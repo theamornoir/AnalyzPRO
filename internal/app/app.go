@@ -1,13 +1,14 @@
 package app
 
 import (
-	"log"
-
+	"github.com/theamornoir/analyzpro/internal/bot"
 	"github.com/theamornoir/analyzpro/internal/config"
 )
 
 type App struct {
 	cfg *config.Config
+
+	bot *bot.Bot
 }
 
 func New() (*App, error) {
@@ -16,13 +17,18 @@ func New() (*App, error) {
 		return nil, err
 	}
 
+	telegramBot, err := bot.New(cfg.BotToken)
+	if err != nil {
+		return nil, err
+	}
 	app := &App{
 		cfg: cfg,
+		bot: telegramBot,
 	}
 
 	return app, nil
 }
 
 func (a *App) Run() {
-	log.Println("AnalyzPro started")
+	a.bot.Start()
 }

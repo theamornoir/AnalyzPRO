@@ -4,6 +4,7 @@ go 1.26.3
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
+	github.com/go-telegram/bot v1.23.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
