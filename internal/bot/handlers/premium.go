@@ -9,13 +9,10 @@ import (
 
 func PremiumHandler() func(context.Context, *tgbot.Bot, *models.Update) {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update) {
-		if update.Message == nil {
-			return
-		}
-
+		chatID := update.Message.Chat.ID
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID: update.Message.Chat.ID,
-			Text:   "💎 Premium находится в разработке.",
+			ChatID: chatID,
+			Text:   "💎 Premium находится в разработке. Скоро будут новые функции!",
 		})
 	}
 }

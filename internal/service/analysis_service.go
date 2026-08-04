@@ -2,49 +2,29 @@ package service
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/theamornoir/analyzpro/internal/ai"
 )
 
 type AnalysisService interface {
 	HandleAnalysis(ctx context.Context, text string) (string, error)
+	HandleAnalysisFromFile(ctx context.Context, data []byte, mimeType string) (string, error)
 }
 
 type analysisService struct {
-	client *ai.Client
+	aiClient *ai.GeminiClient
 }
 
-func NewAnalysisService(client *ai.Client) AnalysisService {
-	return &analysisService{client: client}
+func NewAnalysisService(aiClient *ai.GeminiClient) AnalysisService {
+	return &analysisService{
+		aiClient: aiClient,
+	}
 }
 
 func (s *analysisService) HandleAnalysis(ctx context.Context, text string) (string, error) {
-	if strings.TrimSpace(text) == "" {
-		return "", fmt.Errorf("empty analysis input")
-	}
+	return s.aiClient.GenerateAnalysisSummary(ctx, text)
+}
 
-	if s.client == nil {
-		return ai.BuildDoctorTemplate(
-			"Cервис недоступен.",
-			"Данные получены, но обработка пока не подключена.",
-			"Необходимо настроить сервис.",
-			"Подключите сервис и повторите запрос.",
-			"Этот ответ не является диагностикой.",
-		), nil
-	}
-
-	response, err := s.client.GenerateAnalysisSummary(ctx, text)
-	if err != nil {
-		return ai.BuildDoctorTemplate(
-			"Сервис временно недоступен.",
-			"Данные получены, но их обработка сейчас ограничена внешним сервисом.",
-			"Необходима повторная попытка позже.",
-			"Подождите 1–2 минуты и отправьте анализ ещё раз.",
-			"Этот ответ не является диагнозом и используется только как безопасная временная заглушка.",
-		), nil
-	}
-
-	return response, nil
+func (s *analysisService) HandleAnalysisFromFile(ctx context.Context, data []byte, mimeType string) (string, error) {
+	return s.aiClient.GenerateAnalysisFromFile(ctx, data, mimeType)
 }

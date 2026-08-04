@@ -9,12 +9,13 @@ import (
 )
 
 type Config struct {
-	AppEnv       string
-	BotToken     string
-	OpenAIAPIKey string
-	DatabaseURL  string
-	UploadDir    string
-	LogLevel     string
+	AppEnv            string
+	BotToken          string
+	GoogleGeminiAPIKey string
+	GoogleAIModel     string
+	DatabaseURL       string
+	UploadDir         string
+	LogLevel          string
 }
 
 func Load() (*Config, error) {
@@ -25,12 +26,13 @@ func Load() (*Config, error) {
 	viper.AutomaticEnv()
 
 	cfg := &Config{
-		AppEnv:       viper.GetString("APP_ENV"),
-		BotToken:     viper.GetString("BOT_TOKEN"),
-		OpenAIAPIKey: viper.GetString("OPENAI_API_KEY"),
-		DatabaseURL:  viper.GetString("DATABASE_URL"),
-		UploadDir:    viper.GetString("UPLOAD_DIR"),
-		LogLevel:     viper.GetString("LOG_LEVEL"),
+		AppEnv:             viper.GetString("APP_ENV"),
+		BotToken:           viper.GetString("BOT_TOKEN"),
+		GoogleGeminiAPIKey: viper.GetString("GOOGLE_GEMINI_API_KEY"),
+		GoogleAIModel:      viper.GetString("GOOGLE_AI_MODEL"),
+		DatabaseURL:        viper.GetString("DATABASE_URL"),
+		UploadDir:          viper.GetString("UPLOAD_DIR"),
+		LogLevel:           viper.GetString("LOG_LEVEL"),
 	}
 
 	return cfg, nil

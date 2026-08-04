@@ -9,13 +9,17 @@ import (
 
 func AboutHandler() func(context.Context, *tgbot.Bot, *models.Update) {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update) {
-		if update.Message == nil {
-			return
-		}
-
+		chatID := update.Message.Chat.ID
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID: update.Message.Chat.ID,
-			Text:   "ℹ️ О сервисе\n\nAnalyzPro помогает анализировать медицинские показатели и объяснять их простым языком.\n\n• бот использует искусственный интеллект для интерпретации данных;\n• анализ не является медицинским заключением;\n• сервис не заменяет врача и не ставит диагнозы;\n• бот поддерживает PDF и фотографии анализов.",
+			ChatID: chatID,
+			Text: `ℹ️ О сервисе AnalyzPro
+
+🤖 AnalyzPro — это Telegram-бот, который помогает разобраться в медицинских анализах с помощью искусственного интеллекта.
+
+⚠️ Важно:
+• Бот НЕ ставит диагнозы
+• Результаты носят информационный характер
+• Всегда консультируйтесь с врачом`,
 		})
 	}
 }

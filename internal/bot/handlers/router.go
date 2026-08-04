@@ -10,7 +10,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/service"
 )
 
-func MessageRouter(stateManager states.StateManager, analysisService service.AnalysisService) func(context.Context, *tgbot.Bot, *models.Update) {
+func MessageRouter(stateManager states.StateManager, analysisService service.AnalysisService, uploadDir string) func(context.Context, *tgbot.Bot, *models.Update) {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update) {
 		if update.Message == nil {
 			return
@@ -19,7 +19,7 @@ func MessageRouter(stateManager states.StateManager, analysisService service.Ana
 		chatID := update.Message.Chat.ID
 		state := stateManager.GetState(chatID)
 		if state == states.StateWaitingAnalysisFile {
-			UploadHandler(stateManager, analysisService)(ctx, b, update)
+			UploadHandler(stateManager, analysisService, uploadDir)(ctx, b, update)
 			return
 		}
 

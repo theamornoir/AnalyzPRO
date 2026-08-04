@@ -15,12 +15,14 @@ type Bot struct {
 	client          *tgbot.Bot
 	stateManager    states.StateManager
 	analysisService service.AnalysisService
+	uploadDir       string
 }
 
 func New(
 	token string,
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
+	uploadDir string, // <-- Добавьте этот параметр
 ) (*Bot, error) {
 
 	if stateManager == nil {
@@ -40,6 +42,7 @@ func New(
 		client:          client,
 		stateManager:    stateManager,
 		analysisService: analysisService,
+		uploadDir:       uploadDir,
 	}
 
 	botInstance.registerHandlers()
@@ -52,10 +55,11 @@ func (b *Bot) Start(ctx context.Context) {
 }
 
 func (b *Bot) registerHandlers() {
-
+	// Роутер для всех сообщений
 	router := handlers.MessageRouter(
 		b.stateManager,
 		b.analysisService,
+		b.uploadDir, // <-- Передаем uploadDir
 	)
 
 	// /start

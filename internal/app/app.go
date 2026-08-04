@@ -23,13 +23,14 @@ func New() (*App, error) {
 
 	stateManager := states.NewMemoryStateManager()
 
-	aiClient := ai.NewClient(cfg.OpenAIAPIKey, "gpt-4o-mini")
-	analysisService := service.NewAnalysisService(aiClient)
+	geminiClient := ai.NewGeminiClient(cfg.GoogleGeminiAPIKey, cfg.GoogleAIModel)
+	analysisService := service.NewAnalysisService(geminiClient)
 
 	telegramBot, err := bot.New(
 		cfg.BotToken,
 		stateManager,
 		analysisService,
+		cfg.UploadDir,
 	)
 	if err != nil {
 		return nil, err

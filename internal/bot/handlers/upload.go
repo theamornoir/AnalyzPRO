@@ -3,7 +3,10 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"io"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tgbot "github.com/go-telegram/bot"
@@ -16,6 +19,7 @@ import (
 func UploadHandler(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
+	uploadDir string,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
 
 	return func(
@@ -40,22 +44,19 @@ func UploadHandler(
 			return
 		}
 
-		// Обработка файлов
-		if update.Message.Document != nil ||
-			update.Message.Photo != nil {
-
+		if update.Message.Document != nil || update.Message.Photo != nil {
 			sendLoading(ctx, b, chatID)
 
-			payload := buildPayload(update)
-
-			result, err := analysisService.HandleAnalysis(
-				ctx,
-				payload,
-			)
-
+			fileData, mimeType, err := downloadUploadedFile(ctx, b, update, uploadDir)
 			if err != nil {
 				sendError(ctx, b, chatID)
+				stateManager.Reset(chatID)
+				return
+			}
 
+			result, err := analysisService.HandleAnalysisFromFile(ctx, fileData, mimeType)
+			if err != nil {
+				sendError(ctx, b, chatID)
 				stateManager.Reset(chatID)
 				return
 			}
@@ -69,10 +70,7 @@ func UploadHandler(
 			return
 		}
 
-		// Если пришел текст
-		payload := strings.TrimSpace(
-			update.Message.Text,
-		)
+		payload := strings.TrimSpace(update.Message.Text)
 
 		if payload == "" {
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
@@ -82,14 +80,9 @@ func UploadHandler(
 			return
 		}
 
-		result, err := analysisService.HandleAnalysis(
-			ctx,
-			payload,
-		)
-
+		result, err := analysisService.HandleAnalysis(ctx, payload)
 		if err != nil {
 			sendError(ctx, b, chatID)
-
 			stateManager.Reset(chatID)
 			return
 		}
@@ -100,6 +93,74 @@ func UploadHandler(
 		})
 
 		stateManager.Reset(chatID)
+	}
+}
+
+func downloadUploadedFile(
+	ctx context.Context,
+	b *tgbot.Bot,
+	update *models.Update,
+	uploadDir string,
+) ([]byte, string, error) {
+	var fileID string
+	var fileName string
+	var mimeType string
+
+	if doc := update.Message.Document; doc != nil {
+		fileID = doc.FileID
+		fileName = doc.FileName
+		mimeType = doc.MimeType
+	} else if photos := update.Message.Photo; len(photos) > 0 {
+		photo := photos[len(photos)-1]
+		fileID = photo.FileID
+		fileName = "photo.jpg"
+		mimeType = "image/jpeg"
+	}
+
+	if fileID == "" {
+		return nil, "", io.EOF
+	}
+
+	file, err := b.GetFile(ctx, &tgbot.GetFileParams{FileID: fileID})
+	if err != nil {
+		return nil, "", err
+	}
+
+	resp, err := http.Get(b.FileDownloadLink(file))
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if mimeType == "" {
+		mimeType = detectMimeType(fileName)
+	}
+
+	if uploadDir != "" {
+		_ = os.MkdirAll(uploadDir, 0o755)
+		_ = os.WriteFile(filepath.Join(uploadDir, fileName), data, 0o644)
+	}
+
+	return data, mimeType, nil
+}
+
+func detectMimeType(fileName string) string {
+	switch strings.ToLower(filepath.Ext(fileName)) {
+	case ".pdf":
+		return "application/pdf"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".webp":
+		return "image/webp"
+	default:
+		return "application/octet-stream"
 	}
 }
 
@@ -141,33 +202,6 @@ func sendLoading(
 				"3/3 Анализируем показатели",
 		},
 	)
-}
-
-func buildPayload(
-	update *models.Update,
-) string {
-
-	if update.Message.Document != nil {
-
-		payload :=
-			"Пользователь загрузил PDF-анализ. " +
-				"Документ принят в систему."
-
-		if update.Message.Document.FileName != "" {
-			payload +=
-				" Имя файла: " +
-					update.Message.Document.FileName
-		}
-
-		return payload
-	}
-
-	if update.Message.Photo != nil {
-
-		return "Пользователь загрузил фотографию анализов. Изображение принято в систему."
-	}
-
-	return ""
 }
 
 func sendError(
