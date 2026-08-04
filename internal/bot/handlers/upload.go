@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -45,10 +44,13 @@ func UploadHandler(
 		}
 
 		if update.Message.Document != nil || update.Message.Photo != nil {
-			sendLoading(ctx, b, chatID)
+			// Отправляем стикер и текстовое сообщение
+			loadingMsg, textMsg := sendLoadingMessages(ctx, b, chatID)
 
 			fileData, mimeType, err := downloadUploadedFile(ctx, b, update, uploadDir)
 			if err != nil {
+				deleteMessage(ctx, b, chatID, loadingMsg.ID)
+				deleteMessage(ctx, b, chatID, textMsg.ID)
 				sendError(ctx, b, chatID)
 				stateManager.Reset(chatID)
 				return
@@ -56,11 +58,18 @@ func UploadHandler(
 
 			result, err := analysisService.HandleAnalysisFromFile(ctx, fileData, mimeType)
 			if err != nil {
+				deleteMessage(ctx, b, chatID, loadingMsg.ID)
+				deleteMessage(ctx, b, chatID, textMsg.ID)
 				sendError(ctx, b, chatID)
 				stateManager.Reset(chatID)
 				return
 			}
 
+			// Удаляем стикер и текстовое сообщение
+			deleteMessage(ctx, b, chatID, loadingMsg.ID)
+			deleteMessage(ctx, b, chatID, textMsg.ID)
+
+			// Отправляем результат
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 				ChatID: chatID,
 				Text:   result,
@@ -70,6 +79,7 @@ func UploadHandler(
 			return
 		}
 
+		// Текстовый анализ
 		payload := strings.TrimSpace(update.Message.Text)
 
 		if payload == "" {
@@ -80,12 +90,19 @@ func UploadHandler(
 			return
 		}
 
+		loadingMsg, textMsg := sendLoadingMessages(ctx, b, chatID)
+
 		result, err := analysisService.HandleAnalysis(ctx, payload)
 		if err != nil {
+			deleteMessage(ctx, b, chatID, loadingMsg.ID)
+			deleteMessage(ctx, b, chatID, textMsg.ID)
 			sendError(ctx, b, chatID)
 			stateManager.Reset(chatID)
 			return
 		}
+
+		deleteMessage(ctx, b, chatID, loadingMsg.ID)
+		deleteMessage(ctx, b, chatID, textMsg.ID)
 
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,
@@ -96,6 +113,51 @@ func UploadHandler(
 	}
 }
 
+// sendLoadingMessages - отправляет стикер и текстовое сообщение
+func sendLoadingMessages(ctx context.Context, b *tgbot.Bot, chatID int64) (*models.Message, *models.Message) {
+	// ВАШ FILE_ID СТИКЕРА
+	stickerFileID := "CAACAgIAAxkBAAN3anIN2ra-k9IPOjpSwnAcKKu5ZQcAAmVzAAJK3mBLnf-jLZbQHmM9BA"
+
+	// Отправляем стикер
+	stickerMsg, err := b.SendSticker(ctx, &tgbot.SendStickerParams{
+		ChatID: chatID,
+		Sticker: &models.InputFileString{
+			Data: stickerFileID,
+		},
+	})
+
+	// Если стикер не отправился - отправляем текстовое сообщение вместо него
+	if err != nil {
+		stickerMsg, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "⏳ Обрабатываю...",
+		})
+	}
+
+	// Отправляем текстовое сообщение под стикером
+	textMsg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: chatID,
+		Text:   "📊 Обрабатываю результаты...",
+	})
+
+	return stickerMsg, textMsg
+}
+
+// deleteMessage - удаляет сообщение
+func deleteMessage(ctx context.Context, b *tgbot.Bot, chatID int64, messageID int) {
+	if messageID == 0 {
+		return
+	}
+	_, err := b.DeleteMessage(ctx, &tgbot.DeleteMessageParams{
+		ChatID:    chatID,
+		MessageID: messageID,
+	})
+	if err != nil {
+		return
+	}
+}
+
+// downloadUploadedFile - скачивает файл из Telegram
 func downloadUploadedFile(
 	ctx context.Context,
 	b *tgbot.Bot,
@@ -149,6 +211,7 @@ func downloadUploadedFile(
 	return data, mimeType, nil
 }
 
+// detectMimeType - определяет MIME тип файла
 func detectMimeType(fileName string) string {
 	switch strings.ToLower(filepath.Ext(fileName)) {
 	case ".pdf":
@@ -164,56 +227,14 @@ func detectMimeType(fileName string) string {
 	}
 }
 
-func sendLoading(
-	ctx context.Context,
-	b *tgbot.Bot,
-	chatID int64,
-) {
-
-	path := "assets/loading.mp4"
-
-	data, err := os.ReadFile(path)
-
-	if err == nil && len(data) > 0 {
-
-		_, _ = b.SendAnimation(ctx,
-			&tgbot.SendAnimationParams{
-				ChatID: chatID,
-				Animation: &models.InputFileUpload{
-					Filename: "loading.mp4",
-					Data:     bytes.NewReader(data),
-				},
-				Caption: "⏳ Обработка анализа…\n\n" +
-					"1/3 Сохраняем файл\n" +
-					"2/3 Проверяем документ\n" +
-					"3/3 Анализируем показатели",
-			},
-		)
-
-		return
-	}
-
-	_, _ = b.SendMessage(ctx,
-		&tgbot.SendMessageParams{
-			ChatID: chatID,
-			Text: "⏳ Обработка анализа…\n\n" +
-				"1/3 Сохраняем файл\n" +
-				"2/3 Проверяем документ\n" +
-				"3/3 Анализируем показатели",
-		},
-	)
-}
-
+// sendError - отправляет сообщение об ошибке
 func sendError(
 	ctx context.Context,
 	b *tgbot.Bot,
 	chatID int64,
 ) {
-
-	_, _ = b.SendMessage(ctx,
-		&tgbot.SendMessageParams{
-			ChatID: chatID,
-			Text:   "⚠️ Не удалось обработать анализ. Попробуйте позже.",
-		},
-	)
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: chatID,
+		Text:   "⚠️ Не удалось обработать анализ. Попробуйте позже.",
+	})
 }
