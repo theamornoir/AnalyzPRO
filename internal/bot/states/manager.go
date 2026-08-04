@@ -1,15 +1,18 @@
 package states
 
-import "sync"
+import (
+	"sync"
+)
 
 type State string
 
 const (
 	StateIdle                      State = "idle"
 	StateWaitingAnalysisFile       State = "waiting_analysis_file"
-	StateWaitingCourseInfo         State = "waiting_course_info" // Вопрос про тестостерон
-	StateWaitingCourseTime         State = "waiting_course_time" // Какие препараты
+	StateWaitingCourseInfo         State = "waiting_course_info"
+	StateWaitingCourseTime         State = "waiting_course_time"
 	StateWaitingPhotoConfirm       State = "waiting_photo_confirm"
+	StateWaitingFilesConfirm       State = "waiting_files_confirm"
 	StateWaitingAge                State = "waiting_age"
 	StateWaitingHeight             State = "waiting_height"
 	StateWaitingWeight             State = "waiting_weight"

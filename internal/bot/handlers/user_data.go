@@ -36,10 +36,10 @@ func (c *UserDataCollector) StartCollection(ctx context.Context, b *tgbot.Bot, c
 // HandleAge - обрабатывает возраст
 func (c *UserDataCollector) HandleAge(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
 	age, err := strconv.Atoi(strings.TrimSpace(text))
-	if err != nil || age < 10 || age > 120 {
+	if err != nil || age < 5 || age > 90 {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,
-			Text:   "Пожалуйста, укажите корректный возраст (от 10 до 120 лет).",
+			Text:   "❌ Пожалуйста, укажите корректный возраст (от 5 до 90 лет).\n\nПопробуйте ещё раз:",
 		})
 		return
 	}
@@ -57,10 +57,10 @@ func (c *UserDataCollector) HandleAge(ctx context.Context, b *tgbot.Bot, chatID 
 // HandleHeight - обрабатывает рост
 func (c *UserDataCollector) HandleHeight(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
 	height, err := strconv.Atoi(strings.TrimSpace(text))
-	if err != nil || height < 50 || height > 300 {
+	if err != nil || height < 50 || height > 210 {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,
-			Text:   "Пожалуйста, укажите корректный рост (от 50 до 300 см).",
+			Text:   "❌ Пожалуйста, укажите корректный рост (от 50 до 210 см).\n\nПопробуйте ещё раз:",
 		})
 		return
 	}
@@ -78,10 +78,10 @@ func (c *UserDataCollector) HandleHeight(ctx context.Context, b *tgbot.Bot, chat
 // HandleWeight - обрабатывает вес
 func (c *UserDataCollector) HandleWeight(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
 	weight, err := strconv.Atoi(strings.TrimSpace(text))
-	if err != nil || weight < 20 || weight > 400 {
+	if err != nil || weight < 30 || weight > 200 {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,
-			Text:   "Пожалуйста, укажите корректный вес (от 20 до 400 кг).",
+			Text:   "❌ Пожалуйста, укажите корректный вес (от 30 до 200 кг).\n\nПопробуйте ещё раз:",
 		})
 		return
 	}
@@ -191,7 +191,16 @@ func (c *UserDataCollector) HandleSportType(ctx context.Context, b *tgbot.Bot, c
 
 // HandleTrainingExperience - обрабатывает стаж тренировок
 func (c *UserDataCollector) HandleTrainingExperience(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
-	c.stateManager.SetUserData(chatID, "training_experience", strings.TrimSpace(text))
+	exp, err := strconv.Atoi(strings.TrimSpace(text))
+	if err != nil || exp < 0 || exp > 80 {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "❌ Пожалуйста, укажите корректный стаж тренировок (от 0 до 80 лет).\n\nПопробуйте ещё раз:",
+		})
+		return
+	}
+
+	c.stateManager.SetUserData(chatID, "training_experience", fmt.Sprintf("%d", exp))
 	c.stateManager.SetState(chatID, states.StateWaitingGoal)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
@@ -208,8 +217,10 @@ func (c *UserDataCollector) HandleGoal(ctx context.Context, b *tgbot.Bot, chatID
 	c.finishCollection(ctx, b, chatID)
 }
 
-// finishCollection - завершает сбор данных и спрашивает про тестостерон
+// finishCollection - завершает сбор данных
 func (c *UserDataCollector) finishCollection(ctx context.Context, b *tgbot.Bot, chatID int64) {
+	c.stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
+
 	// Показываем собранные данные
 	userData := c.stateManager.GetAllUserData(chatID)
 	summary := formatUserData(userData)
@@ -217,12 +228,10 @@ func (c *UserDataCollector) finishCollection(ctx context.Context, b *tgbot.Bot, 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID: chatID,
 		Text: "✅ **Данные сохранены!**\n\n" + summary + "\n\n" +
-			"🧬 **Используете ли вы препараты для повышения тестостерона?**\n" +
-			"Ответьте: Да / Нет",
+			"📄 Теперь отправьте PDF-файл или фотографию анализов.\n\n" +
+			"Я учту все ваши данные при расшифровке!",
 		ParseMode: "Markdown",
 	})
-
-	c.stateManager.SetState(chatID, states.StateWaitingCourseInfo)
 }
 
 // formatUserData - форматирует данные пользователя
@@ -239,17 +248,29 @@ func formatUserData(data map[string]string) string {
 	}
 	if weight := data["weight"]; weight != "" {
 		parts = append(parts, fmt.Sprintf("• **Вес:** %s кг", weight))
+
+		// Рассчитываем ИМТ если есть рост и вес
+		if height := data["height"]; height != "" {
+			if weight := data["weight"]; weight != "" {
+				h, _ := strconv.ParseFloat(height, 64)
+				w, _ := strconv.ParseFloat(weight, 64)
+				if h > 0 && w > 0 {
+					bmi := w / ((h / 100) * (h / 100))
+					parts = append(parts, fmt.Sprintf("• **ИМТ:** %.1f", bmi))
+				}
+			}
+		}
 	}
-	if chronic := data["chronic_diseases"]; chronic != "" && chronic != "нет" {
+	if chronic := data["chronic_diseases"]; chronic != "" && strings.ToLower(chronic) != "нет" {
 		parts = append(parts, fmt.Sprintf("• **Хронические заболевания:** %s", chronic))
 	}
-	if allergies := data["allergies"]; allergies != "" && allergies != "нет" {
+	if allergies := data["allergies"]; allergies != "" && strings.ToLower(allergies) != "нет" {
 		parts = append(parts, fmt.Sprintf("• **Аллергии:** %s", allergies))
 	}
-	if medications := data["medications"]; medications != "" && medications != "нет" {
+	if medications := data["medications"]; medications != "" && strings.ToLower(medications) != "нет" {
 		parts = append(parts, fmt.Sprintf("• **Лекарства:** %s", medications))
 	}
-	if smoking := data["smoking"]; smoking != "" && smoking != "нет" {
+	if smoking := data["smoking"]; smoking != "" && strings.ToLower(smoking) != "нет" {
 		parts = append(parts, fmt.Sprintf("• **Курение:** %s", smoking))
 	}
 	if alcohol := data["alcohol"]; alcohol != "" {
@@ -266,51 +287,6 @@ func formatUserData(data map[string]string) string {
 	}
 	if course := data["course_info"]; course != "" {
 		parts = append(parts, fmt.Sprintf("• **Курс:** %s", course))
-	}
-
-	return strings.Join(parts, "\n")
-}
-
-// BuildUserContext - формирует контекст для AI
-func BuildUserContext(data map[string]string) string {
-	var parts []string
-	parts = append(parts, "👤 **Данные пациента:**")
-
-	if age := data["age"]; age != "" {
-		parts = append(parts, fmt.Sprintf("• Возраст: %s лет", age))
-	}
-	if height := data["height"]; height != "" {
-		parts = append(parts, fmt.Sprintf("• Рост: %s см", height))
-	}
-	if weight := data["weight"]; weight != "" {
-		parts = append(parts, fmt.Sprintf("• Вес: %s кг", weight))
-	}
-	if chronic := data["chronic_diseases"]; chronic != "" && chronic != "нет" {
-		parts = append(parts, fmt.Sprintf("• Хронические заболевания: %s", chronic))
-	}
-	if allergies := data["allergies"]; allergies != "" && allergies != "нет" {
-		parts = append(parts, fmt.Sprintf("• Аллергии: %s", allergies))
-	}
-	if medications := data["medications"]; medications != "" && medications != "нет" {
-		parts = append(parts, fmt.Sprintf("• Принимаемые лекарства: %s", medications))
-	}
-	if smoking := data["smoking"]; smoking != "" && smoking != "нет" {
-		parts = append(parts, fmt.Sprintf("• Курение: %s", smoking))
-	}
-	if alcohol := data["alcohol"]; alcohol != "" {
-		parts = append(parts, fmt.Sprintf("• Алкоголь: %s", alcohol))
-	}
-	if sport := data["sport_type"]; sport != "" {
-		parts = append(parts, fmt.Sprintf("• Вид спорта: %s", sport))
-	}
-	if exp := data["training_experience"]; exp != "" {
-		parts = append(parts, fmt.Sprintf("• Стаж тренировок: %s лет", exp))
-	}
-	if goal := data["goal"]; goal != "" {
-		parts = append(parts, fmt.Sprintf("• Цель: %s", goal))
-	}
-	if course := data["course_info"]; course != "" {
-		parts = append(parts, fmt.Sprintf("• Курс: %s", course))
 	}
 
 	return strings.Join(parts, "\n")

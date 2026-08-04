@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -35,10 +36,20 @@ func UploadHandler(
 		}
 
 		chatID := update.Message.Chat.ID
+		log.Printf("📥 Получено сообщение: chatID=%d, text=%q, hasPhoto=%v, hasDocument=%v",
+			chatID, update.Message.Text, update.Message.Photo != nil, update.Message.Document != nil)
 
 		state := stateManager.GetState(chatID)
+		log.Printf("📊 Текущее состояние: %s", state)
+
+		// Если мы уже ждём ответ на вопрос о фото - игнорируем новые сообщения
+		if state == states.StateWaitingPhotoConfirm {
+			log.Printf("⏭️ Уже ждём ответ на вопрос, игнорируем")
+			return
+		}
 
 		if state != states.StateWaitingAnalysisFile {
+			log.Printf("⏭️ Состояние не StateWaitingAnalysisFile, отправляем сообщение")
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 				ChatID: chatID,
 				Text:   "📄 Отправьте PDF-файл или фотографию анализов.",
@@ -52,6 +63,7 @@ func UploadHandler(
 
 		// 1. Если это не документ и не фото и не текст
 		if update.Message.Document == nil && update.Message.Photo == nil && update.Message.Text == "" {
+			log.Printf("❌ Пустое сообщение")
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 				ChatID: chatID,
 				Text:   "❌ Я могу обрабатывать только:\n\n• 📄 PDF-файлы с анализами\n• 📸 Фотографии анализов\n• 📝 Текст с показателями\n\nПожалуйста, отправьте один из этих форматов.",
@@ -61,6 +73,7 @@ func UploadHandler(
 
 		// 2. Если это документ - проверяем PDF
 		if update.Message.Document != nil {
+			log.Printf("📄 Обработка документа")
 			doc := update.Message.Document
 			mimeType := doc.MimeType
 			fileName := strings.ToLower(doc.FileName)
@@ -68,6 +81,7 @@ func UploadHandler(
 			isPDF := mimeType == "application/pdf" || strings.HasSuffix(fileName, ".pdf")
 
 			if !isPDF {
+				log.Printf("❌ Не PDF файл: %s", fileName)
 				_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 					ChatID: chatID,
 					Text:   "❌ Поддерживаются только PDF-файлы.\n\nПожалуйста, отправьте:\n• PDF с анализами\n• Или фотографию анализов\n• Или текст с показателями",
@@ -83,6 +97,7 @@ func UploadHandler(
 			}
 
 			if !isPDFLikelyAnalysis(fileData) {
+				log.Printf("❌ PDF не похож на анализы")
 				_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 					ChatID: chatID,
 					Text:   "📄 Я получил PDF-файл, но он не похож на медицинские анализы.\n\nПожалуйста, убедитесь, что файл содержит:\n• 📊 Таблицы с показателями\n• 📝 Названия анализов (гемоглобин, холестерин и т.д.)\n• 🔢 Числовые значения и референсные нормы\n\nИли отправьте фотографию анализов / текст с показателями.",
@@ -90,19 +105,100 @@ func UploadHandler(
 				return
 			}
 
+			log.Printf("✅ PDF проходит проверку, обрабатываем")
 			processPDF(ctx, b, chatID, stateManager, analysisService, uploadDir, stickerID, fileData)
 			return
 		}
 
 		// 3. Если это фото - проверяем
 		if update.Message.Photo != nil {
-			caption := strings.ToLower(update.Message.Caption)
+			log.Printf("📸 Обработка фото")
 
+			// Проверяем, не обработаны ли уже фото
+			photoProcessed := stateManager.GetUserData(chatID, "photo_processed")
+			log.Printf("📸 photoProcessed: %q", photoProcessed)
+			if photoProcessed == "yes" {
+				log.Printf("⏭️ Фото уже обработаны, игнорируем")
+				return
+			}
+
+			// Проверяем, ждём ли мы уже ответа на вопрос
+			waitingConfirm := stateManager.GetUserData(chatID, "waiting_photo_confirm")
+			log.Printf("📸 waitingConfirm: %q", waitingConfirm)
+			if waitingConfirm == "yes" {
+				log.Printf("📸 Уже ждём ответа, сохраняем фото")
+				// Уже ждём ответа - просто сохраняем новые фото
+				photo := update.Message.Photo[len(update.Message.Photo)-1]
+				existingPhotos := stateManager.GetUserData(chatID, "pending_photos")
+				if existingPhotos == "" {
+					stateManager.SetUserData(chatID, "pending_photos", photo.FileID)
+				} else {
+					stateManager.SetUserData(chatID, "pending_photos", existingPhotos+","+photo.FileID)
+				}
+				return
+			}
+
+			// Проверяем, задавали ли уже вопрос
+			questionAsked := stateManager.GetUserData(chatID, "question_asked")
+			log.Printf("📸 questionAsked: %q", questionAsked)
+			if questionAsked == "yes" {
+				log.Printf("📸 Вопрос уже задан, сохраняем фото")
+				// Вопрос уже задан - просто сохраняем фото
+				photo := update.Message.Photo[len(update.Message.Photo)-1]
+				existingPhotos := stateManager.GetUserData(chatID, "pending_photos")
+				if existingPhotos == "" {
+					stateManager.SetUserData(chatID, "pending_photos", photo.FileID)
+				} else {
+					stateManager.SetUserData(chatID, "pending_photos", existingPhotos+","+photo.FileID)
+				}
+				return
+			}
+
+			// ==========================================
+			// НОВАЯ ПРОВЕРКА: MediaGroupID
+			// ==========================================
+			mediaGroupID := update.Message.MediaGroupID
+			if mediaGroupID != "" {
+				// Проверяем, не обрабатываем ли уже эту группу
+				processedGroup := stateManager.GetUserData(chatID, "processed_group_id")
+				if processedGroup == mediaGroupID {
+					log.Printf("📸 Медиа-группа %s уже обрабатывается, игнорируем", mediaGroupID)
+					// Но сохраняем фото в список
+					photo := update.Message.Photo[len(update.Message.Photo)-1]
+					existingPhotos := stateManager.GetUserData(chatID, "pending_photos")
+					if existingPhotos == "" {
+						stateManager.SetUserData(chatID, "pending_photos", photo.FileID)
+					} else {
+						stateManager.SetUserData(chatID, "pending_photos", existingPhotos+","+photo.FileID)
+					}
+					return
+				}
+				// Сохраняем ID группы
+				stateManager.SetUserData(chatID, "processed_group_id", mediaGroupID)
+				log.Printf("📸 Начинаем обработку медиа-группы: %s", mediaGroupID)
+			}
+
+			// Сохраняем фото
+			photo := update.Message.Photo[len(update.Message.Photo)-1]
+			existingPhotos := stateManager.GetUserData(chatID, "pending_photos")
+
+			// Добавляем фото в список
+			if existingPhotos == "" {
+				stateManager.SetUserData(chatID, "pending_photos", photo.FileID)
+			} else {
+				stateManager.SetUserData(chatID, "pending_photos", existingPhotos+","+photo.FileID)
+			}
+
+			if mediaGroupID != "" {
+				stateManager.SetUserData(chatID, "media_group_id", mediaGroupID)
+			}
+
+			// Проверяем подпись
+			caption := strings.ToLower(update.Message.Caption)
 			keywords := []string{
 				"анализ", "кровь", "биохимия", "результат", "показатель",
 				"гемоглобин", "холестерин", "глюкоза", "билирубин",
 			}
-
 			hasKeyword := false
 			for _, kw := range keywords {
 				if strings.Contains(caption, kw) {
@@ -111,96 +207,57 @@ func UploadHandler(
 				}
 			}
 
-			if !hasKeyword {
-				photo := update.Message.Photo[len(update.Message.Photo)-1]
-				stateManager.SetUserData(chatID, "pending_photo_id", photo.FileID)
-				stateManager.SetState(chatID, states.StateWaitingPhotoConfirm)
-
-				_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-					ChatID: chatID,
-					Text:   "📸 Это медицинские анализы?\n\nОтветьте: Да / Нет",
-				})
+			if hasKeyword {
+				log.Printf("📸 Есть ключевые слова в подписи, обрабатываем сразу")
+				// Если есть ключевые слова - обрабатываем сразу
+				processAllPhotos(ctx, b, chatID, stateManager, analysisService, uploadDir, stickerID)
 				return
 			}
+
+			// Устанавливаем флаг, что вопрос задан
+			log.Printf("📸 Устанавливаем флаги и отправляем вопрос")
+			stateManager.SetUserData(chatID, "question_asked", "yes")
+			stateManager.SetUserData(chatID, "waiting_photo_confirm", "yes")
+			stateManager.SetState(chatID, states.StateWaitingPhotoConfirm)
+
+			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+				ChatID: chatID,
+				Text:   "📸 Это медицинские анализы?\n\nОтветьте: Да / Нет",
+			})
+
+			log.Printf("✅ Вопрос отправлен, завершаем обработку")
+			return
 		}
 
 		// 4. Если это текст - проверяем ответ на вопрос про фото
 		if update.Message.Text != "" {
+			log.Printf("📝 Обработка текста: %q", update.Message.Text)
 			text := strings.TrimSpace(strings.ToLower(update.Message.Text))
 
-			pendingPhotoID := stateManager.GetUserData(chatID, "pending_photo_id")
+			// Проверяем, ждём ли ответа
+			waitingConfirm := stateManager.GetUserData(chatID, "waiting_photo_confirm")
+			log.Printf("📝 waitingConfirm: %q", waitingConfirm)
 
-			if pendingPhotoID != "" {
+			if waitingConfirm == "yes" {
+				log.Printf("📝 Это ответ на вопрос")
+				// Это ответ на вопрос
 				if text == "да" || text == "да." || text == "ага" || text == "yes" {
-					stateManager.SetUserData(chatID, "pending_photo_id", "")
+					log.Printf("📝 Ответ: ДА")
+					// Очищаем флаги
+					stateManager.SetUserData(chatID, "waiting_photo_confirm", "")
+					stateManager.SetUserData(chatID, "question_asked", "")
 
-					// Скачиваем фото для проверки
-					fileData, mimeType, err := downloadFileByID(ctx, b, pendingPhotoID, uploadDir)
-					if err != nil {
-						sendError(ctx, b, chatID)
-						return
-					}
-
-					// Проверяем содержимое фото
-					if !isPhotoLikelyAnalysis(fileData) {
-						stateManager.SetUserData(chatID, "pending_photo_id", "")
-						stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
-
-						_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-							ChatID: chatID,
-							Text:   "📸 Я проверил фото, но оно не похоже на медицинские анализы.\n\nПожалуйста, убедитесь, что на фото видно:\n• 📊 Таблицу с показателями\n• 📝 Названия анализов (гемоглобин, холестерин и т.д.)\n• 🔢 Числовые значения\n\nИли отправьте:\n• 📄 PDF-файл с анализами\n• 📝 Текст с показателями",
-						})
-						return
-					}
-
-					// Это действительно анализы - обрабатываем
-					stateManager.SetUserData(chatID, "pending_photo_id", "")
-
-					// Проверяем, есть ли информация о курсе
-					userData := stateManager.GetAllUserData(chatID)
-					onCourse := userData["on_course"]
-
-					if onCourse == "" {
-						stateManager.SetState(chatID, states.StateWaitingCourseInfo)
-						_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-							ChatID: chatID,
-							Text:   "🧬 Вы сейчас на курсе (спортивная фармакология / ПКТ)?\n\nОтветьте: Да / Нет",
-						})
-						return
-					}
-
-					// Проверяем, есть ли данные пользователя (возраст, рост и т.д.)
-					if userData["age"] == "" {
-						collector := NewUserDataCollector(stateManager)
-						collector.StartCollection(ctx, b, chatID)
-						return
-					}
-
-					loadingMsg, textMsg := sendLoadingMessages(ctx, b, chatID, stickerID)
-
-					analysisText := buildAnalysisText(userData)
-
-					result, err := analysisService.HandleAnalysisFromFileWithContext(ctx, fileData, mimeType, analysisText)
-					if err != nil {
-						deleteMessage(ctx, b, chatID, loadingMsg.ID)
-						deleteMessage(ctx, b, chatID, textMsg.ID)
-						sendError(ctx, b, chatID)
-						return
-					}
-
-					deleteMessage(ctx, b, chatID, loadingMsg.ID)
-					deleteMessage(ctx, b, chatID, textMsg.ID)
-
-					_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-						ChatID: chatID,
-						Text:   result,
-					})
-
-					stateManager.Reset(chatID)
+					processAllPhotos(ctx, b, chatID, stateManager, analysisService, uploadDir, stickerID)
 					return
 
 				} else if text == "нет" || text == "нет." || text == "неа" || text == "no" {
-					stateManager.SetUserData(chatID, "pending_photo_id", "")
+					log.Printf("📝 Ответ: НЕТ")
+					stateManager.SetUserData(chatID, "waiting_photo_confirm", "")
+					stateManager.SetUserData(chatID, "question_asked", "")
+					stateManager.SetUserData(chatID, "pending_photos", "")
+					stateManager.SetUserData(chatID, "photo_processed", "yes")
+					stateManager.SetUserData(chatID, "processed_group_id", "")
+					stateManager.SetUserData(chatID, "media_group_id", "")
 					stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
 
 					_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
@@ -209,6 +266,7 @@ func UploadHandler(
 					})
 					return
 				} else {
+					log.Printf("📝 Непонятный ответ: %q", text)
 					_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 						ChatID: chatID,
 						Text:   "Пожалуйста, ответьте 'Да' или 'Нет'.\n\nЭто медицинские анализы?",
@@ -218,6 +276,7 @@ func UploadHandler(
 			}
 
 			// Обычная проверка текста на анализы
+			log.Printf("📝 Обычная проверка текста на анализы")
 			keywords := []string{
 				"гемоглобин", "эритроциты", "лейкоциты", "тромбоциты",
 				"холестерин", "глюкоза", "билирубин", "креатинин",
@@ -242,6 +301,7 @@ func UploadHandler(
 				strings.Contains(text, "мкг/л") || strings.Contains(text, "г/л")
 
 			if !hasKeyword && !hasNumbers {
+				log.Printf("❌ Текст не похож на анализы (нет ключевых слов и чисел)")
 				_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 					ChatID: chatID,
 					Text:   "❓ Это не похоже на медицинские анализы.\n\nПожалуйста, отправьте:\n• 📄 PDF-файл с анализами\n• 📸 Фотографию анализов\n• 📝 Текст с показателями\n\nПример: \"Гемоглобин 110, норма 130-160\"",
@@ -250,6 +310,7 @@ func UploadHandler(
 			}
 
 			if hasKeyword && !hasNumbers && !hasUnits {
+				log.Printf("❌ Текст похож на анализы, но нет чисел")
 				_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 					ChatID: chatID,
 					Text:   "📝 Я вижу упоминание анализов, но не вижу числовых значений.\n\nПожалуйста, добавьте конкретные показатели с числами.\n\nПример: \"Гемоглобин 110, норма 130-160\"",
@@ -265,13 +326,11 @@ func UploadHandler(
 		payload := strings.TrimSpace(update.Message.Text)
 
 		if payload == "" {
-			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-				ChatID: chatID,
-				Text:   "Пожалуйста, отправьте PDF или фотографию анализов.",
-			})
+			log.Printf("⚠️ Пустой текст, игнорируем")
 			return
 		}
 
+		log.Printf("📤 Отправляем текст в AI: %q", payload[:min(len(payload), 50)])
 		loadingMsg, textMsg := sendLoadingMessages(ctx, b, chatID, stickerID)
 
 		userData := stateManager.GetAllUserData(chatID)
@@ -294,6 +353,202 @@ func UploadHandler(
 		})
 
 		stateManager.Reset(chatID)
+	}
+}
+
+// processAllPhotos - обрабатывает все накопленные фото
+func processAllPhotos(
+	ctx context.Context,
+	b *tgbot.Bot,
+	chatID int64,
+	stateManager states.StateManager,
+	analysisService service.AnalysisService,
+	uploadDir string,
+	stickerID string,
+) {
+	// Получаем список всех фото
+	pendingPhotos := stateManager.GetUserData(chatID, "pending_photos")
+	if pendingPhotos == "" {
+		return
+	}
+
+	// Очищаем список и флаги
+	stateManager.SetUserData(chatID, "pending_photos", "")
+	stateManager.SetUserData(chatID, "waiting_photo_confirm", "")
+	stateManager.SetUserData(chatID, "photo_processed", "yes")
+	stateManager.SetUserData(chatID, "question_asked", "")
+	stateManager.SetUserData(chatID, "processed_group_id", "")
+	stateManager.SetUserData(chatID, "media_group_id", "")
+
+	// Разбиваем ID
+	photoIDs := strings.Split(pendingPhotos, ",")
+
+	// Скачиваем все фото
+	var allFileData [][]byte
+	var allMimeTypes []string
+
+	for _, id := range photoIDs {
+		fileData, mimeType, err := downloadFileByID(ctx, b, id, uploadDir)
+		if err == nil {
+			allFileData = append(allFileData, fileData)
+			allMimeTypes = append(allMimeTypes, mimeType)
+		}
+	}
+
+	if len(allFileData) == 0 {
+		sendError(ctx, b, chatID)
+		stateManager.Reset(chatID)
+		return
+	}
+
+	// Проверяем первое фото (базовая проверка)
+	if !isPhotoLikelyAnalysis(allFileData[0]) {
+		stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "📸 Я проверил фото, но оно не похоже на медицинские анализы.\n\nПожалуйста, отправьте:\n• 📄 PDF-файл с анализами\n• 📸 Фотографию анализов (с таблицей и цифрами)\n• 📝 Текст с показателями\n\nЯ не могу обработать это фото как медицинский анализ.",
+		})
+		return
+	}
+
+	// Проверяем данные пользователя
+	userData := stateManager.GetAllUserData(chatID)
+	onCourse := userData["on_course"]
+
+	if onCourse == "" {
+		stateManager.SetState(chatID, states.StateWaitingCourseInfo)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "🧬 Вы сейчас на курсе (спортивная фармакология / ПКТ)?\n\nОтветьте: Да / Нет",
+		})
+		return
+	}
+
+	if userData["age"] == "" {
+		collector := NewUserDataCollector(stateManager)
+		collector.StartCollection(ctx, b, chatID)
+		return
+	}
+
+	// Отправляем стикер загрузки
+	loadingMsg, textMsg := sendLoadingMessages(ctx, b, chatID, stickerID)
+	analysisText := buildAnalysisText(userData)
+
+	// ==========================================
+	// ОТПРАВЛЯЕМ ВСЕ ФОТО В GEMINI
+	// ==========================================
+
+	var result string
+	var err error
+
+	if len(allFileData) == 1 {
+		// Если одно фото - отправляем как есть
+		result, err = analysisService.HandleAnalysisFromFileWithContext(ctx, allFileData[0], allMimeTypes[0], analysisText)
+	} else {
+		// Если несколько фото - отправляем все по очереди и объединяем ответы
+		var allResults []string
+
+		for i, fileData := range allFileData {
+			resp, err := analysisService.HandleAnalysisFromFileWithContext(ctx, fileData, allMimeTypes[i], analysisText)
+			if err != nil {
+				continue
+			}
+			allResults = append(allResults, resp)
+		}
+
+		if len(allResults) == 0 {
+			deleteMessage(ctx, b, chatID, loadingMsg.ID)
+			deleteMessage(ctx, b, chatID, textMsg.ID)
+			sendError(ctx, b, chatID)
+			stateManager.Reset(chatID)
+			return
+		}
+
+		// Объединяем ответы
+		result = strings.Join(allResults, "\n\n---\n\n")
+
+		// Если ответ слишком длинный - сокращаем
+		if len(result) > 4000 {
+			result = result[:4000] + "\n\n... (ответ сокращён)"
+		}
+	}
+
+	if err != nil {
+		deleteMessage(ctx, b, chatID, loadingMsg.ID)
+		deleteMessage(ctx, b, chatID, textMsg.ID)
+		sendError(ctx, b, chatID)
+		stateManager.Reset(chatID)
+		return
+	}
+
+	deleteMessage(ctx, b, chatID, loadingMsg.ID)
+	deleteMessage(ctx, b, chatID, textMsg.ID)
+
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: chatID,
+		Text:   result,
+	})
+
+	stateManager.Reset(chatID)
+}
+
+// handleFilesConfirm - обрабатывает подтверждение для группы файлов
+func handleFilesConfirm(
+	ctx context.Context,
+	b *tgbot.Bot,
+	stateManager states.StateManager,
+	analysisService service.AnalysisService,
+	uploadDir string,
+	stickerID string,
+	chatID int64,
+	text string,
+) {
+	text = strings.ToLower(text)
+
+	if text == "да" || text == "да." || text == "ага" || text == "yes" {
+		// Проверяем, есть ли невалидные файлы
+		hasInvalid := stateManager.GetUserData(chatID, "has_invalid_file")
+
+		if hasInvalid == "yes" {
+			stateManager.SetUserData(chatID, "has_invalid_file", "")
+			stateManager.SetUserData(chatID, "pending_files", "")
+			stateManager.SetUserData(chatID, "media_group_id", "")
+			stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
+
+			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+				ChatID: chatID,
+				Text:   "📄 Я проверил все файлы. Один или несколько файлов не похожи на медицинские анализы.\n\nПожалуйста, убедитесь, что все файлы содержат:\n• 📊 Таблицы с показателями\n• 📝 Названия анализов (гемоглобин, холестерин и т.д.)\n• 🔢 Числовые значения и референсные нормы\n\nОтправьте только файлы с анализами.",
+			})
+			return
+		}
+
+		// Все файлы валидны - обрабатываем их все
+		// Пока обрабатываем только первый файл
+		// TODO: обработать все файлы из группы
+		stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
+
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "✅ Все файлы прошли проверку! Обрабатываю...",
+		})
+		return
+
+	} else if text == "нет" || text == "нет." || text == "неа" || text == "no" {
+		stateManager.SetUserData(chatID, "pending_files", "")
+		stateManager.SetUserData(chatID, "media_group_id", "")
+		stateManager.SetUserData(chatID, "has_invalid_file", "")
+		stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
+
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "📄 Понял! Тогда, пожалуйста, отправьте:\n\n• 📄 PDF-файл с анализами\n• 📸 Фотографию анализов\n• 📝 Текст с показателями\n\nЯ помогу вам с расшифровкой!",
+		})
+		return
+	} else {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "Пожалуйста, ответьте 'Да' или 'Нет'.\n\nЭто медицинские анализы?",
+		})
 	}
 }
 
@@ -441,32 +696,24 @@ func isPDFLikelyAnalysis(data []byte) bool {
 	return false
 }
 
-// isPhotoLikelyAnalysis - проверяет, похоже ли фото на медицинские анализы (улучшенная версия)
+// isPhotoLikelyAnalysis - проверяет, похоже ли фото на медицинские анализы
 func isPhotoLikelyAnalysis(data []byte) bool {
 	if len(data) == 0 {
 		return false
 	}
 
-	// Проверяем размер фото - слишком маленькие файлы (меньше 30KB) - точно не анализы
-	if len(data) < 30000 {
+	if len(data) < 30000 || len(data) > 5000000 {
 		return false
 	}
 
-	// Проверяем тип файла по магическим числам (сигнатурам)
 	if len(data) >= 4 {
-		// JPEG: FF D8 FF
 		if data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
-			// JPEG - проверяем размер
-			// Для анализов нужны качественные фото, обычно > 200KB
-			if len(data) > 200000 { // качественное фото документа
+			if len(data) > 200000 {
 				return true
 			}
-			// Если фото 30-200KB - это может быть иконка, стикер или маленькое фото
-			// Не доверяем, даже если пользователь сказал "Да"
 			return false
 		}
 
-		// PNG: 89 50 4E 47
 		if data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 {
 			if len(data) > 150000 {
 				return true
@@ -474,16 +721,21 @@ func isPhotoLikelyAnalysis(data []byte) bool {
 			return false
 		}
 
-		// WEBP: 52 49 46 46
 		if data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 {
 			if len(data) > 150000 {
 				return true
 			}
 			return false
 		}
+
+		if len(data) > 12 && data[4] == 0x66 && data[5] == 0x74 && data[6] == 0x79 && data[7] == 0x70 {
+			if len(data) > 200000 {
+				return true
+			}
+			return false
+		}
 	}
 
-	// Если формат неизвестен - не доверяем
 	return false
 }
 
@@ -522,15 +774,12 @@ func downloadFileByID(
 func buildAnalysisText(userData map[string]string) string {
 	var parts []string
 
-	// Добавляем основную информацию
 	parts = append(parts, "❗ ВАЖНАЯ ИНФОРМАЦИЯ ДЛЯ АНАЛИЗА:")
 
-	// Возраст
 	if age := userData["age"]; age != "" {
 		parts = append(parts, fmt.Sprintf("• Возраст: %s лет", age))
 	}
 
-	// Рост и вес
 	height := userData["height"]
 	weight := userData["weight"]
 
@@ -551,22 +800,18 @@ func buildAnalysisText(userData map[string]string) string {
 		}
 	}
 
-	// Хронические заболевания
 	if chronic := userData["chronic_diseases"]; chronic != "" && strings.ToLower(chronic) != "нет" {
 		parts = append(parts, fmt.Sprintf("• Хронические заболевания: %s", chronic))
 	}
 
-	// Аллергии
 	if allergies := userData["allergies"]; allergies != "" && strings.ToLower(allergies) != "нет" {
 		parts = append(parts, fmt.Sprintf("• Аллергии: %s", allergies))
 	}
 
-	// Лекарства
 	if medications := userData["medications"]; medications != "" && strings.ToLower(medications) != "нет" {
 		parts = append(parts, fmt.Sprintf("• Принимаемые лекарства: %s", medications))
 	}
 
-	// Образ жизни
 	if smoking := userData["smoking"]; smoking != "" && strings.ToLower(smoking) != "нет" {
 		parts = append(parts, fmt.Sprintf("• Курение: %s", smoking))
 	}
@@ -574,7 +819,6 @@ func buildAnalysisText(userData map[string]string) string {
 		parts = append(parts, fmt.Sprintf("• Алкоголь: %s", alcohol))
 	}
 
-	// Спортивные данные
 	if sport := userData["sport_type"]; sport != "" {
 		parts = append(parts, fmt.Sprintf("• Вид спорта: %s", sport))
 	}
@@ -585,7 +829,6 @@ func buildAnalysisText(userData map[string]string) string {
 		parts = append(parts, fmt.Sprintf("• Цель: %s", goal))
 	}
 
-	// Информация о курсе
 	onCourse := userData["on_course"]
 	if onCourse == "yes" {
 		courseInfo := userData["course_info"]
@@ -633,98 +876,9 @@ func sendLoadingMessages(
 	return stickerMsg, nil
 }
 
-// deleteMessage - удаляет сообщение
-func deleteMessage(ctx context.Context, b *tgbot.Bot, chatID int64, messageID int) {
-	if messageID == 0 {
-		return
+func min(a, b int) int {
+	if a < b {
+		return a
 	}
-	_, err := b.DeleteMessage(ctx, &tgbot.DeleteMessageParams{
-		ChatID:    chatID,
-		MessageID: messageID,
-	})
-	if err != nil {
-		return
-	}
-}
-
-// downloadUploadedFile - скачивает файл из Telegram
-func downloadUploadedFile(
-	ctx context.Context,
-	b *tgbot.Bot,
-	update *models.Update,
-	uploadDir string,
-) ([]byte, string, error) {
-	var fileID string
-	var fileName string
-	var mimeType string
-
-	if doc := update.Message.Document; doc != nil {
-		fileID = doc.FileID
-		fileName = doc.FileName
-		mimeType = doc.MimeType
-	} else if photos := update.Message.Photo; len(photos) > 0 {
-		photo := photos[len(photos)-1]
-		fileID = photo.FileID
-		fileName = "photo.jpg"
-		mimeType = "image/jpeg"
-	}
-
-	if fileID == "" {
-		return nil, "", io.EOF
-	}
-
-	file, err := b.GetFile(ctx, &tgbot.GetFileParams{FileID: fileID})
-	if err != nil {
-		return nil, "", err
-	}
-
-	resp, err := http.Get(b.FileDownloadLink(file))
-	if err != nil {
-		return nil, "", err
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, "", err
-	}
-
-	if mimeType == "" {
-		mimeType = detectMimeType(fileName)
-	}
-
-	if uploadDir != "" {
-		_ = os.MkdirAll(uploadDir, 0o755)
-		_ = os.WriteFile(filepath.Join(uploadDir, fileName), data, 0o644)
-	}
-
-	return data, mimeType, nil
-}
-
-// detectMimeType - определяет MIME тип файла
-func detectMimeType(fileName string) string {
-	switch strings.ToLower(filepath.Ext(fileName)) {
-	case ".pdf":
-		return "application/pdf"
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".webp":
-		return "image/webp"
-	default:
-		return "application/octet-stream"
-	}
-}
-
-// sendError - отправляет сообщение об ошибке
-func sendError(
-	ctx context.Context,
-	b *tgbot.Bot,
-	chatID int64,
-) {
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text:   "⚠️ Не удалось обработать анализ. Попробуйте позже.",
-	})
+	return b
 }
