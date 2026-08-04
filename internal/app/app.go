@@ -2,12 +2,12 @@ package app
 
 import (
 	"github.com/theamornoir/analyzpro/internal/bot"
+	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/config"
 )
 
 type App struct {
 	cfg *config.Config
-
 	bot *bot.Bot
 }
 
@@ -17,16 +17,16 @@ func New() (*App, error) {
 		return nil, err
 	}
 
-	telegramBot, err := bot.New(cfg.BotToken)
+	stateManager := states.NewMemoryStateManager()
+	telegramBot, err := bot.New(cfg.BotToken, stateManager)
 	if err != nil {
 		return nil, err
 	}
-	app := &App{
+
+	return &App{
 		cfg: cfg,
 		bot: telegramBot,
-	}
-
-	return app, nil
+	}, nil
 }
 
 func (a *App) Run() {

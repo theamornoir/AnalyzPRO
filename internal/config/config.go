@@ -1,6 +1,9 @@
 package config
 
 import (
+	"errors"
+	"os"
+
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
@@ -15,8 +18,7 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	err := godotenv.Load()
-	if err != nil {
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 
