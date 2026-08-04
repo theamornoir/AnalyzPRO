@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	tgbot "github.com/go-telegram/bot"
@@ -55,7 +56,6 @@ func UploadHandler(
 				ChatID: chatID,
 				Text:   "❌ Я могу обрабатывать только:\n\n• 📄 PDF-файлы с анализами\n• 📸 Фотографии анализов\n• 📝 Текст с показателями\n\nПожалуйста, отправьте один из этих форматов.",
 			})
-			stateManager.Reset(chatID)
 			return
 		}
 
@@ -72,7 +72,6 @@ func UploadHandler(
 					ChatID: chatID,
 					Text:   "❌ Поддерживаются только PDF-файлы.\n\nПожалуйста, отправьте:\n• PDF с анализами\n• Или фотографию анализов\n• Или текст с показателями",
 				})
-				stateManager.Reset(chatID)
 				return
 			}
 
@@ -80,7 +79,6 @@ func UploadHandler(
 			fileData, _, err := downloadUploadedFile(ctx, b, update, uploadDir)
 			if err != nil {
 				sendError(ctx, b, chatID)
-				stateManager.Reset(chatID)
 				return
 			}
 
@@ -89,7 +87,6 @@ func UploadHandler(
 					ChatID: chatID,
 					Text:   "📄 Я получил PDF-файл, но он не похож на медицинские анализы.\n\nПожалуйста, убедитесь, что файл содержит:\n• 📊 Таблицы с показателями\n• 📝 Названия анализов (гемоглобин, холестерин и т.д.)\n• 🔢 Числовые значения и референсные нормы\n\nИли отправьте фотографию анализов / текст с показателями.",
 				})
-				stateManager.Reset(chatID)
 				return
 			}
 
@@ -141,7 +138,6 @@ func UploadHandler(
 					fileData, mimeType, err := downloadFileByID(ctx, b, pendingPhotoID, uploadDir)
 					if err != nil {
 						sendError(ctx, b, chatID)
-						stateManager.Reset(chatID)
 						return
 					}
 
@@ -152,7 +148,7 @@ func UploadHandler(
 
 						_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 							ChatID: chatID,
-							Text:   "📸 Я проверил фото, но оно НЕ похоже на медицинские анализы.\n\nПожалуйста, убедитесь, что на фото видно:\n• 📊 Таблицу с показателями\n• 📝 Названия анализов\n• 🔢 Числовые значения\n\nИли отправьте:\n• 📄 PDF-файл с анализами\n• 📝 Текст с показателями",
+							Text:   "📸 Я проверил фото, но оно не похоже на медицинские анализы.\n\nПожалуйста, убедитесь, что на фото видно:\n• 📊 Таблицу с показателями\n• 📝 Названия анализов (гемоглобин, холестерин и т.д.)\n• 🔢 Числовые значения\n\nИли отправьте:\n• 📄 PDF-файл с анализами\n• 📝 Текст с показателями",
 						})
 						return
 					}
@@ -165,7 +161,6 @@ func UploadHandler(
 					onCourse := userData["on_course"]
 
 					if onCourse == "" {
-						// Спрашиваем про курс
 						stateManager.SetState(chatID, states.StateWaitingCourseInfo)
 						_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 							ChatID: chatID,
@@ -174,7 +169,13 @@ func UploadHandler(
 						return
 					}
 
-					// Если информация о курсе есть - обрабатываем фото
+					// Проверяем, есть ли данные пользователя (возраст, рост и т.д.)
+					if userData["age"] == "" {
+						collector := NewUserDataCollector(stateManager)
+						collector.StartCollection(ctx, b, chatID)
+						return
+					}
+
 					loadingMsg, textMsg := sendLoadingMessages(ctx, b, chatID, stickerID)
 
 					analysisText := buildAnalysisText(userData)
@@ -184,7 +185,6 @@ func UploadHandler(
 						deleteMessage(ctx, b, chatID, loadingMsg.ID)
 						deleteMessage(ctx, b, chatID, textMsg.ID)
 						sendError(ctx, b, chatID)
-						stateManager.Reset(chatID)
 						return
 					}
 
@@ -246,7 +246,6 @@ func UploadHandler(
 					ChatID: chatID,
 					Text:   "❓ Это не похоже на медицинские анализы.\n\nПожалуйста, отправьте:\n• 📄 PDF-файл с анализами\n• 📸 Фотографию анализов\n• 📝 Текст с показателями\n\nПример: \"Гемоглобин 110, норма 130-160\"",
 				})
-				stateManager.Reset(chatID)
 				return
 			}
 
@@ -255,7 +254,6 @@ func UploadHandler(
 					ChatID: chatID,
 					Text:   "📝 Я вижу упоминание анализов, но не вижу числовых значений.\n\nПожалуйста, добавьте конкретные показатели с числами.\n\nПример: \"Гемоглобин 110, норма 130-160\"",
 				})
-				stateManager.Reset(chatID)
 				return
 			}
 		}
@@ -284,7 +282,6 @@ func UploadHandler(
 			deleteMessage(ctx, b, chatID, loadingMsg.ID)
 			deleteMessage(ctx, b, chatID, textMsg.ID)
 			sendError(ctx, b, chatID)
-			stateManager.Reset(chatID)
 			return
 		}
 
@@ -321,7 +318,6 @@ func processPDF(
 		deleteMessage(ctx, b, chatID, loadingMsg.ID)
 		deleteMessage(ctx, b, chatID, textMsg.ID)
 		sendError(ctx, b, chatID)
-		stateManager.Reset(chatID)
 		return
 	}
 
@@ -445,21 +441,50 @@ func isPDFLikelyAnalysis(data []byte) bool {
 	return false
 }
 
-// isPhotoLikelyAnalysis - проверяет, похоже ли фото на медицинские анализы
+// isPhotoLikelyAnalysis - проверяет, похоже ли фото на медицинские анализы (улучшенная версия)
 func isPhotoLikelyAnalysis(data []byte) bool {
 	if len(data) == 0 {
 		return false
 	}
 
-	if len(data) < 10000 {
+	// Проверяем размер фото - слишком маленькие файлы (меньше 30KB) - точно не анализы
+	if len(data) < 30000 {
 		return false
 	}
 
-	if len(data) > 50000 {
-		return true
+	// Проверяем тип файла по магическим числам (сигнатурам)
+	if len(data) >= 4 {
+		// JPEG: FF D8 FF
+		if data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
+			// JPEG - проверяем размер
+			// Для анализов нужны качественные фото, обычно > 200KB
+			if len(data) > 200000 { // качественное фото документа
+				return true
+			}
+			// Если фото 30-200KB - это может быть иконка, стикер или маленькое фото
+			// Не доверяем, даже если пользователь сказал "Да"
+			return false
+		}
+
+		// PNG: 89 50 4E 47
+		if data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 {
+			if len(data) > 150000 {
+				return true
+			}
+			return false
+		}
+
+		// WEBP: 52 49 46 46
+		if data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 {
+			if len(data) > 150000 {
+				return true
+			}
+			return false
+		}
 	}
 
-	return true
+	// Если формат неизвестен - не доверяем
+	return false
 }
 
 // downloadFileByID - скачивает файл по file_id
@@ -497,24 +522,79 @@ func downloadFileByID(
 func buildAnalysisText(userData map[string]string) string {
 	var parts []string
 
-	onCourse := userData["on_course"]
+	// Добавляем основную информацию
+	parts = append(parts, "❗ ВАЖНАЯ ИНФОРМАЦИЯ ДЛЯ АНАЛИЗА:")
 
+	// Возраст
+	if age := userData["age"]; age != "" {
+		parts = append(parts, fmt.Sprintf("• Возраст: %s лет", age))
+	}
+
+	// Рост и вес
+	height := userData["height"]
+	weight := userData["weight"]
+
+	if height != "" {
+		parts = append(parts, fmt.Sprintf("• Рост: %s см", height))
+	}
+	if weight != "" {
+		parts = append(parts, fmt.Sprintf("• Вес: %s кг", weight))
+		if height != "" && weight != "" {
+			h, err := strconv.ParseFloat(height, 64)
+			if err == nil {
+				w, err := strconv.ParseFloat(weight, 64)
+				if err == nil && h > 0 && w > 0 {
+					bmi := w / ((h / 100) * (h / 100))
+					parts = append(parts, fmt.Sprintf("• ИМТ: %.1f", bmi))
+				}
+			}
+		}
+	}
+
+	// Хронические заболевания
+	if chronic := userData["chronic_diseases"]; chronic != "" && strings.ToLower(chronic) != "нет" {
+		parts = append(parts, fmt.Sprintf("• Хронические заболевания: %s", chronic))
+	}
+
+	// Аллергии
+	if allergies := userData["allergies"]; allergies != "" && strings.ToLower(allergies) != "нет" {
+		parts = append(parts, fmt.Sprintf("• Аллергии: %s", allergies))
+	}
+
+	// Лекарства
+	if medications := userData["medications"]; medications != "" && strings.ToLower(medications) != "нет" {
+		parts = append(parts, fmt.Sprintf("• Принимаемые лекарства: %s", medications))
+	}
+
+	// Образ жизни
+	if smoking := userData["smoking"]; smoking != "" && strings.ToLower(smoking) != "нет" {
+		parts = append(parts, fmt.Sprintf("• Курение: %s", smoking))
+	}
+	if alcohol := userData["alcohol"]; alcohol != "" {
+		parts = append(parts, fmt.Sprintf("• Алкоголь: %s", alcohol))
+	}
+
+	// Спортивные данные
+	if sport := userData["sport_type"]; sport != "" {
+		parts = append(parts, fmt.Sprintf("• Вид спорта: %s", sport))
+	}
+	if exp := userData["training_experience"]; exp != "" {
+		parts = append(parts, fmt.Sprintf("• Стаж тренировок: %s лет", exp))
+	}
+	if goal := userData["goal"]; goal != "" {
+		parts = append(parts, fmt.Sprintf("• Цель: %s", goal))
+	}
+
+	// Информация о курсе
+	onCourse := userData["on_course"]
 	if onCourse == "yes" {
 		courseInfo := userData["course_info"]
-		parts = append(parts, "❗ ВАЖНАЯ ИНФОРМАЦИЯ ДЛЯ АНАЛИЗА:")
-		parts = append(parts, "• Статус: СПОРТСМЕН НА КУРСЕ")
 		if courseInfo != "" {
-			parts = append(parts, fmt.Sprintf("• Препараты и длительность: %s", courseInfo))
-		} else {
-			parts = append(parts, "• Информация о курсе не указана")
+			parts = append(parts, fmt.Sprintf("• КУРС: %s", courseInfo))
 		}
-		parts = append(parts, "• Требуется профессиональная интерпретация с учетом фармакологии")
-		parts = append(parts, "• Оценить риски и побочные эффекты препаратов")
+		parts = append(parts, "• Требуется интерпретация с учетом фармакологии")
 	} else if onCourse == "no" {
-		parts = append(parts, "• Статус: ОБЫЧНЫЙ ПАЦИЕНТ")
-		parts = append(parts, "• Интерпретация без учета спортивной фармакологии")
-	} else {
-		parts = append(parts, "• Статус: НЕ УКАЗАН (обработка как обычный пациент)")
+		parts = append(parts, "• Без курса (естественный фон)")
 	}
 
 	return strings.Join(parts, "\n")

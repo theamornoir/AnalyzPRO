@@ -39,24 +39,71 @@ func MessageRouter(
 			return
 		}
 
-		// ==========================================
-		// ПРОВЕРКА: Обработка отзывов (ДО ВСЕГО!)
-		// ==========================================
-
-		// Если пользователь отправил текст и мы ожидаем отзыв
-		if stateManager.GetUserData(chatID, "waiting_feedback") == "yes" {
-			// Очищаем флаг ожидания
-			stateManager.SetUserData(chatID, "waiting_feedback", "")
-
-			// Обрабатываем отзыв
-			FeedbackHandler(adminChatID)(ctx, b, update)
-			return
-		}
-
 		state := stateManager.GetState(chatID)
 
 		// ==========================================
-		// ОБРАБОТКА СОСТОЯНИЙ
+		// ОБРАБОТКА СОСТОЯНИЙ ДЛЯ СБОРА ДАННЫХ
+		// ==========================================
+
+		collector := NewUserDataCollector(stateManager)
+
+		if state == states.StateWaitingAge {
+			collector.HandleAge(ctx, b, chatID, text)
+			return
+		}
+
+		if state == states.StateWaitingHeight {
+			collector.HandleHeight(ctx, b, chatID, text)
+			return
+		}
+
+		if state == states.StateWaitingWeight {
+			collector.HandleWeight(ctx, b, chatID, text)
+			return
+		}
+
+		if state == states.StateWaitingChronicDiseases {
+			collector.HandleChronicDiseases(ctx, b, chatID, text)
+			return
+		}
+
+		if state == states.StateWaitingAllergies {
+			collector.HandleAllergies(ctx, b, chatID, text)
+			return
+		}
+
+		if state == states.StateWaitingMedications {
+			collector.HandleMedications(ctx, b, chatID, text)
+			return
+		}
+
+		if state == states.StateWaitingSmoking {
+			collector.HandleSmoking(ctx, b, chatID, text)
+			return
+		}
+
+		if state == states.StateWaitingAlcohol {
+			collector.HandleAlcohol(ctx, b, chatID, text)
+			return
+		}
+
+		if state == states.StateWaitingSportType {
+			collector.HandleSportType(ctx, b, chatID, text)
+			return
+		}
+
+		if state == states.StateWaitingTrainingExperience {
+			collector.HandleTrainingExperience(ctx, b, chatID, text)
+			return
+		}
+
+		if state == states.StateWaitingGoal {
+			collector.HandleGoal(ctx, b, chatID, text)
+			return
+		}
+
+		// ==========================================
+		// ОБРАБОТКА ОСТАЛЬНЫХ СОСТОЯНИЙ
 		// ==========================================
 
 		if state == states.StateWaitingPhotoConfirm {
@@ -93,11 +140,9 @@ func MessageRouter(
 
 		switch text {
 		case "📤 Загрузить анализ":
-			stateManager.SetState(chatID, states.StateWaitingCourseInfo)
-			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-				ChatID: chatID,
-				Text:   "🧬 Вы сейчас на курсе (спортивная фармакология / ПКТ)?\n\nОтветьте: Да / Нет",
-			})
+			// Начинаем сбор данных (без вопроса про курс)
+			collector := NewUserDataCollector(stateManager)
+			collector.StartCollection(ctx, b, chatID)
 			return
 
 		case "📊 История":
@@ -113,18 +158,7 @@ func MessageRouter(
 			return
 
 		case "📝 Отзывы и предложения":
-			// Устанавливаем флаг, что ждем отзыв
-			stateManager.SetUserData(chatID, "waiting_feedback", "yes")
-			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-				ChatID: chatID,
-				Text: "✍️ Напишите ваш отзыв или предложение.\n\n" +
-					"Вы можете поделиться:\n" +
-					"• Мнением о работе бота\n" +
-					"• Предложением по улучшению\n" +
-					"• Сообщить о проблеме\n" +
-					"• Задать вопрос\n\n" +
-					"Я передам ваше сообщение разработчику.",
-			})
+			FeedbackHandler(adminChatID)(ctx, b, update)
 			return
 		}
 
@@ -184,6 +218,13 @@ func handlePhotoConfirm(
 		userData := stateManager.GetAllUserData(chatID)
 		onCourse := userData["on_course"]
 
+		// Проверяем, есть ли уже данные пользователя
+		if userData["age"] == "" {
+			collector := NewUserDataCollector(stateManager)
+			collector.StartCollection(ctx, b, chatID)
+			return
+		}
+
 		if onCourse == "" {
 			stateManager.SetState(chatID, states.StateWaitingCourseInfo)
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
@@ -235,6 +276,7 @@ func handlePhotoConfirm(
 }
 
 // handleCourseInfo - обрабатывает ответ про курс
+// handleCourseInfo - обрабатывает ответ про препараты
 func handleCourseInfo(
 	ctx context.Context,
 	b *tgbot.Bot,
@@ -249,8 +291,9 @@ func handleCourseInfo(
 		stateManager.SetState(chatID, states.StateWaitingCourseTime)
 
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID: chatID,
-			Text:   "💉 На каком вы курсе и сколько по времени?\n\nНапример: \n- Туринабол, 6 неделя\n- ПКТ (Кломид + Тамоксифен), 2 неделя\n- Тестостерон + Примоболан, месяц",
+			ChatID:    chatID,
+			Text:      "💉 **Какие препараты вы используете и сколько по времени?**\n\nНапример: \n- Туринабол, 6 неделя\n- ПКТ (Кломид + Тамоксифен), 2 неделя\n- Тестостерон + Примоболан, месяц",
+			ParseMode: "Markdown",
 		})
 		return
 	}
@@ -260,19 +303,20 @@ func handleCourseInfo(
 		stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
 
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID: chatID,
-			Text:   "📄 Понял! Тогда просто отправьте PDF-файл или фотографию анализов.\n\nЯ сделаю расшифровку как для обычного пациента.",
+			ChatID:    chatID,
+			Text:      "📄 **Понял!** Теперь отправьте PDF-файл или фотографию анализов.\n\nЯ сделаю расшифровку как для обычного пациента.",
+			ParseMode: "Markdown",
 		})
 		return
 	}
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID: chatID,
-		Text:   "Пожалуйста, ответьте 'Да' или 'Нет'.\n\nВы сейчас на курсе (спортивная фармакология / ПКТ)?",
+		Text:   "Пожалуйста, ответьте 'Да' или 'Нет'.\n\nИспользуете ли вы препараты для повышения тестостерона?",
 	})
 }
 
-// handleCourseTime - обрабатывает ответ про время курса
+// handleCourseTime - обрабатывает ответ про препараты
 func handleCourseTime(
 	ctx context.Context,
 	b *tgbot.Bot,
@@ -283,7 +327,7 @@ func handleCourseTime(
 	if strings.TrimSpace(text) == "" {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,
-			Text:   "Пожалуйста, напишите на каком вы курсе и сколько по времени.\n\nНапример: Туринабол, 6 неделя",
+			Text:   "Пожалуйста, напишите какие препараты вы используете и сколько по времени.\n\nНапример: Туринабол, 6 неделя",
 		})
 		return
 	}
@@ -292,7 +336,8 @@ func handleCourseTime(
 	stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text:   "📄 Спасибо! Теперь отправьте PDF-файл или фотографию анализов.\n\nЯ учту вашу информацию о курсе при расшифровке.",
+		ChatID:    chatID,
+		Text:      "📄 **Спасибо!** Теперь отправьте PDF-файл или фотографию анализов.\n\nЯ учту вашу информацию при расшифровке.",
+		ParseMode: "Markdown",
 	})
 }

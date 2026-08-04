@@ -5,11 +5,22 @@ import "sync"
 type State string
 
 const (
-	StateIdle                State = "idle"
-	StateWaitingAnalysisFile State = "waiting_analysis_file"
-	StateWaitingCourseInfo   State = "waiting_course_info"
-	StateWaitingCourseTime   State = "waiting_course_time"
-	StateWaitingPhotoConfirm State = "waiting_photo_confirm" // <-- НОВОЕ СОСТОЯНИЕ
+	StateIdle                      State = "idle"
+	StateWaitingAnalysisFile       State = "waiting_analysis_file"
+	StateWaitingCourseInfo         State = "waiting_course_info" // Вопрос про тестостерон
+	StateWaitingCourseTime         State = "waiting_course_time" // Какие препараты
+	StateWaitingPhotoConfirm       State = "waiting_photo_confirm"
+	StateWaitingAge                State = "waiting_age"
+	StateWaitingHeight             State = "waiting_height"
+	StateWaitingWeight             State = "waiting_weight"
+	StateWaitingChronicDiseases    State = "waiting_chronic_diseases"
+	StateWaitingAllergies          State = "waiting_allergies"
+	StateWaitingMedications        State = "waiting_medications"
+	StateWaitingSmoking            State = "waiting_smoking"
+	StateWaitingAlcohol            State = "waiting_alcohol"
+	StateWaitingSportType          State = "waiting_sport_type"
+	StateWaitingTrainingExperience State = "waiting_training_experience"
+	StateWaitingGoal               State = "waiting_goal"
 )
 
 type StateManager interface {
