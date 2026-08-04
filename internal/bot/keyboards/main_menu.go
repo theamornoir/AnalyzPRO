@@ -4,8 +4,8 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
-func MainMenu() *models.ReplyKeyboardMarkup {
-	return &models.ReplyKeyboardMarkup{
+func MainMenu() models.ReplyKeyboardMarkup {
+	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
 			{
 				{Text: "📤 Загрузить анализ"},
@@ -15,8 +15,10 @@ func MainMenu() *models.ReplyKeyboardMarkup {
 				{Text: "💎 Premium"},
 				{Text: "ℹ️ О сервисе"},
 			},
+			{
+				{Text: "📝 Отзывы и предложения"}, // <-- Новая кнопка
+			},
 		},
 		ResizeKeyboard: true,
-		OneTimeKeyboard: false,
 	}
 }

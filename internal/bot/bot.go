@@ -16,13 +16,17 @@ type Bot struct {
 	stateManager    states.StateManager
 	analysisService service.AnalysisService
 	uploadDir       string
+	stickerID       string
+	adminChatID     int64
 }
 
 func New(
 	token string,
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
-	uploadDir string, // <-- Добавьте этот параметр
+	uploadDir string,
+	stickerID string,
+	adminChatID int64,
 ) (*Bot, error) {
 
 	if stateManager == nil {
@@ -43,6 +47,8 @@ func New(
 		stateManager:    stateManager,
 		analysisService: analysisService,
 		uploadDir:       uploadDir,
+		stickerID:       stickerID,
+		adminChatID:     adminChatID,
 	}
 
 	botInstance.registerHandlers()
@@ -55,11 +61,12 @@ func (b *Bot) Start(ctx context.Context) {
 }
 
 func (b *Bot) registerHandlers() {
-	// Роутер для всех сообщений
 	router := handlers.MessageRouter(
 		b.stateManager,
 		b.analysisService,
-		b.uploadDir, // <-- Передаем uploadDir
+		b.uploadDir,
+		b.stickerID,
+		b.adminChatID,
 	)
 
 	// /start

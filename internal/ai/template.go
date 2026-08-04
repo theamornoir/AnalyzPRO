@@ -1,17 +1,21 @@
 package ai
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
-func BuildDoctorTemplate(summary, important, risks, recommendation, footnote string) string {
-	return fmt.Sprintf("📌 Краткий вывод\n%s\n\n🩺 Что важно\n- %s\n\n⚠️ Показатели, требующие внимания\n- %s\n\n✅ Рекомендации\n1. %s\n\nℹ️ Важно\n%s", summary, important, risks, recommendation, footnote)
-}
+// BuildDoctorTemplate - возвращает шаблон для ошибок
+func BuildDoctorTemplate(shortSummary, important, warnings, recommendations, disclaimer string) string {
+	return fmt.Sprintf(`📌 Краткий вывод
+%s
 
-func normalizeAIResponse(raw string) string {
-	clean := strings.TrimSpace(raw)
-	clean = strings.Trim(clean, "```")
-	clean = strings.TrimSpace(clean)
-	return clean
+🩺 Что важно
+%s
+
+⚠️ Показатели, требующие внимания
+%s
+
+✅ Рекомендации
+%s
+
+ℹ️ Важно
+%s`, shortSummary, important, warnings, recommendations, disclaimer)
 }

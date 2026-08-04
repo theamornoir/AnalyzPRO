@@ -31,6 +31,8 @@ func New() (*App, error) {
 		stateManager,
 		analysisService,
 		cfg.UploadDir,
+		cfg.LoadingStickerID,
+		cfg.AdminChatID,
 	)
 	if err != nil {
 		return nil, err

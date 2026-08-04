@@ -20,7 +20,7 @@ func StartHandler(stateManager states.StateManager) func(context.Context, *tgbot
 
 		_, err := b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
-			Text:        "🧬 Добро пожаловать в AnalyzPro!\n\nAnalyzPro помогает разобраться в медицинских анализах с помощью искусственного интеллекта.\n\nПоддерживаются:\n\n• PDF\n• фотографии анализов\n\nПосле обработки бот объяснит показатели простым языком и покажет возможные отклонения.\n\n⚠️ Важно\n\nAnalyzPro не заменяет врача и не ставит диагнозы.\n\nВыберите действие.",
+			Text:        "🧬 Добро пожаловать в AnalyzPro!\n\nAnalyzPro помогает разобраться в медицинских анализах.\n\nПоддерживаются:\n\n• PDF\n• фотографии анализов\n\nПосле обработки бот объяснит показатели простым языком и покажет возможные отклонения.\n\n⚠️ Важно\n\nAnalyzPro не заменяет врача и не ставит диагнозы.\n\nВыберите действие.",
 			ReplyMarkup: keyboards.MainMenu(),
 		})
 		if err != nil {

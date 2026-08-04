@@ -24,7 +24,6 @@ func NewGeminiClient(apiKey, model string) *GeminiClient {
 		model = "gemini-3.6-flash"
 	}
 
-	// Убираем "models/" если оно есть
 	model = strings.TrimPrefix(model, "models/")
 
 	log.Printf("🔑 Gemini Client initialized with model: %s", model)
@@ -44,7 +43,22 @@ func (c *GeminiClient) GenerateAnalysisSummary(ctx context.Context, userInput st
 		return noKeyFallback(), nil
 	}
 
-	prompt := c.buildPrompt(userInput)
+	// Проверяем, есть ли информация о курсе
+	var prompt string
+	if strings.Contains(userInput, "❗ ВАЖНАЯ ИНФОРМАЦИЯ ДЛЯ АНАЛИЗА:") {
+		courseInfo := extractCourseInfo(userInput)
+		if courseInfo != "" {
+			prompt = c.buildPromptForAthlete(userInput, courseInfo)
+			log.Printf("🏋️ Athlete mode: on course")
+		} else {
+			prompt = c.buildPromptForRegular(userInput)
+			log.Printf("👤 Regular mode: no course info")
+		}
+	} else {
+		prompt = c.buildPromptForRegular(userInput)
+		log.Printf("👤 Regular mode")
+	}
+
 	log.Printf("📝 Built prompt length: %d characters", len(prompt))
 
 	return c.generate(ctx, []geminiPart{{Text: prompt}})
@@ -69,7 +83,46 @@ func (c *GeminiClient) GenerateAnalysisFromFile(ctx context.Context, data []byte
 				Data:     base64.StdEncoding.EncodeToString(data),
 			},
 		},
-		{Text: c.buildPrompt("Содержимое загруженного документа с медицинскими анализами во вложении.")},
+		{Text: c.buildPromptForRegular("Содержимое загруженного документа с медицинскими анализами во вложении.")},
+	}
+
+	return c.generate(ctx, parts)
+}
+
+// GenerateAnalysisFromFileWithContext - анализирует файл с учетом контекста
+func (c *GeminiClient) GenerateAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
+	if strings.TrimSpace(c.apiKey) == "" {
+		return noKeyFallback(), nil
+	}
+
+	if len(data) == 0 {
+		return "", fmt.Errorf("empty file data")
+	}
+
+	// Проверяем, есть ли информация о курсе
+	var prompt string
+	if strings.Contains(contextText, "❗ ВАЖНАЯ ИНФОРМАЦИЯ ДЛЯ АНАЛИЗА:") {
+		courseInfo := extractCourseInfo(contextText)
+		if courseInfo != "" {
+			prompt = c.buildPromptForAthlete(contextText, courseInfo)
+			log.Printf("🏋️ Athlete mode: on course")
+		} else {
+			prompt = c.buildPromptForRegular(contextText)
+			log.Printf("👤 Regular mode")
+		}
+	} else {
+		prompt = c.buildPromptForRegular(contextText)
+		log.Printf("👤 Regular mode")
+	}
+
+	parts := []geminiPart{
+		{
+			InlineData: &geminiInlineData{
+				MimeType: mimeType,
+				Data:     base64.StdEncoding.EncodeToString(data),
+			},
+		},
+		{Text: prompt},
 	}
 
 	return c.generate(ctx, parts)
@@ -110,7 +163,6 @@ func (c *GeminiClient) generate(ctx context.Context, parts []geminiPart) (string
 		c.apiKey,
 	)
 
-	// Скрываем ключ в логах
 	if len(c.apiKey) > 10 {
 		loggedURL := fmt.Sprintf(
 			"https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s...%s",
@@ -157,6 +209,10 @@ func (c *GeminiClient) generate(ctx context.Context, parts []geminiPart) (string
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("❌ Non-OK status: %d", resp.StatusCode)
 
+		if resp.StatusCode == 429 {
+			return rateLimitFallback(), nil
+		}
+
 		var errResp struct {
 			Error struct {
 				Code    int    `json:"code"`
@@ -178,7 +234,7 @@ func (c *GeminiClient) generate(ctx context.Context, parts []geminiPart) (string
 			return "", fmt.Errorf("gemini error %d: %s", errResp.Error.Code, errResp.Error.Message)
 		}
 
-		if resp.StatusCode == 429 || resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 500 {
+		if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 500 {
 			return serviceUnavailableFallback(), nil
 		}
 		return "", fmt.Errorf("gemini request failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
@@ -217,10 +273,56 @@ func (c *GeminiClient) generate(ctx context.Context, parts []geminiPart) (string
 	return normalizeAIResponse(text), nil
 }
 
-func (c *GeminiClient) buildPrompt(text string) string {
-	prompt := fmt.Sprintf(`Ты опытный врач-диагност и медицинский консультант. Отвечай строго по шаблону, без вариативности структуры. Не пиши общие рассуждения. Сохраняй спокойный и профессиональный тон.
+// buildPromptForAthlete - промпт для спортсмена на курсе
+func (c *GeminiClient) buildPromptForAthlete(text string, courseInfo string) string {
+	return fmt.Sprintf(`Ты опытный спортивный врач и фармаколог, специализирующийся на работе со спортсменами, которые находятся на курсах спортивной фармакологии.
 
-Пользователь прислал информацию по анализам:
+ВАЖНО: Пользователь находится на курсе: %s
+
+Твоя задача - проанализировать медицинские показатели с учетом того, что человек на курсе.
+
+Правила анализа:
+1. Учитывай влияние препаратов на показатели
+2. Оценивай риски и побочные эффекты
+3. Давай рекомендации по коррекции курса
+4. Обращай внимание на показатели, критичные для спортсменов
+
+Формат ответа (строго следуй этому шаблону):
+
+📌 Краткий вывод
+[1-2 предложения о состоянии с учетом курса]
+
+🩺 Ключевые показатели (с учетом курса)
+- [показатель 1] - [интерпретация с учетом курса]
+- [показатель 2] - [интерпретация с учетом курса]
+- [показатель 3] - [интерпретация с учетом курса]
+
+⚠️ Критические отклонения (для спортсмена на курсе)
+- [показатель 1] - [опасность и рекомендация]
+- [показатель 2] - [опасность и рекомендация]
+
+💊 Рекомендации по коррекции курса
+1. [рекомендация по дозировке/препарату]
+2. [рекомендация по поддержке/восстановлению]
+3. [рекомендация по дополнительным анализам]
+
+🏋️ Спортивные рекомендации
+1. [рекомендация по тренировкам]
+2. [рекомендация по питанию]
+3. [рекомендация по восстановлению]
+
+ℹ️ Важно
+Этот ответ не является медицинским диагнозом. Для коррекции курса обязательно проконсультируйтесь с вашим лечащим врачом или спортивным доктором.
+
+Данные анализов пользователя:
+%s`, courseInfo, text)
+}
+
+// buildPromptForRegular - промпт для обычного человека (стандартный)
+func (c *GeminiClient) buildPromptForRegular(text string) string {
+	return fmt.Sprintf(`Ты опытный врач-диагност. Отвечай только по фиксированному шаблону, без текста вне формата.
+
+Вот медицинский анализ пользователя:
 %s
 
 Верни ответ строго в таком формате:
@@ -245,31 +347,71 @@ func (c *GeminiClient) buildPrompt(text string) string {
 ℹ️ Важно
 Этот ответ не является диагнозом и не заменяет очную консультацию врача. Он помогает понять направление анализа и возможные отклонения.
 `, text)
+}
 
-	log.Printf("📝 Built prompt with user input (first 100 chars): %s...", text[:min(100, len(text))])
-	return prompt
+// extractCourseInfo - извлекает информацию о курсе из текста
+func extractCourseInfo(text string) string {
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		if strings.Contains(line, "❗ ВАЖНАЯ ИНФОРМАЦИЯ ДЛЯ АНАЛИЗА:") {
+			var courseInfo strings.Builder
+			for j := i + 1; j < len(lines) && j < i+6; j++ {
+				if strings.TrimSpace(lines[j]) == "" {
+					break
+				}
+				if strings.Contains(lines[j], "•") {
+					courseInfo.WriteString(strings.TrimSpace(lines[j]) + "\n")
+				}
+			}
+			return courseInfo.String()
+		}
+	}
+	return ""
+}
+
+func rateLimitFallback() string {
+	log.Printf("⚠️ Returning rate-limit fallback response")
+	return `⏳ Сервис временно перегружен
+
+📊 В данный момент я не могу обработать ваш запрос, так как достигнут лимит запросов к сервису искусственного интеллекта.
+
+🔄 Что делать:
+• Подождите 1-2 минуты
+• Отправьте анализ повторно
+
+💡 Бесплатный тариф имеет ограничение на количество запросов в минуту. Это сделано для того, чтобы все пользователи могли пользоваться сервисом.
+
+⏰ Обычно лимит восстанавливается через 1-2 минуты. Попробуйте снова через несколько минут.
+
+ℹ️ Важно
+Если проблема повторяется, вы можете написать разработчику бота для увеличения лимитов.`
 }
 
 func noKeyFallback() string {
 	log.Printf("⚠️ Returning no-key fallback response")
-	return BuildDoctorTemplate(
-		"AI не подключён в текущем окружении.",
-		"Для полноценной аналитики нужно настроить GOOGLE_GEMINI_API_KEY.",
-		"Проверьте конфигурацию сервиса.",
-		"Подождите, пока API будет подключено.",
-		"Не используйте этот ответ как медицинское заключение.",
-	)
+	return `❌ AI не настроен
+
+🔑 В текущем окружении не настроен ключ для доступа к искусственному интеллекту.
+
+🛠️ Что делать:
+• Обратитесь к администратору бота
+• Убедитесь, что в настройках указан GOOGLE_GEMINI_API_KEY
+
+⏳ Как только ключ будет добавлен, бот снова сможет обрабатывать анализы.`
 }
 
 func serviceUnavailableFallback() string {
 	log.Printf("⚠️ Returning service-unavailable fallback response")
-	return BuildDoctorTemplate(
-		"Сервис ИИ временно недоступен.",
-		"Запрос был получен, но обработка сейчас ограничена по квоте или скорости доступа.",
-		"На текущий момент стоит повторить запрос чуть позже.",
-		"Подождите 1–2 минуты и отправьте анализ повторно.",
-		"Этот ответ не является диагнозом и служит только для безопасного уведомления о временной недоступности AI.",
-	)
+	return `🔧 Сервис временно недоступен
+
+🌐 В данный момент сервис искусственного интеллекта не отвечает.
+
+🔄 Что делать:
+• Проверьте интернет-соединение
+• Подождите несколько минут
+• Попробуйте отправить анализ повторно
+
+⏰ Если проблема сохраняется, возможно проводятся технические работы. Попробуйте позже.`
 }
 
 type geminiRequest struct {
@@ -328,6 +470,27 @@ func extractGeminiText(resp *geminiResponse) string {
 	}
 
 	return strings.Join(parts, "\n")
+}
+
+func normalizeAIResponse(text string) string {
+	text = strings.TrimSpace(text)
+
+	sections := []string{"📌 Краткий вывод", "🩺 Что важно", "⚠️ Показатели", "✅ Рекомендации", "ℹ️ Важно"}
+	hasAllSections := true
+	for _, section := range sections {
+		if !strings.Contains(text, section) {
+			hasAllSections = false
+			break
+		}
+	}
+
+	if !hasAllSections {
+		if !strings.Contains(text, "ℹ️ Важно") {
+			text += "\n\nℹ️ Важно\nЭтот ответ не является диагнозом и не заменяет очную консультацию врача."
+		}
+	}
+
+	return text
 }
 
 func min(a, b int) int {
