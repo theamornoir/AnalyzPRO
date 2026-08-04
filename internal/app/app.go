@@ -1,9 +1,13 @@
 package app
 
 import (
+	"context"
+
+	"github.com/theamornoir/analyzpro/internal/ai"
 	"github.com/theamornoir/analyzpro/internal/bot"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/config"
+	"github.com/theamornoir/analyzpro/internal/service"
 )
 
 type App struct {
@@ -18,7 +22,15 @@ func New() (*App, error) {
 	}
 
 	stateManager := states.NewMemoryStateManager()
-	telegramBot, err := bot.New(cfg.BotToken, stateManager)
+
+	aiClient := ai.NewClient(cfg.OpenAIAPIKey, "gpt-4o-mini")
+	analysisService := service.NewAnalysisService(aiClient)
+
+	telegramBot, err := bot.New(
+		cfg.BotToken,
+		stateManager,
+		analysisService,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -29,6 +41,6 @@ func New() (*App, error) {
 	}, nil
 }
 
-func (a *App) Run() {
-	a.bot.Start()
+func (a *App) Run(ctx context.Context) {
+	a.bot.Start(ctx)
 }
