@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	tgbot "github.com/go-telegram/bot"
+	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 )
 
@@ -23,13 +24,63 @@ func NewUserDataCollector(stateManager states.StateManager) *UserDataCollector {
 
 // StartCollection - начинает сбор данных
 func (c *UserDataCollector) StartCollection(ctx context.Context, b *tgbot.Bot, chatID int64) {
-	c.stateManager.SetState(chatID, states.StateWaitingAge)
+	c.stateManager.SetState(chatID, states.StateWaitingName)
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text: "📋 Для более точного анализа мне нужно знать немного о вас.\n\n" +
-			"1️⃣ **Сколько вам лет?**\n" +
-			"Напишите число (например: 25)",
-		ParseMode: "Markdown",
+		ChatID:      chatID,
+		Text:        "📋 Для более точного анализа мне нужно знать немного о вас.\n\n1️⃣ **Как вас зовут?**\nНапишите ваше имя (например: Ирина)",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
+	})
+}
+
+// HandleName - обрабатывает имя
+func (c *UserDataCollector) HandleName(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
+	name := strings.TrimSpace(text)
+	if len(name) < 2 || len(name) > 50 {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        "❌ Пожалуйста, укажите корректное имя (от 2 до 50 символов).\n\nПопробуйте ещё раз:",
+			ReplyMarkup: keyboards.BackMenu(),
+		})
+		return
+	}
+
+	c.stateManager.SetUserData(chatID, "name", name)
+	c.stateManager.SetState(chatID, states.StateWaitingGender)
+
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        "2️⃣ **Ваш пол?**\nОтветьте: Мужской / Женский",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
+	})
+}
+
+// HandleGender - обрабатывает пол
+func (c *UserDataCollector) HandleGender(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
+	gender := strings.ToLower(strings.TrimSpace(text))
+
+	if gender == "мужской" || gender == "м" || gender == "male" {
+		c.stateManager.SetUserData(chatID, "gender", "Мужской")
+	} else if gender == "женский" || gender == "ж" || gender == "female" {
+		c.stateManager.SetUserData(chatID, "gender", "Женский")
+	} else {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        "❌ Пожалуйста, укажите ваш пол: **Мужской** или **Женский**.\n\nПопробуйте ещё раз:",
+			ReplyMarkup: keyboards.BackMenu(),
+			ParseMode:   "Markdown",
+		})
+		return
+	}
+
+	c.stateManager.SetState(chatID, states.StateWaitingAge)
+
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        "3️⃣ **Сколько вам лет?**\nНапишите число (например: 25)",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
 	})
 }
 
@@ -38,8 +89,9 @@ func (c *UserDataCollector) HandleAge(ctx context.Context, b *tgbot.Bot, chatID 
 	age, err := strconv.Atoi(strings.TrimSpace(text))
 	if err != nil || age < 5 || age > 90 {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID: chatID,
-			Text:   "❌ Пожалуйста, укажите корректный возраст (от 5 до 90 лет).\n\nПопробуйте ещё раз:",
+			ChatID:      chatID,
+			Text:        "❌ Пожалуйста, укажите корректный возраст (от 5 до 90 лет).\n\nПопробуйте ещё раз:",
+			ReplyMarkup: keyboards.BackMenu(),
 		})
 		return
 	}
@@ -48,9 +100,10 @@ func (c *UserDataCollector) HandleAge(ctx context.Context, b *tgbot.Bot, chatID 
 	c.stateManager.SetState(chatID, states.StateWaitingHeight)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:    chatID,
-		Text:      "2️⃣ **Какой у вас рост?**\nНапишите в сантиметрах (например: 178)",
-		ParseMode: "Markdown",
+		ChatID:      chatID,
+		Text:        "4️⃣ **Какой у вас рост?**\nНапишите в сантиметрах (например: 178)",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
 	})
 }
 
@@ -59,8 +112,9 @@ func (c *UserDataCollector) HandleHeight(ctx context.Context, b *tgbot.Bot, chat
 	height, err := strconv.Atoi(strings.TrimSpace(text))
 	if err != nil || height < 50 || height > 210 {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID: chatID,
-			Text:   "❌ Пожалуйста, укажите корректный рост (от 50 до 210 см).\n\nПопробуйте ещё раз:",
+			ChatID:      chatID,
+			Text:        "❌ Пожалуйста, укажите корректный рост (от 50 до 210 см).\n\nПопробуйте ещё раз:",
+			ReplyMarkup: keyboards.BackMenu(),
 		})
 		return
 	}
@@ -69,9 +123,10 @@ func (c *UserDataCollector) HandleHeight(ctx context.Context, b *tgbot.Bot, chat
 	c.stateManager.SetState(chatID, states.StateWaitingWeight)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:    chatID,
-		Text:      "3️⃣ **Какой у вас вес?**\nНапишите в килограммах (например: 82)",
-		ParseMode: "Markdown",
+		ChatID:      chatID,
+		Text:        "5️⃣ **Какой у вас вес?**\nНапишите в килограммах (например: 82)",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
 	})
 }
 
@@ -80,8 +135,9 @@ func (c *UserDataCollector) HandleWeight(ctx context.Context, b *tgbot.Bot, chat
 	weight, err := strconv.Atoi(strings.TrimSpace(text))
 	if err != nil || weight < 30 || weight > 200 {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID: chatID,
-			Text:   "❌ Пожалуйста, укажите корректный вес (от 30 до 200 кг).\n\nПопробуйте ещё раз:",
+			ChatID:      chatID,
+			Text:        "❌ Пожалуйста, укажите корректный вес (от 30 до 200 кг).\n\nПопробуйте ещё раз:",
+			ReplyMarkup: keyboards.BackMenu(),
 		})
 		return
 	}
@@ -90,11 +146,10 @@ func (c *UserDataCollector) HandleWeight(ctx context.Context, b *tgbot.Bot, chat
 	c.stateManager.SetState(chatID, states.StateWaitingChronicDiseases)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text: "4️⃣ **Есть ли у вас хронические заболевания?**\n" +
-			"Например: гипертония, диабет, проблемы с печенью и т.д.\n" +
-			"Если нет - напишите **Нет**",
-		ParseMode: "Markdown",
+		ChatID:      chatID,
+		Text:        "6️⃣ **Есть ли у вас хронические заболевания?**\nНапример: гипертония, диабет, проблемы с печенью и т.д.\nЕсли нет - напишите **Нет**",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
 	})
 }
 
@@ -104,11 +159,10 @@ func (c *UserDataCollector) HandleChronicDiseases(ctx context.Context, b *tgbot.
 	c.stateManager.SetState(chatID, states.StateWaitingAllergies)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text: "5️⃣ **Есть ли у вас аллергии?**\n" +
-			"На лекарства, продукты или что-то ещё.\n" +
-			"Если нет - напишите **Нет**",
-		ParseMode: "Markdown",
+		ChatID:      chatID,
+		Text:        "7️⃣ **Есть ли у вас аллергии?**\nНа лекарства, продукты или что-то ещё.\nЕсли нет - напишите **Нет**",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
 	})
 }
 
@@ -118,11 +172,10 @@ func (c *UserDataCollector) HandleAllergies(ctx context.Context, b *tgbot.Bot, c
 	c.stateManager.SetState(chatID, states.StateWaitingMedications)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text: "6️⃣ **Принимаете ли вы какие-либо лекарства постоянно?**\n" +
-			"Если да - напишите какие.\n" +
-			"Если нет - напишите **Нет**",
-		ParseMode: "Markdown",
+		ChatID:      chatID,
+		Text:        "8️⃣ **Принимаете ли вы какие-либо лекарства постоянно?**\nЕсли да - напишите какие.\nЕсли нет - напишите **Нет**",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
 	})
 }
 
@@ -132,11 +185,10 @@ func (c *UserDataCollector) HandleMedications(ctx context.Context, b *tgbot.Bot,
 	c.stateManager.SetState(chatID, states.StateWaitingSmoking)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text: "7️⃣ **Курите ли вы?**\n" +
-			"Ответьте: Да / Нет\n" +
-			"Если Да - укажите сколько лет и сколько в день.",
-		ParseMode: "Markdown",
+		ChatID:      chatID,
+		Text:        "9️⃣ **Курите ли вы?**\nОтветьте: Да / Нет\nЕсли Да - укажите сколько лет и сколько в день.",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
 	})
 }
 
@@ -146,10 +198,10 @@ func (c *UserDataCollector) HandleSmoking(ctx context.Context, b *tgbot.Bot, cha
 	c.stateManager.SetState(chatID, states.StateWaitingAlcohol)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text: "8️⃣ **Как часто вы употребляете алкоголь?**\n" +
-			"Например: не употребляю, редко, раз в неделю, каждый день",
-		ParseMode: "Markdown",
+		ChatID:      chatID,
+		Text:        "🔟 **Как часто вы употребляете алкоголь?**\nНапример: не употребляю, редко, раз в неделю, каждый день",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
 	})
 }
 
@@ -164,10 +216,10 @@ func (c *UserDataCollector) HandleAlcohol(ctx context.Context, b *tgbot.Bot, cha
 		// Если спортсмен - спрашиваем про вид спорта
 		c.stateManager.SetState(chatID, states.StateWaitingSportType)
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID: chatID,
-			Text: "9️⃣ **Каким видом спорта вы занимаетесь?**\n" +
-				"Например: бодибилдинг, кроссфит, тяжелая атлетика и т.д.",
-			ParseMode: "Markdown",
+			ChatID:      chatID,
+			Text:        "1️⃣1️⃣ **Каким видом спорта вы занимаетесь?**\nНапример: бодибилдинг, кроссфит, тяжелая атлетика и т.д.",
+			ReplyMarkup: keyboards.BackMenu(),
+			ParseMode:   "Markdown",
 		})
 		return
 	}
@@ -182,10 +234,10 @@ func (c *UserDataCollector) HandleSportType(ctx context.Context, b *tgbot.Bot, c
 	c.stateManager.SetState(chatID, states.StateWaitingTrainingExperience)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text: "🔟 **Какой у вас стаж тренировок?**\n" +
-			"Напишите количество лет (например: 5)",
-		ParseMode: "Markdown",
+		ChatID:      chatID,
+		Text:        "1️⃣2️⃣ **Какой у вас стаж тренировок?**\nНапишите количество лет (например: 5)",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
 	})
 }
 
@@ -194,8 +246,9 @@ func (c *UserDataCollector) HandleTrainingExperience(ctx context.Context, b *tgb
 	exp, err := strconv.Atoi(strings.TrimSpace(text))
 	if err != nil || exp < 0 || exp > 80 {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID: chatID,
-			Text:   "❌ Пожалуйста, укажите корректный стаж тренировок (от 0 до 80 лет).\n\nПопробуйте ещё раз:",
+			ChatID:      chatID,
+			Text:        "❌ Пожалуйста, укажите корректный стаж тренировок (от 0 до 80 лет).\n\nПопробуйте ещё раз:",
+			ReplyMarkup: keyboards.BackMenu(),
 		})
 		return
 	}
@@ -204,16 +257,72 @@ func (c *UserDataCollector) HandleTrainingExperience(ctx context.Context, b *tgb
 	c.stateManager.SetState(chatID, states.StateWaitingGoal)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text: "1️⃣1️⃣ **Какова ваша цель?**\n" +
-			"Например: набор мышечной массы, сушка, поддержка формы, улучшение силы",
-		ParseMode: "Markdown",
+		ChatID:      chatID,
+		Text:        "1️⃣3️⃣ **Какова ваша цель?**\nНапример: набор мышечной массы, сушка, поддержка формы, улучшение силы",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
 	})
 }
 
 // HandleGoal - обрабатывает цель
 func (c *UserDataCollector) HandleGoal(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
 	c.stateManager.SetUserData(chatID, "goal", strings.TrimSpace(text))
+
+	// ==========================================
+	// ВОПРОС О ПРЕПАРАТАХ
+	// ==========================================
+	c.stateManager.SetState(chatID, states.StateWaitingCourseInfo)
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        "1️⃣4️⃣ **Используете ли вы препараты для повышения тестостерона или другие гормональные препараты?**\n\nНапример: стероиды, SARMs, ПКТ, TRT и т.д.\n\nОтветьте: Да / Нет",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
+	})
+}
+
+// HandleCourseInfo - обрабатывает ответ про препараты (используется из router.go)
+// Но мы добавим его сюда для полноты
+func (c *UserDataCollector) HandleCourseInfo(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
+	text = strings.ToLower(strings.TrimSpace(text))
+
+	if text == "да" || text == "да." || text == "ага" || text == "yes" || text == "д" || text == "+" {
+		c.stateManager.SetUserData(chatID, "on_course", "yes")
+		c.stateManager.SetState(chatID, states.StateWaitingCourseTime)
+
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        "💉 **Какие препараты вы используете и сколько по времени?**\n\nНапишите подробно, например:\n• Тестостерон энантат, 8 недель, 250 мг/нед\n• Туринабол, 6 недель, 40 мг/день\n• ПКТ (Кломид + Тамоксифен), 4 недели",
+			ReplyMarkup: keyboards.BackMenu(),
+			ParseMode:   "Markdown",
+		})
+		return
+	}
+
+	if text == "нет" || text == "нет." || text == "неа" || text == "no" || text == "н" || text == "-" {
+		c.stateManager.SetUserData(chatID, "on_course", "no")
+		c.finishCollection(ctx, b, chatID)
+		return
+	}
+
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        "❌ Пожалуйста, ответьте 'Да' или 'Нет'.\n\nИспользуете ли вы препараты для повышения тестостерона?",
+		ReplyMarkup: keyboards.BackMenu(),
+	})
+}
+
+// HandleCourseTime - обрабатывает ответ про время курса
+func (c *UserDataCollector) HandleCourseTime(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
+	if strings.TrimSpace(text) == "" {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        "❌ Пожалуйста, напишите какие препараты вы используете и сколько по времени.\n\nНапример: Тестостерон энантат, 8 недель",
+			ReplyMarkup: keyboards.BackMenu(),
+		})
+		return
+	}
+
+	c.stateManager.SetUserData(chatID, "course_info", strings.TrimSpace(text))
 	c.finishCollection(ctx, b, chatID)
 }
 
@@ -225,12 +334,16 @@ func (c *UserDataCollector) finishCollection(ctx context.Context, b *tgbot.Bot, 
 	userData := c.stateManager.GetAllUserData(chatID)
 	summary := formatUserData(userData)
 
+	name := userData["name"]
+	if name == "" {
+		name = "Пользователь"
+	}
+
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text: "✅ **Данные сохранены!**\n\n" + summary + "\n\n" +
-			"📄 Теперь отправьте PDF-файл или фотографию анализов.\n\n" +
-			"Я учту все ваши данные при расшифровке!",
-		ParseMode: "Markdown",
+		ChatID:      chatID,
+		Text:        fmt.Sprintf("✅ **%s, ваши данные сохранены!**\n\n%s\n\n📄 Теперь отправьте PDF-файл или фотографию анализов.\n\nЯ учту все ваши данные при расшифровке!", name, summary),
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
 	})
 }
 
@@ -240,6 +353,12 @@ func formatUserData(data map[string]string) string {
 	parts = append(parts, "📋 **Ваши данные:**")
 	parts = append(parts, "")
 
+	if name := data["name"]; name != "" {
+		parts = append(parts, fmt.Sprintf("• **Имя:** %s", name))
+	}
+	if gender := data["gender"]; gender != "" {
+		parts = append(parts, fmt.Sprintf("• **Пол:** %s", gender))
+	}
 	if age := data["age"]; age != "" {
 		parts = append(parts, fmt.Sprintf("• **Возраст:** %s лет", age))
 	}
@@ -249,7 +368,6 @@ func formatUserData(data map[string]string) string {
 	if weight := data["weight"]; weight != "" {
 		parts = append(parts, fmt.Sprintf("• **Вес:** %s кг", weight))
 
-		// Рассчитываем ИМТ если есть рост и вес
 		if height := data["height"]; height != "" {
 			if weight := data["weight"]; weight != "" {
 				h, _ := strconv.ParseFloat(height, 64)
@@ -286,7 +404,7 @@ func formatUserData(data map[string]string) string {
 		parts = append(parts, fmt.Sprintf("• **Цель:** %s", goal))
 	}
 	if course := data["course_info"]; course != "" {
-		parts = append(parts, fmt.Sprintf("• **Курс:** %s", course))
+		parts = append(parts, fmt.Sprintf("• **Препараты:** %s", course))
 	}
 
 	return strings.Join(parts, "\n")

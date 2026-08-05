@@ -12,6 +12,7 @@ type AnalysisService interface {
 	HandleAnalysisWithContext(ctx context.Context, text string, contextInfo string) (string, error)
 	HandleAnalysisFromFile(ctx context.Context, data []byte, mimeType string) (string, error)
 	HandleAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error)
+	HandleBioscan(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error)
 }
 
 type analysisService struct {
@@ -29,7 +30,6 @@ func (s *analysisService) HandleAnalysis(ctx context.Context, text string) (stri
 }
 
 func (s *analysisService) HandleAnalysisWithContext(ctx context.Context, text string, contextInfo string) (string, error) {
-	// Добавляем контекстную информацию к тексту
 	fullText := text
 	if contextInfo != "" {
 		fullText = fmt.Sprintf("%s\n\nДополнительная информация о пациенте:\n%s", text, contextInfo)
@@ -42,10 +42,14 @@ func (s *analysisService) HandleAnalysisFromFile(ctx context.Context, data []byt
 }
 
 func (s *analysisService) HandleAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error) {
-	// Добавляем контекстную информацию
 	textPrompt := "Содержимое загруженного документа с медицинскими анализами."
 	if contextInfo != "" {
 		textPrompt = fmt.Sprintf("%s\n\nДополнительная информация о пациенте:\n%s", textPrompt, contextInfo)
 	}
 	return s.aiClient.GenerateAnalysisFromFileWithContext(ctx, data, mimeType, textPrompt)
+}
+
+// HandleBioscan - обрабатывает фото тела
+func (s *analysisService) HandleBioscan(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error) {
+	return s.aiClient.GenerateBioscanAnalysis(ctx, data, mimeType, contextInfo)
 }

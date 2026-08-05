@@ -16,15 +16,39 @@ func StartHandler(stateManager states.StateManager) func(context.Context, *tgbot
 		}
 
 		chatID := update.Message.Chat.ID
-		stateManager.Reset(chatID)
 
-		_, err := b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        "🧬 Добро пожаловать в AnalyzPro!\n\nAnalyzPro помогает разобраться в медицинских анализах.\n\nПоддерживаются:\n\n• PDF\n• фотографии анализов\n\nПосле обработки бот объяснит показатели простым языком и покажет возможные отклонения.\n\n⚠️ Важно\n\nAnalyzPro не заменяет врача и не ставит диагнозы.\n\nВыберите действие.",
-			ReplyMarkup: keyboards.MainMenu(),
-		})
-		if err != nil {
+		// Проверяем, принято ли соглашение
+		agreementAccepted := stateManager.GetUserData(chatID, "agreement_accepted")
+
+		if agreementAccepted == "yes" {
+			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+				ChatID: chatID,
+				Text: `👋 **Добро пожаловать обратно в AnalyzPRO!**
+
+Выберите действие:`,
+				ReplyMarkup: keyboards.MainMenu(),
+				ParseMode:   "Markdown",
+			})
 			return
 		}
+
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text: `👋 **Добро пожаловать в AnalyzPRO!**
+
+Я помогу вам разобраться в медицинских анализах.
+
+🔬 **Что я умею:**
+• Анализировать PDF и фото с результатами
+• Объяснять показатели простым языком
+• Выделять отклонения от нормы
+• Давать рекомендации
+
+⚠️ **Важно:** Я НЕ ставлю диагнозы и НЕ заменяю врача!
+
+📝 Для начала работы примите пользовательское соглашение.`,
+			ReplyMarkup: keyboards.StartMenu(),
+			ParseMode:   "Markdown",
+		})
 	}
 }

@@ -9,10 +9,12 @@ type State string
 const (
 	StateIdle                      State = "idle"
 	StateWaitingAnalysisFile       State = "waiting_analysis_file"
-	StateWaitingCourseInfo         State = "waiting_course_info"
-	StateWaitingCourseTime         State = "waiting_course_time"
+	StateWaitingCourseInfo         State = "waiting_course_info" // Вопрос про препараты
+	StateWaitingCourseTime         State = "waiting_course_time" // Какие препараты
 	StateWaitingPhotoConfirm       State = "waiting_photo_confirm"
 	StateWaitingFilesConfirm       State = "waiting_files_confirm"
+	StateWaitingName               State = "waiting_name"
+	StateWaitingGender             State = "waiting_gender"
 	StateWaitingAge                State = "waiting_age"
 	StateWaitingHeight             State = "waiting_height"
 	StateWaitingWeight             State = "waiting_weight"
