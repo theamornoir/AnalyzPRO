@@ -3,9 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	tgbot "github.com/go-telegram/bot"
@@ -81,41 +79,8 @@ func BioscanHandler(
 			return
 		}
 
-		// Получаем данные пользователя
-		userData := stateManager.GetAllUserData(chatID)
-
-		userName := userData["name"]
-		if userName == "" {
-			userName = "Пользователь"
-		}
-
-		age := userData["age"]
-		if age == "" {
-			age = "—"
-		}
-
-		gender := userData["gender"]
-		if gender == "" {
-			gender = "—"
-		}
-
-		height := userData["height"]
-		if height == "" {
-			height = "—"
-		}
-
-		weight := userData["weight"]
-		if weight == "" {
-			weight = "—"
-		}
-
-		sportType := userData["sport_type"]
-		goal := userData["goal"]
-
-		userContext := buildBioscanContext(userData)
-
-		// Отправляем запрос в Gemini
-		result, err := analysisService.HandleBioscan(ctx, fileData, mimeType, userContext)
+		// Отправляем запрос в Gemini (без данных пользователя)
+		result, err := analysisService.HandleBioscan(ctx, fileData, mimeType, "")
 		if err != nil {
 			deleteMessage(ctx, b, chatID, loadingMsg.ID)
 			deleteMessage(ctx, b, chatID, statusMsg.ID)
@@ -134,37 +99,50 @@ func BioscanHandler(
 		deleteMessage(ctx, b, chatID, statusMsg.ID)
 
 		// ==========================================
-		// ОТПРАВЛЯЕМ РЕЗУЛЬТАТ В PDF
+		// ЛОГИРУЕМ РЕЗУЛЬТАТ
+		// ==========================================
+		log.Printf("📊 Получен результат от Gemini: %d символов", len(result))
+		if len(result) > 100 {
+			log.Printf("📊 Первые 100 символов: %q", result[:100])
+		} else {
+			log.Printf("📊 Полный текст: %q", result)
+		}
+
+		// ==========================================
+		// СОЗДАЁМ HTML ОТЧЁТ (без лишнего сообщения)
 		// ==========================================
 
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		// Отправляем сообщение о создании отчёта
+		creatingMsg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,
-			Text:   "📄 Создаю профессиональный PDF-отчёт...\n\n⏳ Это может занять несколько секунд.",
+			Text:   "📄 Создаю отчёт...",
 		})
 
-		pdfData, err := GenerateBioscanPDF(result, userName, age, gender, height, weight, sportType, goal)
+		// Создаём HTML отчёт
+		htmlData, err := GenerateSimpleBioscanPDF(result)
 		if err != nil {
-			log.Printf("❌ PDF generation error: %v", err)
+			log.Printf("❌ Ошибка создания HTML: %v", err)
+			// Удаляем сообщение "Создаю отчёт..."
+			deleteMessage(ctx, b, chatID, creatingMsg.ID)
+			// Отправляем текст как fallback
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 				ChatID:    chatID,
 				Text:      result,
 				ParseMode: "Markdown",
 			})
 		} else {
+			// Удаляем сообщение "Создаю отчёт..."
+			deleteMessage(ctx, b, chatID, creatingMsg.ID)
+
+			// Отправляем HTML файл с названием "Bioscan_отчет.html"
 			_, _ = b.SendDocument(ctx, &tgbot.SendDocumentParams{
 				ChatID: chatID,
 				Document: &models.InputFileUpload{
-					Filename: fmt.Sprintf("Bioscan_%s.pdf", time.Now().Format("2006-01-02_15-04")),
-					Data:     bytes.NewReader(pdfData),
+					Filename: "Bioscan_отчет.html",
+					Data:     bytes.NewReader(htmlData),
 				},
-				Caption: "📸 **Ваш профессиональный Bioscan-анализ**\n\n" +
-					"📄 **Отчёт содержит:**\n" +
-					"• 📊 Оценку телосложения\n" +
-					"• 💪 Детальный разбор каждой мышцы\n" +
-					"• 🦴 Анализ осанки\n" +
-					"• ✅ Персональные рекомендации по тренировкам\n\n" +
-					"📅 **Сохраните этот файл** для отслеживания прогресса!\n" +
-					"🔄 Рекомендуется повторить анализ через 4-6 недель.",
+				Caption: "📄 **Ваш Bioscan-отчёт**\n\n" +
+					"🔍 Отчёт содержит детальный анализ фигуры и рекомендации.\n\n",
 				ParseMode: "Markdown",
 			})
 		}
@@ -199,7 +177,7 @@ func animateBioscanStatus(ctx context.Context, b *tgbot.Bot, chatID int64, messa
 		default:
 		}
 
-		// Ждём между обновлениями (первое обновление через 1.5 сек, остальные через 1-2 сек)
+		// Ждём между обновлениями
 		if i == 0 {
 			time.Sleep(1500 * time.Millisecond)
 		} else {
@@ -215,36 +193,4 @@ func animateBioscanStatus(ctx context.Context, b *tgbot.Bot, chatID int64, messa
 				"🔄 Процесс анализа может занять до 20 секунд",
 		})
 	}
-}
-
-// buildBioscanContext - формирует контекст для Bioscan
-func buildBioscanContext(userData map[string]string) string {
-	var parts []string
-
-	name := userData["name"]
-	if name == "" {
-		name = "Пользователь"
-	}
-	parts = append(parts, fmt.Sprintf("👤 **Имя:** %s", name))
-
-	if gender := userData["gender"]; gender != "" {
-		parts = append(parts, fmt.Sprintf("• **Пол:** %s", gender))
-	}
-	if age := userData["age"]; age != "" {
-		parts = append(parts, fmt.Sprintf("• **Возраст:** %s лет", age))
-	}
-	if height := userData["height"]; height != "" {
-		parts = append(parts, fmt.Sprintf("• **Рост:** %s см", height))
-	}
-	if weight := userData["weight"]; weight != "" {
-		parts = append(parts, fmt.Sprintf("• **Вес:** %s кг", weight))
-	}
-	if sport := userData["sport_type"]; sport != "" {
-		parts = append(parts, fmt.Sprintf("• **Вид спорта:** %s", sport))
-	}
-	if goal := userData["goal"]; goal != "" {
-		parts = append(parts, fmt.Sprintf("• **Цель:** %s", goal))
-	}
-
-	return strings.Join(parts, "\n")
 }

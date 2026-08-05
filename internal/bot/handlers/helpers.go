@@ -148,29 +148,42 @@ func sendLoadingMessages(
 	stickerID string,
 ) (*models.Message, *models.Message) {
 
+	var stickerMsg *models.Message
+
 	if stickerID != "" {
-		stickerMsg, err := b.SendSticker(ctx, &tgbot.SendStickerParams{
+		stickerMsg, _ = b.SendSticker(ctx, &tgbot.SendStickerParams{
 			ChatID: chatID,
 			Sticker: &models.InputFileString{
 				Data: stickerID,
 			},
 		})
-
-		if err == nil && stickerMsg != nil {
-			textMsg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
-				ChatID: chatID,
-				Text:   "📊 Обрабатываю результаты...",
-			})
-			return stickerMsg, textMsg
-		}
 	}
 
-	stickerMsg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text:   "⏳ Обрабатываю результаты...",
-	})
+	var textMsg *models.Message
+	if stickerMsg != nil {
+		textMsg, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "📊 Обрабатываю результаты...",
+		})
+	} else {
+		stickerMsg, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "⏳ Обрабатываю результаты...",
+		})
+	}
 
-	return stickerMsg, nil
+	return stickerMsg, textMsg
+}
+
+// updateLoadingStatus - обновляет сообщение со статусом
+func updateLoadingStatus(ctx context.Context, b *tgbot.Bot, chatID int64, messageID int, newStatus string) {
+	_, _ = b.EditMessageText(ctx, &tgbot.EditMessageTextParams{
+		ChatID:    chatID,
+		MessageID: messageID,
+		Text: newStatus + "\n\n" +
+			"🔄 Пожалуйста, подождите...\n" +
+			"⏳ Это может занять несколько секунд",
+	})
 }
 
 // isPhotoLikelyAnalysis - проверяет, похоже ли фото на медицинские анализы
@@ -329,7 +342,6 @@ func isPDFLikelyAnalysis(data []byte) bool {
 func buildAnalysisText(userData map[string]string) string {
 	var parts []string
 
-	// Имя пользователя
 	name := userData["name"]
 	if name == "" {
 		name = "Пользователь"
@@ -339,12 +351,9 @@ func buildAnalysisText(userData map[string]string) string {
 
 	parts = append(parts, "❗ **ВАЖНАЯ ИНФОРМАЦИЯ ДЛЯ АНАЛИЗА:**")
 
-	// Пол
 	if gender := userData["gender"]; gender != "" {
 		parts = append(parts, fmt.Sprintf("• Пол: %s", gender))
 	}
-
-	// Возраст
 	if age := userData["age"]; age != "" {
 		parts = append(parts, fmt.Sprintf("• Возраст: %s лет", age))
 	}
@@ -370,22 +379,18 @@ func buildAnalysisText(userData map[string]string) string {
 	if chronic := userData["chronic_diseases"]; chronic != "" && strings.ToLower(chronic) != "нет" {
 		parts = append(parts, fmt.Sprintf("• Хронические заболевания: %s", chronic))
 	}
-
 	if allergies := userData["allergies"]; allergies != "" && strings.ToLower(allergies) != "нет" {
 		parts = append(parts, fmt.Sprintf("• Аллергии: %s", allergies))
 	}
-
 	if medications := userData["medications"]; medications != "" && strings.ToLower(medications) != "нет" {
 		parts = append(parts, fmt.Sprintf("• Принимаемые лекарства: %s", medications))
 	}
-
 	if smoking := userData["smoking"]; smoking != "" && strings.ToLower(smoking) != "нет" {
 		parts = append(parts, fmt.Sprintf("• Курение: %s", smoking))
 	}
 	if alcohol := userData["alcohol"]; alcohol != "" {
 		parts = append(parts, fmt.Sprintf("• Алкоголь: %s", alcohol))
 	}
-
 	if sport := userData["sport_type"]; sport != "" {
 		parts = append(parts, fmt.Sprintf("• Вид спорта: %s", sport))
 	}
@@ -396,7 +401,6 @@ func buildAnalysisText(userData map[string]string) string {
 		parts = append(parts, fmt.Sprintf("• Цель: %s", goal))
 	}
 
-	// Информация о препаратах
 	onCourse := userData["on_course"]
 	if onCourse == "yes" {
 		courseInfo := userData["course_info"]
@@ -501,10 +505,8 @@ func processAllPhotos(
 	var err error
 
 	if len(allFileData) == 1 {
-		// Если одно фото - отправляем как есть
 		result, err = analysisService.HandleAnalysisFromFileWithContext(ctx, allFileData[0], allMimeTypes[0], analysisText)
 	} else {
-		// Если несколько фото - отправляем все по очереди и объединяем ответы
 		var allResults []string
 
 		for i, fileData := range allFileData {
@@ -523,10 +525,7 @@ func processAllPhotos(
 			return
 		}
 
-		// Объединяем ответы
 		result = strings.Join(allResults, "\n\n---\n\n")
-
-		// Если ответ слишком длинный - сокращаем
 		if len(result) > 4000 {
 			result = result[:4000] + "\n\n... (ответ сокращён)"
 		}
@@ -548,7 +547,6 @@ func processAllPhotos(
 		Text:   result,
 	})
 
-	// Возвращаемся в состояние ожидания файла с кнопкой "Назад"
 	stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
@@ -589,22 +587,10 @@ func processPDF(
 		Text:   result,
 	})
 
-	// Возвращаемся в состояние ожидания файла с кнопкой "Назад"
 	stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        "📄 Отправьте ещё один файл или нажмите ⬅️ Назад для возврата в меню.",
 		ReplyMarkup: keyboards.BackMenu(),
-	})
-}
-
-// updateLoadingStatus - обновляет сообщение со статусом
-func updateLoadingStatus(ctx context.Context, b *tgbot.Bot, chatID int64, messageID int, newStatus string) {
-	_, _ = b.EditMessageText(ctx, &tgbot.EditMessageTextParams{
-		ChatID:    chatID,
-		MessageID: messageID,
-		Text: newStatus + "\n\n" +
-			"🔄 Пожалуйста, подождите...\n" +
-			"⏳ Это может занять несколько секунд",
 	})
 }

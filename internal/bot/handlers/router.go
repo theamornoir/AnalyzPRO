@@ -281,27 +281,25 @@ func MessageRouter(
 			if stateManager.GetUserData(chatID, "agreement_accepted") != "yes" {
 				_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 					ChatID:      chatID,
-					Text:        "📝 Пожалуйста, сначала ознакомьтесь с пользовательским соглашением.\n\nНажмите кнопку **📝 Пользовательское соглашение**.",
+					Text:        "📝 Пожалуйста, сначала примите пользовательское соглашение.",
 					ReplyMarkup: keyboards.StartMenu(),
 				})
 				return
 			}
 
-			// Устанавливаем тип анализа как bioscan
 			stateManager.SetUserData(chatID, "analysis_type", "bioscan")
 			stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
 
-			// Показываем инструкцию
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 				ChatID: chatID,
 				Text: "📸 **Bioscan - анализ фигуры**\n\n" +
-					"Пожалуйста, отправьте **фото** вашего тела для анализа.\n\n" +
-					"📌 **Рекомендации для лучшего результата:**\n" +
-					"• 📸 Фото в **полный рост** (анфас)\n" +
-					"• 💡 Хорошее **освещение**\n" +
-					"• 👕 В **обтягивающей одежде** или без неё\n" +
-					"• 🧍 Стоять **прямо**, руки вдоль тела\n" +
-					"• 📱 Фото должно быть **чётким**, не размытым",
+					"Отправьте **фото** вашего тела для анализа.\n\n" +
+					"📌 Рекомендации:\n" +
+					"• Фото в полный рост (анфас)\n" +
+					"• Хорошее освещение\n" +
+					"• В обтягивающей одежде или без неё\n" +
+					"• Стоять прямо, руки вдоль тела\n\n" +
+					"⏳ Анализ займёт 10-20 секунд.",
 				ReplyMarkup: keyboards.BackMenu(),
 				ParseMode:   "Markdown",
 			})
