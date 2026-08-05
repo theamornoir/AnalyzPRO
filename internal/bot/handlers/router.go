@@ -10,12 +10,14 @@ import (
 
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
+	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/service"
 )
 
 func MessageRouter(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
+	reportRenderer *report.Renderer,
 	uploadDir string,
 	stickerID string,
 	adminChatID int64,
@@ -188,7 +190,13 @@ func MessageRouter(
 		}
 
 		if state == states.StateWaitingAnalysisFile {
-			UploadHandler(stateManager, analysisService, uploadDir, stickerID)(ctx, b, update)
+			UploadHandler(
+				stateManager,
+				analysisService,
+				reportRenderer,
+				uploadDir,
+				stickerID,
+			)(ctx, b, update)
 			return
 		}
 

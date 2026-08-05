@@ -10,12 +10,14 @@ import (
 
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
+	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/service"
 )
 
 func UploadHandler(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
+	reportRenderer *report.Renderer,
 	uploadDir string,
 	stickerID string,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
@@ -120,7 +122,12 @@ func UploadHandler(
 			analysisType := stateManager.GetUserData(chatID, "analysis_type")
 			if analysisType == "bioscan" {
 				log.Printf("📸 Обработка Bioscan")
-				BioscanHandler(stateManager, analysisService, uploadDir, stickerID)(ctx, b, update)
+				BioscanHandler(
+					stateManager,
+					analysisService,
+					uploadDir,
+					stickerID,
+				)(ctx, b, update)
 				return
 			}
 
