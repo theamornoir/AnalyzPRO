@@ -4,12 +4,27 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
+// ProcessAnalysisMenu - меню с кнопками обработки и возврата
+func ProcessAnalysisMenu() models.ReplyKeyboardMarkup {
+	return models.ReplyKeyboardMarkup{
+		Keyboard: [][]models.KeyboardButton{
+			{
+				{Text: "✅ Обработать анализы"},
+			},
+			{
+				{Text: "⬅️ Назад"},
+			},
+		},
+		ResizeKeyboard: true,
+	}
+}
+
 // StartMenu - меню после /start (до принятия соглашения)
 func StartMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
 			{
-				{Text: "📝 Пользовательское соглашение"}, // <-- ИЗМЕНЕНО
+				{Text: "📝 Пользовательское соглашение"},
 			},
 			{
 				{Text: "ℹ️ О сервисе"},
@@ -24,8 +39,7 @@ func MainMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
 			{
-				{Text: "🏥 Обычный анализ"},
-				{Text: "🏋️ Анализ для спортсмена"},
+				{Text: "🏥 Диагностика анализов"},
 			},
 			{
 				{Text: "📸 Bioscan"},
@@ -37,6 +51,50 @@ func MainMenu() models.ReplyKeyboardMarkup {
 			},
 		},
 		ResizeKeyboard: true,
+	}
+}
+
+// AnalysisTypeMenu - меню выбора типа анализа
+func AnalysisTypeMenu() models.ReplyKeyboardMarkup {
+	return models.ReplyKeyboardMarkup{
+		Keyboard: [][]models.KeyboardButton{
+			{
+				{Text: "📊 Обычный анализ"},
+				{Text: "🔬 Расширенный анализ"},
+			},
+			{
+				{Text: "⬅️ Назад"},
+			},
+		},
+		ResizeKeyboard: true,
+	}
+}
+
+// UploadConfirm - меню подтверждения загрузки файлов
+func UploadConfirm() models.ReplyKeyboardMarkup {
+	return models.ReplyKeyboardMarkup{
+		Keyboard: [][]models.KeyboardButton{
+			{
+				{Text: "✅ Обработать анализы"},
+				{Text: "❌ Отмена"},
+			},
+		},
+		ResizeKeyboard:  true,
+		OneTimeKeyboard: true,
+	}
+}
+
+// PhotoConfirm - меню подтверждения для фото (анализы или нет)
+func PhotoConfirm() models.ReplyKeyboardMarkup {
+	return models.ReplyKeyboardMarkup{
+		Keyboard: [][]models.KeyboardButton{
+			{
+				{Text: "✅ Да, это анализы"},
+				{Text: "❌ Нет, это не анализы"},
+			},
+		},
+		ResizeKeyboard:  true,
+		OneTimeKeyboard: true,
 	}
 }
 

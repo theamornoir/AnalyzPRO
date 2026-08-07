@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"log"
+	"os"
 
 	"github.com/theamornoir/analyzpro/internal/ai"
 	"github.com/theamornoir/analyzpro/internal/bot"
@@ -9,6 +11,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/config"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/service"
+	"github.com/theamornoir/analyzpro/internal/storage"
 )
 
 type App struct {
@@ -22,16 +25,33 @@ func New() (*App, error) {
 		return nil, err
 	}
 
+	// Проверяем, нужно ли использовать моки
+	// Моки используются если:
+	// 1. APP_ENV=development и API ключ пустой или содержит "mock"
+	// 2. Или явно установлена переменная USE_MOCK=true
+	useMock := os.Getenv("USE_MOCK") == "true" ||
+		(cfg.AppEnv == "development" && (cfg.GoogleGeminiAPIKey == "" || cfg.GoogleGeminiAPIKey == "mock" || cfg.GoogleGeminiAPIKey == "AQ.Ab8RN6JFdJB_j-vWwX4Rk08YF1yY51dPLOz19FY1Ui5T2YLJDAgo"))
+
+	log.Printf("🧪 Use mock mode: %v", useMock)
+	log.Printf("📌 App Environment: %s", cfg.AppEnv)
+
 	stateManager := states.NewMemoryStateManager()
 
 	// AI клиент
-	geminiClient := ai.NewGeminiClient(
-		cfg.GoogleGeminiAPIKey,
-		cfg.GoogleAIModel,
-	)
+	var geminiClient *ai.GeminiClient
+	if useMock {
+		// Используем мок
+		geminiClient = ai.NewGeminiClient("mock", cfg.GoogleAIModel)
+		log.Printf("🧪 Running in MOCK mode - all AI responses will be mocked")
+	} else {
+		// Используем реальный API
+		geminiClient = ai.NewGeminiClient(
+			cfg.GoogleGeminiAPIKey,
+			cfg.GoogleAIModel,
+		)
+	}
 
 	reportRenderer, err := report.NewRenderer()
-
 	if err != nil {
 		return nil, err
 	}
@@ -48,6 +68,8 @@ func New() (*App, error) {
 		renderer,
 	)
 
+	agreementStorage := storage.NewAgreementStorage("./data/agreements.json")
+
 	telegramBot, err := bot.New(
 		cfg.BotToken,
 		stateManager,
@@ -56,10 +78,20 @@ func New() (*App, error) {
 		cfg.UploadDir,
 		cfg.LoadingStickerID,
 		cfg.AdminChatID,
+		agreementStorage,
 	)
 	if err != nil {
 		return nil, err
 	}
+
+	log.Printf("✅ App initialized successfully")
+	log.Printf("📌 Configuration:")
+	log.Printf("   - App Env: %s", cfg.AppEnv)
+	log.Printf("   - Bot Token: %s...", cfg.BotToken[:10])
+	log.Printf("   - Gemini Model: %s", cfg.GoogleAIModel)
+	log.Printf("   - Upload Dir: %s", cfg.UploadDir)
+	log.Printf("   - Mock Mode: %v", useMock)
+	log.Printf("   - Admin Chat ID: %d", cfg.AdminChatID)
 
 	return &App{
 		cfg: cfg,
@@ -68,5 +100,6 @@ func New() (*App, error) {
 }
 
 func (a *App) Run(ctx context.Context) {
+	log.Printf("🚀 Bot is running...")
 	a.bot.Start(ctx)
 }

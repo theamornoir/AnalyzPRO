@@ -5,11 +5,16 @@ import (
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
+	"github.com/theamornoir/analyzpro/internal/storage"
 )
 
-func StartHandler(stateManager states.StateManager) func(context.Context, *tgbot.Bot, *models.Update) {
+func StartHandler(
+	stateManager states.StateManager,
+	agreementStorage *storage.AgreementStorage, // <-- ДОБАВЛЕНО
+) func(context.Context, *tgbot.Bot, *models.Update) {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update) {
 		if update.Message == nil {
 			return
@@ -17,10 +22,8 @@ func StartHandler(stateManager states.StateManager) func(context.Context, *tgbot
 
 		chatID := update.Message.Chat.ID
 
-		// Проверяем, принято ли соглашение
-		agreementAccepted := stateManager.GetUserData(chatID, "agreement_accepted")
-
-		if agreementAccepted == "yes" {
+		// Проверяем соглашение через постоянное хранилище
+		if agreementStorage.IsAgreed(chatID) {
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 				ChatID: chatID,
 				Text: `👋 **Добро пожаловать обратно в AnalyzPRO!**

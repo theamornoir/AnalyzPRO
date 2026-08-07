@@ -26,6 +26,19 @@ const (
 	StateWaitingSportType          State = "waiting_sport_type"
 	StateWaitingTrainingExperience State = "waiting_training_experience"
 	StateWaitingGoal               State = "waiting_goal"
+
+	StateWaitingBioscanName    State = "waiting_bioscan_name"
+	StateWaitingBioscanAge     State = "waiting_bioscan_age"
+	StateWaitingBioscanHeight  State = "waiting_bioscan_height"
+	StateWaitingBioscanWeight  State = "waiting_bioscan_weight"
+	StateWaitingBioscanGoal    State = "waiting_bioscan_goal"
+	StateWaitingBioscanPhoto1  State = "waiting_bioscan_photo1"
+	StateWaitingBioscanPhoto2  State = "waiting_bioscan_photo2"
+	StateWaitingBioscanPhoto3  State = "waiting_bioscan_photo3"
+	StateWaitingBioscanPhoto4  State = "waiting_bioscan_photo4"
+	StateWaitingBioscanConfirm State = "waiting_bioscan_confirm"
+
+	StateWaitingUploadConfirm State = "waiting_upload_confirm"
 )
 
 type StateManager interface {
