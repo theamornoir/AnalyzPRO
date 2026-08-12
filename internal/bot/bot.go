@@ -7,7 +7,8 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
-	"github.com/theamornoir/analyzpro/internal/bot/handlers"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/router"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/service"
@@ -37,7 +38,7 @@ func New(
 ) (*Bot, error) {
 
 	if stateManager == nil {
-		stateManager = states.NewMemoryStateManager()
+		stateManager = states.NewMemoryStateManager("")
 	}
 
 	if analysisService == nil {
@@ -71,7 +72,7 @@ func (b *Bot) Start(ctx context.Context) {
 
 func (b *Bot) registerHandlers() {
 
-	router := handlers.MessageRouter(
+	router := router.MessageRouter(
 		b.stateManager,
 		b.analysisService,
 		b.reportRenderer,
@@ -86,7 +87,7 @@ func (b *Bot) registerHandlers() {
 		tgbot.HandlerTypeMessageText,
 		"/start",
 		tgbot.MatchTypeExact,
-		handlers.StartHandler(b.stateManager, b.agreementStorage), // <-- ДОБАВЛЕНО
+		menu.StartHandler(b.stateManager, b.agreementStorage), // <-- ДОБАВЛЕНО
 	)
 
 	// Обычный текст

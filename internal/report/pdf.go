@@ -9,23 +9,25 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
 // ConvertHTMLToPDF - конвертирует HTML в PDF через html2pdf.app API
 func ConvertHTMLToPDF(html string) ([]byte, error) {
-	log.Printf("🔄 Начинаем конвертацию HTML в PDF...")
+	log.Printf(locales.LogStartingPDFConversion)
 
 	apiKey := os.Getenv("HTML2PDF_API_KEY")
 	if apiKey == "" {
-		log.Printf("❌ HTML2PDF_API_KEY не найден")
-		return nil, fmt.Errorf("HTML2PDF_API_KEY not set")
+		log.Printf(locales.LogPDFKeyNotFound)
+		return nil, fmt.Errorf(locales.ErrHTML2PDFKeyNotSet)
 	}
 
-	log.Printf("🔑 API ключ найден: %s...", apiKey[:10])
+	log.Printf(locales.LogPDFKeyFound, apiKey[:10])
 
 	// Пробуем передавать ключ в URL (без Authorization)
 	url := fmt.Sprintf("https://api.html2pdf.app/v1/generate?apiKey=%s", apiKey)
-	log.Printf("🌐 URL: %s", url)
+	log.Printf(locales.LogPDFURL, url)
 
 	payload := map[string]interface{}{
 		"html": html,
@@ -55,7 +57,7 @@ func ConvertHTMLToPDF(html string) ([]byte, error) {
 
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	log.Printf("⏳ Отправка запроса...")
+	log.Printf(locales.LogSendingRequest)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -67,12 +69,12 @@ func ConvertHTMLToPDF(html string) ([]byte, error) {
 		return nil, err
 	}
 
-	log.Printf("📊 Статус: %d", resp.StatusCode)
+	log.Printf(locales.LogPDFStatus, resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf(locales.ErrAPIError, resp.StatusCode, string(body))
 	}
 
-	log.Printf("✅ PDF получен, размер: %d байт", len(body))
+	log.Printf(locales.LogPDFReceived, len(body))
 	return body, nil
 }

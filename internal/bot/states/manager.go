@@ -1,18 +1,20 @@
 package states
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 )
 
 type State string
 
 const (
-	StateIdle                      State = "idle"
-	StateWaitingAnalysisFile       State = "waiting_analysis_file"
-	StateWaitingCourseInfo         State = "waiting_course_info" // Вопрос про препараты
-	StateWaitingCourseTime         State = "waiting_course_time" // Какие препараты
-	StateWaitingPhotoConfirm       State = "waiting_photo_confirm"
-	StateWaitingFilesConfirm       State = "waiting_files_confirm"
+	StateIdle                State = "idle"
+	StateWaitingAnalysisFile State = "waiting_analysis_file"
+	StateWaitingCourseInfo   State = "waiting_course_info" // Вопрос про препараты
+	StateWaitingCourseTime   State = "waiting_course_time" // Какие препараты
+
 	StateWaitingName               State = "waiting_name"
 	StateWaitingGender             State = "waiting_gender"
 	StateWaitingAge                State = "waiting_age"
@@ -51,22 +53,88 @@ type StateManager interface {
 }
 
 type MemoryStateManager struct {
-	mu     sync.RWMutex
-	states map[int64]State
-	data   map[int64]map[string]string
+	mu       sync.RWMutex
+	filePath string
+	states   map[int64]State
+	data     map[int64]map[string]string
 }
 
-func NewMemoryStateManager() *MemoryStateManager {
-	return &MemoryStateManager{
-		states: make(map[int64]State),
-		data:   make(map[int64]map[string]string),
+// persistedState - структура для сохранения состояния на диск
+type persistedState struct {
+	States map[int64]State             `json:"states"`
+	Data   map[int64]map[string]string `json:"data"`
+}
+
+// NewMemoryStateManager создаёт in-memory менеджер состояний.
+// Если filePath не пуст, состояния будут персистентно сохраняться на диск.
+func NewMemoryStateManager(filePath string) *MemoryStateManager {
+	m := &MemoryStateManager{
+		filePath: filePath,
+		states:   make(map[int64]State),
+		data:     make(map[int64]map[string]string),
 	}
+	if filePath != "" {
+		m.load()
+	}
+	return m
+}
+
+func (m *MemoryStateManager) load() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	file, err := os.Open(m.filePath)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	var ps persistedState
+	if err := json.NewDecoder(file).Decode(&ps); err != nil {
+		return
+	}
+	if ps.States != nil {
+		m.states = ps.States
+	}
+	if ps.Data != nil {
+		m.data = ps.Data
+	}
+}
+
+func (m *MemoryStateManager) save() {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.filePath == "" {
+		return
+	}
+
+	if dir := filepath.Dir(m.filePath); dir != "." {
+		_ = os.MkdirAll(dir, 0o755)
+	}
+
+	file, err := os.Create(m.filePath)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	ps := persistedState{
+		States: m.states,
+		Data:   m.data,
+	}
+	_ = json.NewEncoder(file).Encode(ps)
+}
+
+func (m *MemoryStateManager) persist() {
+	go m.save()
 }
 
 func (m *MemoryStateManager) SetState(chatID int64, state State) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.states[chatID] = state
+	m.persist()
 }
 
 func (m *MemoryStateManager) GetState(chatID int64) State {
@@ -83,6 +151,7 @@ func (m *MemoryStateManager) Reset(chatID int64) {
 	defer m.mu.Unlock()
 	delete(m.states, chatID)
 	delete(m.data, chatID)
+	m.persist()
 }
 
 func (m *MemoryStateManager) SetUserData(chatID int64, key, value string) {
@@ -92,6 +161,7 @@ func (m *MemoryStateManager) SetUserData(chatID int64, key, value string) {
 		m.data[chatID] = make(map[string]string)
 	}
 	m.data[chatID][key] = value
+	m.persist()
 }
 
 func (m *MemoryStateManager) GetUserData(chatID int64, key string) string {

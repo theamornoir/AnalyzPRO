@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"sync"
 )
 
@@ -16,6 +17,10 @@ func NewAgreementStorage(filePath string) *AgreementStorage {
 	s := &AgreementStorage{
 		filePath: filePath,
 		data:     make(map[int64]bool),
+	}
+	// Гарантируем существование директории для файла хранилища
+	if dir := filepath.Dir(filePath); dir != "." {
+		_ = os.MkdirAll(dir, 0o755)
 	}
 	s.load()
 	return s

@@ -2,6 +2,8 @@ package keyboards
 
 import (
 	"github.com/go-telegram/bot/models"
+
+	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
 // ProcessAnalysisMenu - меню с кнопками обработки и возврата
@@ -9,10 +11,10 @@ func ProcessAnalysisMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
 			{
-				{Text: "✅ Обработать анализы"},
+				{Text: locales.BtnProcessAnalysis},
 			},
 			{
-				{Text: "⬅️ Назад"},
+				{Text: locales.BtnBack},
 			},
 		},
 		ResizeKeyboard: true,
@@ -24,10 +26,10 @@ func StartMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
 			{
-				{Text: "📝 Пользовательское соглашение"},
+				{Text: locales.BtnAgreement},
 			},
 			{
-				{Text: "ℹ️ О сервисе"},
+				{Text: locales.BtnAbout},
 			},
 		},
 		ResizeKeyboard: true,
@@ -39,15 +41,15 @@ func MainMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
 			{
-				{Text: "🏥 Диагностика анализов"},
+				{Text: locales.BtnDiagnostics},
 			},
 			{
-				{Text: "📸 Bioscan"},
-				{Text: "📝 Отзывы и предложения"},
+				{Text: locales.BtnBioscan},
+				{Text: locales.BtnFeedback},
 			},
 			{
-				{Text: "💎 Premium"},
-				{Text: "ℹ️ О сервисе"},
+				{Text: locales.BtnPremium},
+				{Text: locales.BtnAbout},
 			},
 		},
 		ResizeKeyboard: true,
@@ -59,11 +61,11 @@ func AnalysisTypeMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
 			{
-				{Text: "📊 Обычный анализ"},
-				{Text: "🔬 Расширенный анализ"},
+				{Text: locales.BtnRegularAnalysis},
+				{Text: locales.BtnExtendedAnalysis},
 			},
 			{
-				{Text: "⬅️ Назад"},
+				{Text: locales.BtnBack},
 			},
 		},
 		ResizeKeyboard: true,
@@ -75,22 +77,8 @@ func UploadConfirm() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
 			{
-				{Text: "✅ Обработать анализы"},
-				{Text: "❌ Отмена"},
-			},
-		},
-		ResizeKeyboard:  true,
-		OneTimeKeyboard: true,
-	}
-}
-
-// PhotoConfirm - меню подтверждения для фото (анализы или нет)
-func PhotoConfirm() models.ReplyKeyboardMarkup {
-	return models.ReplyKeyboardMarkup{
-		Keyboard: [][]models.KeyboardButton{
-			{
-				{Text: "✅ Да, это анализы"},
-				{Text: "❌ Нет, это не анализы"},
+				{Text: locales.BtnProcessAnalysis},
+				{Text: locales.BtnCancel},
 			},
 		},
 		ResizeKeyboard:  true,
@@ -103,7 +91,7 @@ func BackMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
 			{
-				{Text: "⬅️ Назад"},
+				{Text: locales.BtnBack},
 			},
 		},
 		ResizeKeyboard: true,
@@ -115,7 +103,7 @@ func AgreementMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
 			{
-				{Text: "✅ Принять соглашение"},
+				{Text: locales.BtnAcceptAgreement},
 			},
 		},
 		ResizeKeyboard: true,
@@ -124,18 +112,5 @@ func AgreementMenu() models.ReplyKeyboardMarkup {
 
 // UserAgreementText - текст пользовательского соглашения
 func UserAgreementText() string {
-	return `📝 **ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ**
-
-Я, AnalyzPRO, предоставляю услуги по интерпретации медицинских анализов с использованием искусственного интеллекта.
-
-⚠️ **ВАЖНО:**
-1. Бот НЕ ставит диагнозы и НЕ заменяет врача.
-2. Результаты носят информационный характер.
-3. Всегда консультируйтесь с квалифицированным врачом.
-4. Ответственность за использование результатов лежит на пользователе.
-5. Ваши данные используются только для анализа и не передаются третьим лицам.
-
-📅 Версия соглашения: 1.0 от 05.08.2026
-
-Нажмите кнопку ниже, чтобы принять соглашение.`
+	return locales.UserAgreementText
 }

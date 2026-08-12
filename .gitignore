@@ -1,0 +1,26 @@
+# Secrets
+.env
+
+# Runtime data
+data/
+uploads/
+
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.dmg
+*.pkg
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
