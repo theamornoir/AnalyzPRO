@@ -23,6 +23,12 @@ func StartHandler(
 
 		chatID := update.Message.Chat.ID
 
+		// /start всегда освобождает «зависшее» состояние от прошлых сессий
+		// (оно персистится в states.json между перезапусками бота), чтобы
+		// пользователь начинал с чистого главного меню, а не из середины
+		// старого потока bioscan/анкеты.
+		stateManager.Reset(chatID)
+
 		// Проверяем соглашение через постоянное хранилище
 		if agreementStorage.IsAgreed(chatID) {
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{

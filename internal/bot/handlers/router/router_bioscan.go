@@ -16,6 +16,13 @@ import (
 func (r *router) handleBioscanStates(ctx context.Context, b *tgbot.Bot, chatID int64, text string, update *models.Update) bool {
 	state := r.stateManager.GetState(chatID)
 
+	// Кнопка «⬅️ Назад» должна дойти до handleBack, а не трактоваться как
+	// ввод очередного шага (иначе в фото-состояниях бот требует «пришлите
+	// фото», а на экране подтверждения — «выберите действие»).
+	if text == locales.BtnBack {
+		return false
+	}
+
 	switch state {
 	case states.StateWaitingBioscanName:
 		log.Printf(locales.LogProcessingBioscanName, chatID)

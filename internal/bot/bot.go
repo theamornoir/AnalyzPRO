@@ -3,10 +3,14 @@ package bot
 import (
 	"context"
 	"fmt"
+	"log"
+	"net/http"
+	"strings"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/dashboard"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/router"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
@@ -27,6 +31,9 @@ type Bot struct {
 	adminChatID      int64
 	agreementStorage *storage.AgreementStorage
 	paymentService   *payment.MockPaymentService
+	webAppURL        string
+	dashboardURL     string
+	httpAddr         string
 }
 
 func New(
@@ -39,6 +46,9 @@ func New(
 	adminChatID int64,
 	agreementStorage *storage.AgreementStorage,
 	paymentService *payment.MockPaymentService,
+	webAppURL string,
+	dashboardURL string,
+	httpAddr string,
 ) (*Bot, error) {
 
 	if stateManager == nil {
@@ -64,6 +74,9 @@ func New(
 		adminChatID:      adminChatID,
 		agreementStorage: agreementStorage,
 		paymentService:   paymentService,
+		webAppURL:        webAppURL,
+		dashboardURL:     dashboardURL,
+		httpAddr:         httpAddr,
 	}
 
 	botInstance.registerHandlers()
@@ -72,7 +85,80 @@ func New(
 }
 
 func (b *Bot) Start(ctx context.Context) {
+	listenAddr := b.httpAddr
+	if listenAddr == "" {
+		listenAddr = ":8080"
+	}
+	log.Printf("🌐 HTTP-сервер для Web App запускается на %s", listenAddr)
+
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/dashboard", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/dashboard/", http.StatusMovedPermanently)
+		})
+		mux.HandleFunc("/dashboard/", func(w http.ResponseWriter, r *http.Request) {
+			dashboard.HandleWebApp(w, r, true)
+		})
+		mux.HandleFunc("/api/metrics", dashboard.HandleAPIMetrics)
+		log.Printf("❌ HTTP-сервер ошибка: %v", http.ListenAndServe(listenAddr, mux))
+	}()
+
+	// Настраиваем Menu Button (кнопка рядом с полем ввода внизу чата) так,
+	// чтобы она открывала Дашборд как Telegram Mini App. Это то же самое, что
+	// предлагают делать вручную в BotFather → Menu Button, но выполняется
+	// программно через Bot API (setChatMenuButton), поэтому BotFather не
+	// нужен, а URL перенастраивается при каждом старте (актуально для
+	// динамического https-туннеля `make mini`). Запускаем в горутине — сетевой
+	// вызов к API не должен блокировать старт бота; ошибки логируются, но не
+	// фатальны.
+	go b.SetupMenuButton(ctx)
+
 	b.client.Start(ctx)
+}
+
+// SetupMenuButton настраивает кнопку меню (рядом с полем ввода внизу чата) так,
+// чтобы она открывала Дашборд как Telegram Mini App. Работает только для
+// HTTPS-URL — Telegram требует https для web_app-кнопки меню. Поэтому Mini App
+// в Menu Button имеет смысл только при https-URL (например, при запуске через
+// `make mini`); во всех остальных случаях (localhost/LAN, http) кнопка
+// сбрасывается в дефолт (команды), чтобы не висела нерабочая http-ссылка.
+//
+// Глобальная установка (без ChatID) применяется ко всем пользователям бота —
+// именно это нужно для «кнопки дашборда у всех».
+func (b *Bot) SetupMenuButton(ctx context.Context) {
+	if b.webAppURL == "" {
+		return
+	}
+
+	if !strings.HasPrefix(b.webAppURL, "https") {
+		// Нет HTTPS — сбрасываем Menu Button в дефолт, чтобы не висела
+		// нерабочая web_app-кнопка с http-ссылкой. ВАЖНО: у индивидуальных
+		// типов MenuButton* поле Type не заполняется автоматически (в отличие
+		// от обёртки MenuButton), поэтому его нужно ставить явно, иначе
+		// сериализуется {"type":""} и Telegram вернёт
+		// "can't parse menu button: MenuButton has unsupported type".
+		if _, err := b.client.SetChatMenuButton(ctx, &tgbot.SetChatMenuButtonParams{
+			MenuButton: &models.MenuButtonDefault{Type: models.MenuButtonTypeDefault},
+		}); err != nil {
+			log.Printf("⚠️ Не удалось сбросить Menu Button в default: %v", err)
+		} else {
+			log.Printf("🔘 Menu Button: оставлен дефолтным (нет HTTPS для Mini App).")
+		}
+		return
+	}
+
+	btn := &models.MenuButtonWebApp{
+		Type:   models.MenuButtonTypeWebApp,
+		Text:   "📊 Дашборд",
+		WebApp: models.WebAppInfo{URL: b.webAppURL},
+	}
+	if _, err := b.client.SetChatMenuButton(ctx, &tgbot.SetChatMenuButtonParams{
+		MenuButton: btn,
+	}); err != nil {
+		log.Printf("⚠️ Не удалось установить Menu Button (Mini App): %v", err)
+		return
+	}
+	log.Printf("🔘 Menu Button настроен: открывает Дашборд как Mini App (%s)", btn.WebApp.URL)
 }
 
 func (b *Bot) registerHandlers() {
@@ -86,6 +172,8 @@ func (b *Bot) registerHandlers() {
 		b.adminChatID,
 		b.agreementStorage,
 		b.paymentService,
+		b.webAppURL,
+		b.dashboardURL,
 	)
 
 	// /start
@@ -127,6 +215,17 @@ func (b *Bot) registerHandlers() {
 			return update.Message != nil &&
 				update.Message.Photo != nil
 		},
+		router,
+	)
+
+	// Callback-запросы (inline-кнопки: выбор тарифа premium_<id>,
+	// подтверждение оплаты premium_confirm_<id>, «Назад» back_main).
+	// Без этой регистрации router.handle() никогда не получал callback'и,
+	// поэтому клики по тарифам/оплате «ничего не делали».
+	b.client.RegisterHandler(
+		tgbot.HandlerTypeCallbackQueryData,
+		"",
+		tgbot.MatchTypePrefix,
 		router,
 	)
 }

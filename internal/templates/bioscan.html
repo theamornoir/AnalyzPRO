@@ -1,0 +1,2640 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>AnalyzPRO — Отчёт о физической форме</title>
+
+
+<style>
+
+@page {
+    size: A4;
+    margin:0;
+}
+
+
+* {
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+
+body {
+
+    background:#E9EEEE;
+
+    font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+
+    color:#172026;
+
+}
+
+
+
+.page {
+
+    width:210mm;
+
+    min-height:297mm;
+
+    background:white;
+
+    margin:auto;
+
+    padding:42px 45px;
+
+    position:relative;
+
+    page-break-after:always;
+
+}
+
+
+
+:root {
+
+    --navy:#0B1F2A;
+    --teal:#1FA6A8;
+    --green:#4F8A6D;
+    --blue:#3B82A0;
+    --light:#F5F8F8;
+    --border:#DCE5E7;
+    --gray:#66757D;
+
+}
+
+
+
+/* HEADER */
+
+
+.header {
+
+    margin:
+    -42px
+    -45px
+    38px;
+
+    padding:45px;
+
+
+    background:
+    linear-gradient(
+        135deg,
+        #0B1F2A,
+        #123B45
+    );
+
+
+    color:white;
+
+}
+
+
+.small-title {
+
+    font-size:11px;
+
+    letter-spacing:3px;
+
+    opacity:.7;
+
+}
+
+
+
+.main-title {
+
+    margin-top:25px;
+
+    font-size:34px;
+
+    line-height:1.2;
+
+    font-weight:300;
+
+    letter-spacing:2px;
+
+}
+
+
+
+.main-title strong {
+
+    color:#73D2D4;
+
+    font-weight:700;
+
+}
+
+
+
+.header-description {
+
+    margin-top:15px;
+
+    color:#D7E7E8;
+
+    font-size:13px;
+
+    line-height:1.6;
+
+}
+
+
+
+/* SECTIONS */
+
+
+.section {
+
+    margin-bottom:32px;
+
+}
+
+
+
+.section-header {
+
+    display:flex;
+
+    align-items:center;
+
+    gap:12px;
+
+    border-bottom:
+
+    1px solid var(--border);
+
+    padding-bottom:10px;
+
+    margin-bottom:22px;
+
+}
+
+
+
+.section-header h2 {
+
+    font-size:15px;
+
+    font-weight:600;
+
+}
+
+
+
+.marker {
+
+    width:8px;
+
+    height:8px;
+
+    background:var(--teal);
+
+    border-radius:50%;
+
+}
+
+
+
+.label {
+
+    margin-left:auto;
+
+    padding:
+
+    5px 14px;
+
+
+    border-radius:20px;
+
+
+    background:#E8F6F6;
+
+
+    color:#1FA6A8;
+
+
+    font-size:10px;
+
+    font-weight:600;
+
+}
+
+
+
+
+
+/* RATING */
+
+
+.rating-box {
+
+    display:flex;
+
+    align-items:center;
+
+    gap:35px;
+
+    padding:28px;
+
+    background:#FAFCFC;
+
+    border:1px solid var(--border);
+
+    border-left:5px solid var(--teal);
+
+    border-radius:14px;
+
+}
+
+
+
+.circle {
+
+    width:130px;
+
+    height:130px;
+
+}
+
+
+.circle-main {
+
+    fill:#0B1F2A;
+
+    font-size:28px;
+
+    font-weight:700;
+
+}
+
+
+.circle-small {
+
+    fill:#66757D;
+
+    font-size:11px;
+
+}
+
+
+
+.rating-title {
+
+    font-size:23px;
+
+    font-weight:700;
+
+}
+
+
+
+.rating-text {
+
+    margin-top:10px;
+
+    color:var(--gray);
+
+    line-height:1.8;
+
+    font-size:14px;
+
+}
+
+
+
+
+
+/* CARDS */
+
+
+.cards {
+
+    display:grid;
+
+    grid-template-columns:1fr 1fr;
+
+    gap:14px;
+
+}
+
+
+
+.card {
+
+    padding:18px;
+
+    background:#FAFCFC;
+
+    border:1px solid var(--border);
+
+    border-radius:12px;
+
+}
+
+
+
+.card-title {
+
+    font-size:12px;
+
+    color:var(--gray);
+
+}
+
+
+
+.card-value {
+
+    margin-top:8px;
+
+    font-size:24px;
+
+    font-weight:700;
+
+    color:#0B1F2A;
+
+}
+
+
+
+.text {
+
+    font-size:14px;
+
+    color:#36434A;
+
+    line-height:1.9;
+
+}
+
+
+
+.text strong {
+
+    color:#0B1F2A;
+
+}
+
+
+
+/* FOOTER */
+
+
+.footer {
+
+    position:absolute;
+
+    left:45px;
+
+    right:45px;
+
+    bottom:20px;
+
+
+    border-top:1px solid var(--border);
+
+    padding-top:10px;
+
+
+    display:flex;
+
+    justify-content:space-between;
+
+
+    color:#89959A;
+
+    font-size:10px;
+
+}
+
+
+
+.footer strong {
+
+    color:#1FA6A8;
+
+}
+
+
+</style>
+
+
+</head>
+
+
+<body>
+
+
+<!-- PAGE 1 -->
+
+
+<div class="page">
+
+
+
+<div class="header">
+
+
+<div class="small-title">
+
+ANALYZPRO · СИСТЕМА АНАЛИЗА ФОРМЫ
+
+</div>
+
+
+
+<div class="main-title">
+
+ОТЧЁТ
+
+<br>
+
+О
+
+<strong>
+ФИЗИЧЕСКОЙ ФОРМЕ
+</strong>
+
+
+</div>
+
+
+
+
+<div class="header-description">
+
+Персональный анализ состава тела,
+пропорций и уровня физического развития
+
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+<div class="marker"></div>
+
+<h2>
+Общая оценка телосложения
+</h2>
+
+
+<div class="label">
+ОБЩИЙ ИНДЕКС
+</div>
+
+
+</div>
+
+
+
+<div class="rating-box">
+
+
+<svg class="circle" viewBox="0 0 120 120">
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#E1EBEB"
+stroke-width="10"
+fill="none"
+/>
+
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#1FA6A8"
+stroke-width="10"
+fill="none"
+stroke-dasharray="326"
+stroke-dashoffset="42"
+stroke-linecap="round"
+/>
+
+
+
+<text
+x="60"
+y="58"
+text-anchor="middle"
+class="circle-main">
+
+{{.Score}}
+
+</text>
+
+
+<text
+x="60"
+y="78"
+text-anchor="middle"
+class="circle-small">
+
+из 100
+
+</text>
+
+
+</svg>
+
+
+
+
+<div>
+
+
+<div class="rating-title">
+
+{{.Level}}
+
+</div>
+
+
+
+<div class="rating-text">
+
+{{.Summary}}
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+</div>
+
+<!-- ОСНОВНЫЕ ПАРАМЕТРЫ ТЕЛА -->
+
+<div class="section">
+
+
+<div class="section-header">
+
+<div class="marker"></div>
+
+
+<h2>
+Основные параметры тела
+</h2>
+
+
+<div class="label">
+АНТРОПОМЕТРИЯ
+</div>
+
+
+</div>
+
+
+
+
+<div class="cards">
+
+
+<div class="card">
+
+<div class="card-title">
+Рост
+</div>
+
+<div class="card-value">
+
+{{.Body.Height}}
+
+</div>
+
+</div>
+
+
+
+
+<div class="card">
+
+<div class="card-title">
+Вес
+</div>
+
+<div class="card-value">
+
+{{.Body.Weight}}
+
+</div>
+
+</div>
+
+
+
+
+<div class="card">
+
+<div class="card-title">
+Мышечная масса
+</div>
+
+<div class="card-value">
+
+{{.Body.MuscleMass}}
+
+</div>
+
+</div>
+
+
+
+
+<div class="card">
+
+<div class="card-title">
+Жировая масса
+</div>
+
+<div class="card-value">
+
+{{.Body.Fat}}
+
+</div>
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+
+
+
+
+<!-- СОСТАВ ТЕЛА -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Анализ состава тела
+</h2>
+
+
+<div class="label">
+ОЦЕНКА СОСТОЯНИЯ
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="text">
+
+
+<strong>
+Общая характеристика:
+</strong>
+
+
+<br><br>
+
+
+{{.Composition}}
+
+
+</div>
+
+
+
+</div>
+
+
+
+
+
+
+
+<!-- ПРОФИЛЬ ФОРМЫ -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Ключевые показатели развития
+</h2>
+
+
+<div class="label">
+ПРОФИЛЬ ФОРМЫ
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="cards">
+
+
+<div class="card">
+
+<div class="card-title">
+
+Композиция тела
+
+</div>
+
+
+<div class="card-value">
+
+{{.Profile.Composition}}%
+
+</div>
+
+
+</div>
+
+
+
+
+<div class="card">
+
+<div class="card-title">
+
+Мышечное развитие
+
+</div>
+
+
+<div class="card-value">
+
+{{.Profile.MuscleDevelopment}}%
+
+</div>
+
+
+</div>
+
+
+
+
+<div class="card">
+
+<div class="card-title">
+
+Баланс тела
+
+</div>
+
+
+<div class="card-value">
+
+{{.Profile.Balance}}%
+
+</div>
+
+
+</div>
+
+
+
+
+<div class="card">
+
+<div class="card-title">
+
+Потенциал развития
+
+</div>
+
+
+<div class="card-value">
+
+{{.Profile.Potential}}%
+
+</div>
+
+
+</div>
+
+
+
+</div>
+
+
+</div>
+
+
+
+
+
+
+
+<div class="footer">
+
+
+<div>
+
+<strong>
+AnalyzPRO
+</strong>
+
+</div>
+
+
+<div>
+
+Отчёт о физической форме · Страница 1
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+
+
+
+<!-- ========================= -->
+<!-- PAGE 2 -->
+<!-- ========================= -->
+
+
+<div class="page">
+
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Анализ зон тела
+</h2>
+
+
+<div class="label">
+МЫШЕЧНОЕ РАЗВИТИЕ
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="cards">
+
+
+
+{{range .Zones}}
+
+
+
+<div class="card">
+
+
+
+<svg class="circle" viewBox="0 0 120 120">
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#E1EBEB"
+stroke-width="10"
+fill="none"
+/>
+
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#1FA6A8"
+stroke-width="10"
+fill="none"
+stroke-dasharray="326"
+stroke-dashoffset="{{.Score}}"
+stroke-linecap="round"
+/>
+
+
+
+<text
+
+x="60"
+
+y="65"
+
+text-anchor="middle"
+
+class="circle-main">
+
+
+{{.Score}}%
+
+
+</text>
+
+
+
+</svg>
+
+
+
+
+
+<div class="card-value">
+
+{{.Name}}
+
+</div>
+
+
+
+<div class="card-title">
+
+{{.Status}}
+
+</div>
+
+
+
+<div class="text">
+
+{{.Description}}
+
+</div>
+
+
+
+</div>
+
+
+
+{{end}}
+
+
+
+</div>
+
+
+</div>
+
+<!-- ПРОПОРЦИИ ТЕЛА -->
+
+<div class="section">
+
+
+<div class="section-header">
+
+<div class="marker"></div>
+
+<h2>
+Анализ пропорций тела
+</h2>
+
+<div class="label">
+СТРУКТУРА ТЕЛА
+</div>
+
+</div>
+
+
+
+<div class="rating-box">
+
+
+<svg class="circle" viewBox="0 0 120 120">
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#E1EBEB"
+stroke-width="10"
+fill="none"
+/>
+
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#3B82A0"
+stroke-width="10"
+fill="none"
+stroke-dasharray="326"
+stroke-dashoffset="55"
+stroke-linecap="round"
+/>
+
+
+
+<text
+x="60"
+y="58"
+text-anchor="middle"
+class="circle-main">
+
+{{.Proportion.Score}}
+
+</text>
+
+
+
+<text
+x="60"
+y="78"
+text-anchor="middle"
+class="circle-small">
+
+баланс
+
+</text>
+
+
+</svg>
+
+
+
+
+<div>
+
+
+<div class="rating-title">
+
+{{.Proportion.Title}}
+
+</div>
+
+
+
+<div class="rating-text">
+
+{{.Proportion.Description}}
+
+</div>
+
+
+</div>
+
+
+
+</div>
+
+
+</div>
+
+
+
+
+
+<!-- ВИЗУАЛЬНАЯ ОЦЕНКА СИЛУЭТА -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+<div class="marker"></div>
+
+
+<h2>
+Визуальная оценка силуэта
+</h2>
+
+
+<div class="label">
+ФОРМА ТЕЛА
+</div>
+
+
+</div>
+
+
+
+
+<div class="cards">
+
+
+{{range .Silhouette}}
+
+
+
+<div class="card">
+
+
+<div class="card-title">
+
+{{.Name}}
+
+</div>
+
+
+
+<div class="card-value">
+
+{{.Value}}
+
+</div>
+
+
+</div>
+
+
+
+{{end}}
+
+
+</div>
+
+
+</div>
+
+<!-- FOOTER PAGE 2 -->
+
+<div class="footer">
+
+
+<div>
+
+<strong>
+AnalyzPRO
+</strong>
+
+</div>
+
+
+<div>
+
+Отчёт о физической форме · Страница 2
+
+</div>
+
+
+</div>
+
+
+</div>
+
+<!-- ========================= -->
+<!-- PAGE 3 -->
+<!-- ========================= -->
+
+
+<div class="page">
+
+    <div class="section">
+
+
+<div class="section-header">
+
+<div class="marker"></div>
+
+
+<h2>
+Мышечный баланс и качество развития
+</h2>
+
+
+<div class="label">
+АНАЛИЗ БАЛАНСА
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="rating-box">
+
+
+<svg class="circle" viewBox="0 0 120 120">
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#E1EBEB"
+stroke-width="10"
+fill="none"
+/>
+
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#4F8A6D"
+stroke-width="10"
+fill="none"
+stroke-dasharray="326"
+stroke-dashoffset="45"
+stroke-linecap="round"
+/>
+
+
+
+<text
+x="60"
+y="58"
+text-anchor="middle"
+class="circle-main">
+
+{{.MuscleBalance.Score}}%
+
+</text>
+
+
+
+<text
+x="60"
+y="78"
+text-anchor="middle"
+class="circle-small">
+
+баланс
+
+</text>
+
+
+</svg>
+
+
+
+
+<div>
+
+
+<div class="rating-title">
+
+{{.MuscleBalance.Title}}
+
+</div>
+
+
+
+<div class="rating-text">
+
+{{.MuscleBalance.Description}}
+
+</div>
+
+
+</div>
+
+
+
+</div>
+
+
+</div>
+
+<!-- СООТНОШЕНИЕ РАЗВИТИЯ ТЕЛА -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Соотношение развития тела
+</h2>
+
+
+<div class="label">
+МЫШЕЧНЫЙ ПРОФИЛЬ
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="cards">
+
+
+{{range .MuscleProfile}}
+
+
+<div class="card">
+
+
+<div class="card-title">
+
+{{.Name}}
+
+</div>
+
+
+
+<div class="card-value">
+
+{{.Score}}%
+
+</div>
+
+
+
+<div class="text">
+
+{{.Description}}
+
+</div>
+
+
+</div>
+
+
+
+{{end}}
+
+
+
+</div>
+
+
+</div>
+
+<!-- ОСАНКА И СИММЕТРИЯ -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Осанка и симметрия тела
+</h2>
+
+
+<div class="label">
+АНАЛИЗ СТРУКТУРЫ
+</div>
+
+
+</div>
+
+
+
+
+<div class="cards">
+
+
+{{range .Posture}}
+
+
+
+<div class="card">
+
+
+<div class="card-title">
+
+{{.Name}}
+
+</div>
+
+
+
+<div class="card-value">
+
+{{.Score}}%
+
+</div>
+
+
+
+<div class="text">
+
+{{.Description}}
+
+</div>
+
+
+</div>
+
+
+
+{{end}}
+
+
+</div>
+
+
+</div>
+
+<!-- СИЛЬНЫЕ СТОРОНЫ -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Сильные стороны текущей формы
+</h2>
+
+
+<div class="label">
+ПРЕИМУЩЕСТВА
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="text">
+
+
+{{range .Strengths}}
+
+
+<strong>
+{{.Title}}
+</strong>
+
+
+<br>
+
+
+{{.Description}}
+
+
+<br><br>
+
+
+{{end}}
+
+
+
+</div>
+
+
+</div>
+
+<!-- НАПРАВЛЕНИЯ РАЗВИТИЯ -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Основные направления развития
+</h2>
+
+
+<div class="label">
+ПОТЕНЦИАЛ РОСТА
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="text">
+
+
+{{range .Development}}
+
+
+<strong>
+{{.Title}}
+</strong>
+
+
+<br>
+
+
+{{.Description}}
+
+
+<br><br>
+
+
+{{end}}
+
+
+
+</div>
+
+
+</div>
+
+<!-- FOOTER PAGE 3 -->
+
+
+<div class="footer">
+
+
+<div>
+
+<strong>
+AnalyzPRO
+</strong>
+
+</div>
+
+
+<div>
+
+Отчёт о физической форме · Страница 3
+
+</div>
+
+
+</div>
+
+
+</div>
+
+<!-- ПРОПОРЦИИ ТЕЛА -->
+
+<div class="section">
+
+
+<div class="section-header">
+
+<div class="marker"></div>
+
+<h2>
+Анализ пропорций тела
+</h2>
+
+
+<div class="label">
+СТРУКТУРА ТЕЛА
+</div>
+
+
+</div>
+
+
+
+<div class="rating-box">
+
+
+<svg class="circle" viewBox="0 0 120 120">
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#E1EBEB"
+stroke-width="10"
+fill="none"
+/>
+
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#3B82A0"
+stroke-width="10"
+fill="none"
+stroke-dasharray="326"
+stroke-dashoffset="{{.Proportion.Score}}"
+stroke-linecap="round"
+/>
+
+
+<text
+
+x="60"
+
+y="58"
+
+text-anchor="middle"
+
+class="circle-main">
+
+{{.Proportion.Score}}%
+
+</text>
+
+
+
+<text
+
+x="60"
+
+y="78"
+
+text-anchor="middle"
+
+class="circle-small">
+
+баланс
+
+</text>
+
+
+
+</svg>
+
+
+
+
+
+<div>
+
+
+<div class="rating-title">
+
+{{.Proportion.Title}}
+
+</div>
+
+
+
+<div class="rating-text">
+
+{{.Proportion.Description}}
+
+</div>
+
+
+</div>
+
+
+
+</div>
+
+
+</div>
+
+
+
+
+
+<!-- ДЕТАЛИ ПРОПОРЦИЙ -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Подробный анализ структуры тела
+</h2>
+
+
+<div class="label">
+ОЦЕНКА ФОРМЫ
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="text">
+
+
+{{range .Proportion.Details}}
+
+
+<strong>
+{{.Title}}
+</strong>
+
+<br>
+
+{{.Text}}
+
+<br><br>
+
+
+{{end}}
+
+
+</div>
+
+
+</div>
+
+Proportion struct {
+    Score int
+    Title string
+    Description string
+    Details []Detail
+}
+
+Detail struct {
+    Title string
+    Text string
+}
+
+<!-- МЫШЕЧНЫЙ БАЛАНС -->
+
+<div class="section">
+
+
+<div class="section-header">
+
+<div class="marker"></div>
+
+
+<h2>
+Мышечный баланс и качество развития
+</h2>
+
+
+<div class="label">
+АНАЛИЗ БАЛАНСА
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="rating-box">
+
+
+<svg class="circle" viewBox="0 0 120 120">
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#E1EBEB"
+stroke-width="10"
+fill="none"
+/>
+
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#4F8A6D"
+stroke-width="10"
+fill="none"
+stroke-dasharray="326"
+stroke-dashoffset="{{.MuscleBalance.Score}}"
+stroke-linecap="round"
+/>
+
+
+
+<text
+
+x="60"
+
+y="58"
+
+text-anchor="middle"
+
+class="circle-main">
+
+{{.MuscleBalance.Score}}%
+
+</text>
+
+
+
+<text
+
+x="60"
+
+y="78"
+
+text-anchor="middle"
+
+class="circle-small">
+
+баланс
+
+</text>
+
+
+</svg>
+
+
+
+
+
+<div>
+
+
+<div class="rating-title">
+
+{{.MuscleBalance.Title}}
+
+</div>
+
+
+
+<div class="rating-text">
+
+{{.MuscleBalance.Description}}
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+
+
+
+<!-- ПРОФИЛЬ МЫШЕЧНЫХ ЗОН -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+<div class="marker"></div>
+
+
+<h2>
+Соотношение развития тела
+</h2>
+
+
+<div class="label">
+МЫШЕЧНЫЙ ПРОФИЛЬ
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="cards">
+
+
+
+{{range .MuscleProfile}}
+
+
+
+<div class="card">
+
+
+<div class="card-title">
+
+{{.Name}}
+
+</div>
+
+
+<div class="card-value">
+
+{{.Score}}%
+
+</div>
+
+
+
+<div class="text">
+
+{{.Description}}
+
+</div>
+
+
+</div>
+
+
+
+{{end}}
+
+
+
+</div>
+
+
+</div>
+
+
+
+
+
+<!-- ОСАНКА И СИММЕТРИЯ -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Осанка и симметрия тела
+</h2>
+
+
+<div class="label">
+АНАЛИЗ СТРУКТУРЫ
+</div>
+
+
+</div>
+
+
+
+
+<div class="cards">
+
+
+{{range .Posture}}
+
+
+
+<div class="card">
+
+
+<div class="card-title">
+
+{{.Name}}
+
+</div>
+
+
+<div class="card-value">
+
+{{.Score}}%
+
+</div>
+
+
+
+<div class="text">
+
+{{.Description}}
+
+</div>
+
+
+
+</div>
+
+
+
+{{end}}
+
+
+
+</div>
+
+
+
+</div>
+
+<!-- СИЛЬНЫЕ СТОРОНЫ -->
+
+<div class="section">
+
+
+<div class="section-header">
+
+<div class="marker"></div>
+
+<h2>
+Сильные стороны текущей формы
+</h2>
+
+
+<div class="label">
+ПРЕИМУЩЕСТВА
+</div>
+
+
+</div>
+
+
+
+
+<div class="text">
+
+
+{{range .Strengths}}
+
+
+<strong>
+{{.Title}}
+</strong>
+
+
+<br>
+
+
+{{.Description}}
+
+
+<br><br>
+
+
+{{end}}
+
+
+</div>
+
+
+</div>
+
+
+
+
+
+<!-- НАПРАВЛЕНИЯ РАЗВИТИЯ -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Основные направления развития
+</h2>
+
+
+<div class="label">
+ПОТЕНЦИАЛ РОСТА
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="text">
+
+
+{{range .DevelopmentPlan}}
+
+
+<strong>
+{{.Title}}
+</strong>
+
+
+<br>
+
+
+{{.Description}}
+
+
+<br><br>
+
+
+{{end}}
+
+
+</div>
+
+
+</div>
+
+
+
+
+
+<!-- ТРЕНИРОВОЧНЫЙ ПОДХОД -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Тренировочный подход
+</h2>
+
+
+<div class="label">
+ФИЗИЧЕСКОЕ РАЗВИТИЕ
+</div>
+
+
+</div>
+
+
+
+
+
+<div class="cards">
+
+
+{{range .Training}}
+
+
+
+<div class="card">
+
+
+<div class="card-title">
+
+{{.Title}}
+
+</div>
+
+
+<div class="card-value">
+
+{{.Value}}
+
+</div>
+
+
+
+<div class="text">
+
+{{.Description}}
+
+</div>
+
+
+</div>
+
+
+
+{{end}}
+
+
+</div>
+
+
+</div>
+
+
+
+
+
+<!-- ПИТАНИЕ И ВОССТАНОВЛЕНИЕ -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Питание и восстановление
+</h2>
+
+
+<div class="label">
+ОБРАЗ ЖИЗНИ
+</div>
+
+
+</div>
+
+
+
+
+<div class="text">
+
+
+{{range .Nutrition}}
+
+
+<strong>
+{{.Title}}
+</strong>
+
+
+<br>
+
+
+{{.Description}}
+
+
+<br><br>
+
+
+{{end}}
+
+
+</div>
+
+
+</div>
+
+<!-- ИТОГОВОЕ ЗАКЛЮЧЕНИЕ -->
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Итоговое заключение
+</h2>
+
+
+<div class="label">
+ФИНАЛЬНАЯ ОЦЕНКА
+</div>
+
+
+</div>
+
+
+
+
+<div class="rating-box">
+
+
+<svg class="circle" viewBox="0 0 120 120">
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#E1EBEB"
+stroke-width="10"
+fill="none"
+/>
+
+
+
+<circle
+cx="60"
+cy="60"
+r="52"
+stroke="#1FA6A8"
+stroke-width="10"
+fill="none"
+stroke-dasharray="326"
+stroke-dashoffset="{{.Final.Score}}"
+stroke-linecap="round"
+/>
+
+
+
+<text
+x="60"
+y="58"
+text-anchor="middle"
+class="circle-main">
+
+{{.Final.Score}}
+
+</text>
+
+
+
+<text
+x="60"
+y="78"
+text-anchor="middle"
+class="circle-small">
+
+итог
+
+</text>
+
+
+</svg>
+
+
+
+
+
+<div>
+
+
+<div class="rating-title">
+
+{{.Final.Title}}
+
+</div>
+
+
+
+<div class="rating-text">
+
+{{.Final.Description}}
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+
+
+
+<!-- ГЛАВНАЯ ЦЕЛЬ -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Основная цель развития
+</h2>
+
+
+<div class="label">
+НАПРАВЛЕНИЕ
+</div>
+
+
+</div>
+
+
+
+
+<div class="card">
+
+
+<div class="card-value">
+
+{{.Goal.Title}}
+
+</div>
+
+
+
+<div class="text">
+
+{{.Goal.Description}}
+
+</div>
+
+
+</div>
+
+
+</div>
+
+
+
+
+
+<!-- КОНТРОЛЬ ПРОГРЕССА -->
+
+
+<div class="section">
+
+
+<div class="section-header">
+
+
+<div class="marker"></div>
+
+
+<h2>
+Контроль прогресса
+</h2>
+
+
+<div class="label">
+МОНИТОРИНГ
+</div>
+
+
+</div>
+
+
+
+
+<div class="cards">
+
+
+{{range .Progress}}
+
+
+
+<div class="card">
+
+
+<div class="card-value">
+
+{{.Title}}
+
+</div>
+
+
+
+<div class="text">
+
+{{.Description}}
+
+</div>
+
+
+
+</div>
+
+
+
+{{end}}
+
+
+
+</div>
+
+
+</div>
+
+
+
+
+
+<!-- ФИНАЛЬНЫЙ БЛОК -->
+
+
+<div style="
+margin-top:35px;
+padding:30px;
+background:#0B1F2A;
+border-radius:15px;
+color:white;
+text-align:center;
+">
+
+
+<div style="
+font-size:12px;
+letter-spacing:3px;
+opacity:.7;
+">
+
+ИТОГОВЫЙ ИНДЕКС ФОРМЫ
+
+</div>
+
+
+
+<div style="
+font-size:52px;
+font-weight:700;
+color:#73D2D4;
+margin-top:10px;
+">
+
+{{.Score}}
+
+</div>
+
+
+
+<div style="
+font-size:14px;
+margin-top:10px;
+">
+
+{{.Level}}
+
+</div>
+
+
+
+</div>

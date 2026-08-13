@@ -3,10 +3,12 @@ package router
 import (
 	"context"
 	"log"
+	"strings"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/bot/botutil"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
@@ -133,14 +135,30 @@ func (r *router) handleBioscanStart(ctx context.Context, b *tgbot.Bot, chatID in
 	return true
 }
 
+// isSecureWebAppURL — Telegram Web App (кнопка WebApp) требует HTTPS ИЛИ
+// localhost/127.0.0.1 (для тестов на той же машине, например в Telegram
+// Desktop). LAN-IP (192.168.x.x и т.п.) и прочие http:// НЕ годятся: такая
+// кнопка либо отклоняется API на телефоне (400 Bad Request), либо не
+// открывается с другого устройства. Поэтому WebApp-кнопку добавляем для
+// https и для localhost; для LAN-IP и прочих http используем обычную
+// кнопку-ссылку (URL), которая открывается в браузере / встроенном
+// браузере Telegram (при той же сети).
+func isSecureWebAppURL(rawURL string) bool {
+	if strings.HasPrefix(rawURL, "https") {
+		return true
+	}
+	if strings.HasPrefix(rawURL, "http://localhost") || strings.HasPrefix(rawURL, "http://127.0.0.1") {
+		return true
+	}
+	return false
+}
+
 // handleDashboard — открывает веб-дашборд (только для Premium).
 func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf(locales.LogRouterDashboard, chatID)
 
-	// TODO: В будущем заменить на проверку из БД
-	// Сейчас используем мок — всегда Premium
-	isPremium := true // TODO: r.storage.IsPremium(chatID)
-
+	isPremium := r.paymentService.IsUserPremium(chatID)
+	log.Printf(locales.LogDashboardPremiumCheck, chatID, isPremium)
 	if !isPremium {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
@@ -148,25 +166,73 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 			ReplyMarkup: keyboards.BackMenu(),
 			ParseMode:   "Markdown",
 		})
+		log.Printf(locales.LogDashboardNotPremiumSent, chatID)
 		return true
 	}
 
-	// Отправляем Web App ссылку
-	webAppURL := "https://your-domain.com/dashboard" // TODO: подставить реальный домен
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text:   "📊 **Мой Дашборд**\n\nНажмите кнопку ниже, чтобы открыть интерактивный дашборд с аналитикой вашего здоровья.",
-		ReplyMarkup: models.InlineKeyboardMarkup{
-			InlineKeyboard: [][]models.InlineKeyboardButton{
-				{
-					{
-						Text:   "📊 Открыть Дашборд",
-						WebApp: &models.WebAppInfo{URL: webAppURL},
-					},
-				},
-			},
-		},
-		ParseMode: "Markdown",
+	linkURL := r.dashboardURL
+	if linkURL == "" {
+		linkURL = r.webAppURL
+	}
+	webAppTarget := r.webAppURL
+	if webAppTarget == "" {
+		webAppTarget = r.dashboardURL
+	}
+	if linkURL == "" {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        "⚠️ URL дашборда не настроен. Задайте WEBAPP_URL или запустите `make tunnel`.",
+			ReplyMarkup: keyboards.BackMenu(),
+			ParseMode:   "Markdown",
+		})
+		return true
+	}
+
+	// WebApp-кнопка требует HTTPS (кроме localhost в десктопе). Обычная
+	// ссылка (linkURL) всегда открывается в браузере/встроенном браузере
+	// Telegram — для неё подставляем LAN-IP, чтобы дашборд открывался с
+	// телефона в той же Wi-Fi сети.
+	secure := isSecureWebAppURL(webAppTarget)
+	linkIsLAN := !isSecureWebAppURL(linkURL)
+
+	text := "📊 Мой Дашборд\n\n"
+	if secure {
+		text += "Нажмите кнопку ниже, чтобы открыть дашборд прямо в Telegram (Mini App).\n\n"
+	}
+	if linkIsLAN {
+		text += "Ссылка ниже ведёт на этот компьютер по локальной сети — откройте её в " +
+			"браузере или встроенном браузере Telegram (телефон должен быть в той же " +
+			"Wi-Fi сети, что и этот компьютер). Для полноценного Mini App в телефоне " +
+			"запустите make tunnel (HTTPS-туннель) — бот сам подхватит https-URL.\n\n"
+	} else if !secure {
+		text += "Встроенная кнопка Mini App требует HTTPS. Откройте ссылку ниже в " +
+			"браузере. Для Mini App в телефоне запустите make tunnel.\n\n"
+	}
+	text += "Открыть дашборд: " + linkURL
+
+	// Клавиатура: WebApp-кнопка (только для защищённых/локальных URL,
+	// иначе она «мертвая» на телефоне) + обычная кнопка-ссылка как запасной
+	// вариант, который всегда открывается в браузере.
+	rows := [][]models.InlineKeyboardButton{}
+	if secure {
+		rows = append(rows, []models.InlineKeyboardButton{
+			{Text: "📊 Открыть Дашборд (Mini App)", WebApp: &models.WebAppInfo{URL: webAppTarget}},
+		})
+	}
+	rows = append(rows, []models.InlineKeyboardButton{
+		{Text: "🌐 Открыть в браузере", URL: linkURL},
 	})
+
+	msgID, sendErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        text,
+		ReplyMarkup: models.InlineKeyboardMarkup{InlineKeyboard: rows},
+		ParseMode:   "Markdown",
+	})
+	if sendErr != nil {
+		log.Printf(locales.LogDashboardSendErr, chatID, sendErr)
+	} else {
+		log.Printf(locales.LogDashboardSent, chatID, msgID, linkURL, len(rows))
+	}
 	return true
 }

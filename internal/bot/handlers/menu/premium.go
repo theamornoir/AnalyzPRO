@@ -3,6 +3,7 @@ package menu
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	tgbot "github.com/go-telegram/bot"
@@ -15,6 +16,10 @@ import (
 )
 
 // PremiumHandler — обработчик кнопки Premium.
+//
+// Показывает меню выбора тарифа. Premium активируется только после выбора
+// тарифа и нажатия «Оплатил (симуляция)» (callback premium_confirm_<tariffID>).
+// Мгновенная выдача Premium убрана — это был тестовый режим.
 func PremiumHandler(
 	stateManager states.StateManager,
 	paymentService *payment.MockPaymentService,
@@ -33,8 +38,71 @@ func PremiumHandler(
 			return
 		}
 
-		// Показываем тарифы
+		// Если Premium уже активен — показываем текущий тариф и опцию смены.
+		if paymentService.IsUserPremium(chatID) {
+			log.Printf(locales.LogPremiumChangeTariff, chatID)
+			showPremiumCurrent(ctx, b, chatID, paymentService)
+			return
+		}
+
+		// Иначе — меню выбора тарифа (выбор → экран оплаты → подтверждение).
 		showPremiumMenu(ctx, b, chatID)
+	}
+}
+
+// showPremiumCurrent — экран активного Premium: показывает текущий тариф,
+// дату окончания и кнопку смены тарифа (premium_change).
+func showPremiumCurrent(ctx context.Context, b *tgbot.Bot, chatID int64, paymentService *payment.MockPaymentService) {
+	tariffName := "—"
+	expiry := "—"
+	if info := paymentService.GetPremiumInfo(chatID); info != nil {
+		if t := payment.GetTariffByID(info.TariffID); t != nil {
+			tariffName = t.Name
+		}
+		expiry = info.PremiumExpiresAt.Format("2006-01-02")
+	}
+
+	text := fmt.Sprintf(locales.MsgPremiumCurrent, tariffName, expiry)
+
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: chatID,
+		Text:   text,
+		ReplyMarkup: models.InlineKeyboardMarkup{
+			InlineKeyboard: [][]models.InlineKeyboardButton{
+				{
+					{Text: locales.BtnPremiumChange, CallbackData: "premium_change"},
+				},
+				{
+					{Text: locales.BtnBack, CallbackData: "back_main"},
+				},
+			},
+		},
+		ParseMode: "Markdown",
+	})
+}
+
+// HandleChangeTariff — обработка кнопки «🔄 Сменить тариф» у активного
+// Premium. Показывает меню выбора тарифа (тот же флоу оплаты); после
+// подтверждения оплаты тариф пользователя перезаписывается.
+func HandleChangeTariff(
+	stateManager states.StateManager,
+	paymentService *payment.MockPaymentService,
+) func(ctx context.Context, b *tgbot.Bot, update *models.Update, callbackData string) bool {
+	return func(ctx context.Context, b *tgbot.Bot, update *models.Update, callbackData string) bool {
+		if callbackData != "premium_change" {
+			return false
+		}
+
+		chatID := update.CallbackQuery.From.ID
+
+		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+			Text:            "Выберите новый тариф",
+		})
+
+		// Показываем то же меню выбора тарифа, что и при первой покупке.
+		showPremiumMenu(ctx, b, chatID)
+		return true
 	}
 }
 

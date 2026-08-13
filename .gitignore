@@ -12,6 +12,9 @@ uploads/
 *.dylib
 *.dmg
 *.pkg
+bin/
+analyzpro
+bot
 
 # macOS
 .DS_Store

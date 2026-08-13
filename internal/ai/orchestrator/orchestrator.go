@@ -28,13 +28,31 @@ type Orchestrator struct {
 }
 
 // NewOrchestrator создаёт оркестратор с провайдерами по умолчанию.
+// Провайдеры добавляются только если их API-ключ не пустой.
 func NewOrchestrator() *Orchestrator {
+	var providers []AIProvider
+
+	if p := NewGeminiProvider(); p != nil {
+		providers = append(providers, p)
+		log.Printf(locales.LogOrchestratorProviderAdd, "Gemini")
+	}
+	if p := NewDeepSeekProvider(); p != nil {
+		providers = append(providers, p)
+		log.Printf(locales.LogOrchestratorProviderAdd, "DeepSeek")
+	}
+	if p := NewClaudeProvider(); p != nil {
+		providers = append(providers, p)
+		log.Printf(locales.LogOrchestratorProviderAdd, "Claude")
+	}
+
+	if len(providers) == 0 {
+		log.Printf(locales.LogOrchestratorNoProvider)
+	}
+
+	log.Printf(locales.LogOrchestratorTotal, len(providers))
+
 	return &Orchestrator{
-		providers: []AIProvider{
-			NewGeminiProvider(),
-			NewDeepSeekProvider(),
-			NewClaudeProvider(),
-		},
+		providers: providers,
 	}
 }
 

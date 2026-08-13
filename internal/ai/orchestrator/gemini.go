@@ -13,9 +13,16 @@ type GeminiProvider struct {
 }
 
 // NewGeminiProvider создаёт GeminiProvider с ключом из окружения.
+// Возвращает nil если ключ пустой — провайдер не будет добавлен в оркестратор.
 func NewGeminiProvider() *GeminiProvider {
-	apiKey := os.Getenv("GEMINI_API_KEY")
-	model := os.Getenv("GEMINI_MODEL")
+	apiKey := os.Getenv("GOOGLE_GEMINI_API_KEY")
+	if apiKey == "" {
+		return nil
+	}
+	model := os.Getenv("GOOGLE_AI_MODEL")
+	if model == "" {
+		model = "gemini-3.5-flash"
+	}
 	return &GeminiProvider{
 		client: gemini.NewGeminiClient(apiKey, model),
 	}

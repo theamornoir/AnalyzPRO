@@ -11,6 +11,22 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
+// isMainMenuButton - true, если text совпадает с одной из кнопок главного меню.
+func (r *router) isMainMenuButton(text string) bool {
+	switch text {
+	case locales.BtnAbout,
+		locales.BtnDiagnostics,
+		locales.BtnRegularAnalysis,
+		locales.BtnExtendedAnalysis,
+		locales.BtnBioscan,
+		locales.BtnFeedback,
+		locales.BtnPremium,
+		locales.BtnDashboard:
+		return true
+	}
+	return false
+}
+
 // handleMenuButtons - обработка кнопок главного меню. Возвращает true, если обработано.
 func (r *router) handleMenuButtons(ctx context.Context, b *tgbot.Bot, chatID int64, text string, update *models.Update) bool {
 	if text == "" {

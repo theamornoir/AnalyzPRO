@@ -1,8 +1,8 @@
 package dashboard
 
 import (
+	"embed"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -12,14 +12,14 @@ import (
 
 // MetricsResponse — ответ API для дашборда.
 type MetricsResponse struct {
-	HealthIndex    int       `json:"healthIndex"`
-	EnergyLevel    string    `json:"energyLevel"`
-	AnalysisDate   string    `json:"analysisDate"`
-	Blood          BloodData `json:"blood"`
-	Nutrition      NutData   `json:"nutrition"`
-	Activity       ActData   `json:"activity"`
-	Trend          TrendData `json:"trend"`
-	Recommendations []string `json:"recommendations"`
+	HealthIndex     int       `json:"healthIndex"`
+	EnergyLevel     string    `json:"energyLevel"`
+	AnalysisDate    string    `json:"analysisDate"`
+	Blood           BloodData `json:"blood"`
+	Nutrition       NutData   `json:"nutrition"`
+	Activity        ActData   `json:"activity"`
+	Trend           TrendData `json:"trend"`
+	Recommendations []string  `json:"recommendations"`
 }
 
 type BloodData struct {
@@ -103,66 +103,51 @@ func generateMockMetrics() MetricsResponse {
 	}
 }
 
-// HandleWebApp — отдаёт статический веб-дашборд.
-// Открывается только для Premium-пользователей.
+//go:embed webapp_files/index.html webapp_files/style.css webapp_files/app.js webapp_files/data.js
+var webappFS embed.FS
+
+// GenerateMockMetrics — публичная функция для мок-данных (для тестов)
+func GenerateMockMetrics() MetricsResponse {
+	return generateMockMetrics()
+}
+
+// HandleWebApp — отдаёт статический веб-дашборд из embed-файлов.
+// Требует Premium-подписки.
 func HandleWebApp(w http.ResponseWriter, r *http.Request, isPremium bool) {
 	if !isPremium {
 		http.Error(w, locales.MsgPremiumRequired, http.StatusForbidden)
 		return
 	}
 
-	// Проверяем, запрос на главную страницу
-	if r.URL.Path != "/" && r.URL.Path != "/dashboard" {
+	// Убираем префикс /dashboard/
+	filePath := r.URL.Path
+	if filePath == "/dashboard/" || filePath == "/" {
+		filePath = "index.html"
+	} else {
+		filePath = filePath[len("/dashboard/"):]
+	}
+
+	switch filePath {
+	case "index.html":
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	case "style.css":
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	case "app.js", "data.js":
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	default:
 		http.NotFound(w, r)
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AnalyzPRO — Дашборд</title>
-    <style>
-        body { font-family: Arial, sans-serif; background: #E9EEEE; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
-        h1 { color: #1A2A2A; margin-bottom: 10px; }
-        .subtitle { color: #6B7A7A; margin-bottom: 30px; }
-        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 30px; }
-        .card { background: #F0F8F8; padding: 20px; border-radius: 10px; text-align: center; }
-        .card .label { font-size: 11px; color: #6B7A7A; text-transform: uppercase; margin-bottom: 8px; }
-        .card .value { font-size: 32px; font-weight: 800; color: #1FA6A8; }
-        .rec { background: #F0F8F8; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 3px solid #1FA6A8; }
-        @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>📊 Мой Дашборд</h1>
-        <p class="subtitle">Аналитика здоровья в реальном времени</p>
-        
-        <div class="grid">
-            <div class="card">
-                <div class="label">Индекс здоровья</div>
-                <div class="value">78</div>
-            </div>
-            <div class="card">
-                <div class="label">Энергия</div>
-                <div class="value">Высокий</div>
-            </div>
-            <div class="card">
-                <div class="label">Дата анализа</div>
-                <div class="value" style="font-size:16px;">%s</div>
-            </div>
-        </div>
+	data, err := webappFS.ReadFile("webapp_files/" + filePath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Write(data)
+}
 
-        <h2 style="margin-bottom:15px;">Рекомендации</h2>
-        <div class="rec">💡 Увеличить потребление белка до 1.5г/кг массы тела</div>
-        <div class="rec">💡 Добавить 30 минут кардио 3 раза в неделю</div>
-        <div class="rec">💡 Контролировать уровень витамина D</div>
-        <div class="rec">💡 Нормализовать режим сна (7-8 часов)</div>
-    </div>
-</body>
-</html>`, time.Now().Format("2006-01-02"))
+// HandleWebAppIndex — сервис-обёртка для роутера Telegram.
+func HandleWebAppIndex(w http.ResponseWriter, r *http.Request) {
+	HandleWebApp(w, r, true)
 }

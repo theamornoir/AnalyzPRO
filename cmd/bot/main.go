@@ -11,19 +11,15 @@ import (
 )
 
 func main() {
-
 	application, err := app.New()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	ctx, cancel := signal.NotifyContext(
-		context.Background(),
-		os.Interrupt,
-		syscall.SIGTERM,
-	)
-
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+
+	log.Printf("🚀 AnalyzPRO запускается...")
 
 	application.Run(ctx)
 }

@@ -12,6 +12,7 @@ const (
 	BtnDashboard        = "📊 Мой Дашборд"
 	BtnFeedback         = "📝 Отзывы и предложения"
 	BtnPremium          = "💎 Premium"
+	BtnPremiumChange    = "🔄 Сменить тариф"
 	BtnRegularAnalysis  = "📊 Обычный анализ"
 	BtnExtendedAnalysis = "🔬 Расширенный анализ"
 	BtnAcceptAgreement  = "✅ Принять соглашение"
