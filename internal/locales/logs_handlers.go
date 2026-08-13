@@ -47,4 +47,29 @@ const (
 	LogRouterUserBusy       = "⚠️ Пользователь chatID=%d занят другим процессом: %s"
 	LogRouterSetStateFail   = "❌ НЕ УДАЛОСЬ установить состояние! Текущее состояние: %s"
 	LogRouterForceBioscan   = "📌 Принудительно установлено состояние StateWaitingBioscanName для чата %d"
+	LogRouterDashboard      = "📊 Обработка: Дашборд для chatID=%d"
+	LogRouterCallback       = "📩 Callback: chatID=%d, data=%s"
+	LogAPIEncodeError       = "❌ Ошибка кодирования JSON: %v"
+)
+
+// Логи для платежей.
+const (
+	LogPaymentCreate           = "💳 Создание платежа: user=%d, tariff=%s"
+	LogPaymentCreated          = "✅ Платёж создан: %s (%s — %d ₽)"
+	LogPaymentWebhookReceived  = "📡 Вебхук YooKassa: type=%s, id=%s"
+	LogPaymentWebhookIgnored   = "⏭️ Вебхук проигнорирован: %s"
+	LogPaymentNotSucceeded     = "⏭️ Платёж не succeeded: %s"
+	LogPaymentActivateFailed   = "❌ Активация Premium failed: user=%d, err=%v"
+	LogPaymentActivated        = "✅ Premium активирован: user=%d, tariff=%s"
+	LogPaymentPremiumActivated = "✅ Premium активирован для user=%d: %s (до %s)"
+	LogPaymentSelectTariff     = "👆 Выбран тариф: user=%d, name=%s"
+	LogPaymentCreateErr        = "❌ Ошибка создания платежа: user=%d, err=%v"
+	LogPaymentTariffNotFound   = "❌ Тариф не найден: %s"
+	LogPaymentExpired          = "⏳ Premium истёк для user=%d"
+	LogPaymentServiceInit      = "💳 Сервис платежей инициализирован (Mock)"
+)
+
+// Ошибки для платежей.
+const (
+	ErrTariffNotFound = "тариф не найден: %s"
 )

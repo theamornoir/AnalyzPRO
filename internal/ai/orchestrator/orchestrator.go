@@ -1,0 +1,118 @@
+package orchestrator
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/theamornoir/analyzpro/internal/locales"
+)
+
+// AIProvider — интерфейс для AI-провайдеров.
+type AIProvider interface {
+	// GenerateAnalysisSummary генерирует текстовый анализ по введённому тексту.
+	GenerateAnalysisSummary(ctx context.Context, userInput string) (string, error)
+	// GenerateAnalysisJSON генерирует JSON-структурированный анализ по тексту.
+	GenerateAnalysisJSON(ctx context.Context, userInput string) (string, error)
+	// GenerateAnalysisFromFileWithContext анализирует файл с учётом контекста.
+	GenerateAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextText string) (string, error)
+	// GenerateBioscanJSON генерирует JSON-результат bioscan по фотографиям.
+	GenerateBioscanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error)
+	// GenerateAnalysisFromFileJSON генерирует JSON-анализ из файла.
+	GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error)
+}
+
+// Orchestrator — оркестратор AI-провайдеров с приоритетами.
+type Orchestrator struct {
+	providers []AIProvider
+}
+
+// NewOrchestrator создаёт оркестратор с провайдерами по умолчанию.
+func NewOrchestrator() *Orchestrator {
+	return &Orchestrator{
+		providers: []AIProvider{
+			NewGeminiProvider(),
+			NewDeepSeekProvider(),
+			NewClaudeProvider(),
+		},
+	}
+}
+
+// NewOrchestratorWithProviders создаёт оркестратор с указанными провайдерами.
+func NewOrchestratorWithProviders(providers []AIProvider) *Orchestrator {
+	return &Orchestrator{
+		providers: providers,
+	}
+}
+
+// tryProvider — пытается выполнить метод на провайдере, при ошибке переходит к следующему.
+func (o *Orchestrator) tryProvider(
+	ctx context.Context,
+	fn func(provider AIProvider) (string, error),
+) (string, error) {
+	var lastErr error
+
+	for i, provider := range o.providers {
+		log.Printf(locales.LogOrchestratorTryProvider, i, providerName(provider))
+
+		result, err := fn(provider)
+		if err == nil {
+			log.Printf(locales.LogOrchestratorProviderSuccess, providerName(provider))
+			return result, nil
+		}
+
+		lastErr = err
+		log.Printf(locales.LogOrchestratorProviderFailed, providerName(provider), err)
+	}
+
+	return "", fmt.Errorf(locales.ErrAllProvidersFailed, lastErr)
+}
+
+// GenerateAnalysisSummary — генерирует текстовый анализ.
+func (o *Orchestrator) GenerateAnalysisSummary(ctx context.Context, userInput string) (string, error) {
+	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
+		return p.GenerateAnalysisSummary(ctx, userInput)
+	})
+}
+
+// GenerateAnalysisJSON — генерирует JSON-анализ.
+func (o *Orchestrator) GenerateAnalysisJSON(ctx context.Context, userInput string) (string, error) {
+	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
+		return p.GenerateAnalysisJSON(ctx, userInput)
+	})
+}
+
+// GenerateAnalysisFromFileWithContext — анализирует файл с контекстом.
+func (o *Orchestrator) GenerateAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
+	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
+		return p.GenerateAnalysisFromFileWithContext(ctx, data, mimeType, contextText)
+	})
+}
+
+// GenerateBioscanJSON — генерирует JSON bioscan.
+func (o *Orchestrator) GenerateBioscanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
+	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
+		return p.GenerateBioscanJSON(ctx, photosData, mimeType, contextInfo)
+	})
+}
+
+// GenerateAnalysisFromFileJSON — генерирует JSON-анализ из файла.
+func (o *Orchestrator) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
+	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
+		return p.GenerateAnalysisFromFileJSON(ctx, data, mimeType, contextText)
+	})
+}
+
+// providerName — возвращает имя провайдера для логов.
+func providerName(p AIProvider) string {
+	switch p.(type) {
+	case *GeminiProvider:
+		return "Gemini"
+	case *DeepSeekProvider:
+		return "DeepSeek"
+	case *ClaudeProvider:
+		return "Claude"
+	default:
+		return "Unknown"
+	}
+}

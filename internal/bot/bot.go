@@ -10,6 +10,8 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/router"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
+	"github.com/theamornoir/analyzpro/internal/locales"
+	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/service"
 	"github.com/theamornoir/analyzpro/internal/storage"
@@ -23,7 +25,8 @@ type Bot struct {
 	uploadDir        string
 	stickerID        string
 	adminChatID      int64
-	agreementStorage *storage.AgreementStorage // <-- ДОБАВЛЕНО
+	agreementStorage *storage.AgreementStorage
+	paymentService   *payment.MockPaymentService
 }
 
 func New(
@@ -34,7 +37,8 @@ func New(
 	uploadDir string,
 	stickerID string,
 	adminChatID int64,
-	agreementStorage *storage.AgreementStorage, // <-- ДОБАВЛЕНО
+	agreementStorage *storage.AgreementStorage,
+	paymentService *payment.MockPaymentService,
 ) (*Bot, error) {
 
 	if stateManager == nil {
@@ -58,7 +62,8 @@ func New(
 		uploadDir:        uploadDir,
 		stickerID:        stickerID,
 		adminChatID:      adminChatID,
-		agreementStorage: agreementStorage, // <-- ДОБАВЛЕНО
+		agreementStorage: agreementStorage,
+		paymentService:   paymentService,
 	}
 
 	botInstance.registerHandlers()
@@ -79,7 +84,8 @@ func (b *Bot) registerHandlers() {
 		b.uploadDir,
 		b.stickerID,
 		b.adminChatID,
-		b.agreementStorage, // <-- ДОБАВЛЕНО
+		b.agreementStorage,
+		b.paymentService,
 	)
 
 	// /start
@@ -87,7 +93,15 @@ func (b *Bot) registerHandlers() {
 		tgbot.HandlerTypeMessageText,
 		"/start",
 		tgbot.MatchTypeExact,
-		menu.StartHandler(b.stateManager, b.agreementStorage), // <-- ДОБАВЛЕНО
+		menu.StartHandler(b.stateManager, b.agreementStorage),
+	)
+
+	// Premium — кнопка меню
+	b.client.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		locales.BtnPremium,
+		tgbot.MatchTypeExact,
+		menu.PremiumHandler(b.stateManager, b.paymentService),
 	)
 
 	// Обычный текст

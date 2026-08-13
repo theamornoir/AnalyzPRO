@@ -44,8 +44,11 @@ func (r *router) handleMenuButtons(ctx context.Context, b *tgbot.Bot, chatID int
 
 	case locales.BtnPremium:
 		log.Printf(locales.LogRouterMenuPremium, chatID)
-		menu.PremiumHandler()(ctx, b, update)
+		menu.PremiumHandler(r.stateManager, r.paymentService)(ctx, b, update)
 		return true
+
+	case locales.BtnDashboard:
+		return r.handleDashboard(ctx, b, chatID)
 	}
 
 	return false

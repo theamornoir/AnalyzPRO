@@ -9,6 +9,7 @@ const (
 	BtnAbout            = "ℹ️ О сервисе"
 	BtnDiagnostics      = "🏥 Диагностика анализов"
 	BtnBioscan          = "📸 Bioscan"
+	BtnDashboard        = "📊 Мой Дашборд"
 	BtnFeedback         = "📝 Отзывы и предложения"
 	BtnPremium          = "💎 Premium"
 	BtnRegularAnalysis  = "📊 Обычный анализ"

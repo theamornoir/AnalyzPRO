@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnalyzPRO — Дашборд</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="dashboard">
+        <header class="header">
+            <div class="header-brand">ANALYZPRO</div>
+            <h1>Мой Дашборд</h1>
+            <p class="header-subtitle">Аналитика здоровья в реальном времени</p>
+        </header>
+
+        <main class="main">
+            <!-- Карточка: Общий статус -->
+            <section class="card status-card">
+                <h2>Общий статус</h2>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <div class="status-label">Индекс здоровья</div>
+                        <div class="status-value" id="healthIndex">--</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">Уровень энергии</div>
+                        <div class="status-value" id="energyLevel">--</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">Дата анализа</div>
+                        <div class="status-value date" id="analysisDate">--</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Карточка: Круговые диаграммы -->
+            <section class="card">
+                <h2>Ключевые показатели</h2>
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <canvas id="chartBlood"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chartNutrition"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chartActivity"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Карточка: Динамика -->
+            <section class="card">
+                <h2>Динамика показателей</h2>
+                <div class="chart-full">
+                    <canvas id="chartTrend"></canvas>
+                </div>
+            </section>
+
+            <!-- Карточка: Рекомендации -->
+            <section class="card recommendations">
+                <h2>Рекомендации</h2>
+                <ul class="rec-list" id="recList">
+                    <li>Загрузка...</li>
+                </ul>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <span>AnalyzPRO Dashboard</span>
+            <span id="lastUpdate">Обновлено: --</span>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

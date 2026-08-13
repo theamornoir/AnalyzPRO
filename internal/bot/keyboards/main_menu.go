@@ -45,7 +45,7 @@ func MainMenu() models.ReplyKeyboardMarkup {
 			},
 			{
 				{Text: locales.BtnBioscan},
-				{Text: locales.BtnFeedback},
+				{Text: locales.BtnDashboard},
 			},
 			{
 				{Text: locales.BtnPremium},

@@ -5,11 +5,12 @@ import (
 	"log"
 	"os"
 
-	"github.com/theamornoir/analyzpro/internal/ai/gemini"
+	"github.com/theamornoir/analyzpro/internal/ai/orchestrator"
 	"github.com/theamornoir/analyzpro/internal/bot"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/config"
 	"github.com/theamornoir/analyzpro/internal/locales"
+	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/service"
 	"github.com/theamornoir/analyzpro/internal/storage"
@@ -38,19 +39,8 @@ func New() (*App, error) {
 
 	stateManager := states.NewMemoryStateManager("./data/states.json")
 
-	// AI клиент
-	var geminiClient *gemini.GeminiClient
-	if useMock {
-		// Используем мок
-		geminiClient = gemini.NewGeminiClient("mock", cfg.GoogleAIModel)
-		log.Printf(locales.LogRunningInMockMode)
-	} else {
-		// Используем реальный API
-		geminiClient = gemini.NewGeminiClient(
-			cfg.GoogleGeminiAPIKey,
-			cfg.GoogleAIModel,
-		)
-	}
+	// AI оркестратор (Gemini → DeepSeek → Claude)
+	aiOrchestrator := orchestrator.NewOrchestrator()
 
 	// HTML Renderer для отчётов
 	renderer, err := report.NewRenderer()
@@ -60,7 +50,7 @@ func New() (*App, error) {
 
 	// Сервис анализа
 	analysisService := service.NewAnalysisService(
-		geminiClient,
+		aiOrchestrator,
 		renderer,
 	)
 
@@ -73,6 +63,10 @@ func New() (*App, error) {
 
 	_ = appStorage // Будет передано в хендлеры при следующем этапе
 
+	// Сервис платежей (Mock YooKassa)
+	paymentService := payment.NewMockPaymentService()
+	log.Printf(locales.LogPaymentServiceInit)
+
 	telegramBot, err := bot.New(
 		cfg.BotToken,
 		stateManager,
@@ -82,6 +76,7 @@ func New() (*App, error) {
 		cfg.LoadingStickerID,
 		cfg.AdminChatID,
 		agreementStorage,
+		paymentService,
 	)
 	if err != nil {
 		return nil, err

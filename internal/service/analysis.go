@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/theamornoir/analyzpro/internal/ai/gemini"
+	"github.com/theamornoir/analyzpro/internal/ai/orchestrator"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/models"
 	"github.com/theamornoir/analyzpro/internal/report"
+	reportmodels "github.com/theamornoir/analyzpro/internal/report/models"
 )
 
 // AnalysisService - интерфейс сервиса анализа
@@ -25,13 +26,13 @@ type AnalysisService interface {
 
 // analysisService - реализация AnalysisService
 type analysisService struct {
-	aiClient *gemini.GeminiClient
+	aiClient *orchestrator.Orchestrator
 	renderer *report.Renderer
 }
 
 // NewAnalysisService создает новый AnalysisService
 func NewAnalysisService(
-	aiClient *gemini.GeminiClient,
+	aiClient *orchestrator.Orchestrator,
 	renderer *report.Renderer,
 ) AnalysisService {
 	return &analysisService{
@@ -139,4 +140,54 @@ func (s *analysisService) HandleAnalysisFromFileJSON(
 ) (string, error) {
 	textPrompt := s.formatTextWithContext(locales.MsgDocumentContent, contextInfo)
 	return s.aiClient.GenerateAnalysisFromFileJSON(ctx, data, mimeType, textPrompt)
+}
+
+// HandleAdaptiveAnalysis — возвращает адаптивный HTML-отчёт по тексту
+func (s *analysisService) HandleAdaptiveAnalysis(
+	ctx context.Context,
+	text string,
+) (string, error) {
+	jsonText, err := s.aiClient.GenerateAnalysisJSON(ctx, text)
+	if err != nil {
+		return "", err
+	}
+
+	return s.renderAdaptiveFromJSON(jsonText)
+}
+
+// HandleAdaptiveAnalysisWithContext — адаптивный отчёт с контекстом
+func (s *analysisService) HandleAdaptiveAnalysisWithContext(
+	ctx context.Context,
+	text string,
+	contextInfo string,
+) (string, error) {
+	fullText := s.formatTextWithContext(text, contextInfo)
+	jsonText, err := s.aiClient.GenerateAnalysisJSON(ctx, fullText)
+	if err != nil {
+		return "", err
+	}
+
+	return s.renderAdaptiveFromJSON(jsonText)
+}
+
+// renderAdaptiveFromJSON — парсит JSON от AI и рендерит адаптивный HTML
+func (s *analysisService) renderAdaptiveFromJSON(jsonText string) (string, error) {
+	if strings.TrimSpace(jsonText) == "" {
+		return "", fmt.Errorf(locales.ErrEmptyJSONFromAI)
+	}
+
+	// Очищаем JSON от markdown-обёртки
+	cleaned := strings.TrimSpace(jsonText)
+	cleaned = strings.TrimPrefix(cleaned, "```json")
+	cleaned = strings.TrimPrefix(cleaned, "```")
+	cleaned = strings.TrimSuffix(cleaned, "```")
+	cleaned = strings.TrimSpace(cleaned)
+
+	var data reportmodels.AdaptiveReportData
+	if err := json.Unmarshal([]byte(cleaned), &data); err != nil {
+		return "", fmt.Errorf(locales.ErrParseAnalysisJSON, err)
+	}
+
+	html := report.RenderAdaptiveReport(data)
+	return html, nil
 }

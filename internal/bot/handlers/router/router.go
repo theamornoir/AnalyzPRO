@@ -8,8 +8,11 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
+	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
+	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/service"
 	"github.com/theamornoir/analyzpro/internal/storage"
@@ -24,6 +27,7 @@ type router struct {
 	stickerID        string
 	adminChatID      int64
 	agreementStorage *storage.AgreementStorage
+	paymentService   *payment.MockPaymentService
 }
 
 // MessageRouter - главный маршрутизатор сообщений бота.
@@ -35,6 +39,7 @@ func MessageRouter(
 	stickerID string,
 	adminChatID int64,
 	agreementStorage *storage.AgreementStorage,
+	paymentService *payment.MockPaymentService,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
 
 	r := &router{
@@ -45,6 +50,7 @@ func MessageRouter(
 		stickerID:        stickerID,
 		adminChatID:      adminChatID,
 		agreementStorage: agreementStorage,
+		paymentService:   paymentService,
 	}
 
 	return r.handle
@@ -52,6 +58,12 @@ func MessageRouter(
 
 // handle - точка входа маршрутизатора.
 func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update) {
+	// Обработка callback-запросов (inline buttons)
+	if update.CallbackQuery != nil {
+		r.handleCallback(ctx, b, update)
+		return
+	}
+
 	if update.Message == nil {
 		return
 	}
@@ -99,4 +111,37 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 
 	// Обработка обычного текста
 	r.handleText(ctx, b, chatID, text)
+}
+
+// handleCallback — обработка callback-запросов от inline-кнопок.
+func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *models.Update) {
+	callbackData := update.CallbackQuery.Data
+	chatID := update.Message.Chat.ID
+
+	log.Printf(locales.LogRouterCallback, chatID, callbackData)
+
+	// Premium callback
+	if strings.HasPrefix(callbackData, "premium_") {
+		menu.HandlePremiumCallback(r.stateManager, r.paymentService)(ctx, b, update, callbackData)
+		return
+	}
+
+	// Back callback
+	if callbackData == "back_main" {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgStartWelcome,
+			ReplyMarkup: keyboards.MainMenu(),
+			ParseMode:   "Markdown",
+		})
+		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
+		return
+	}
+
+	// Answer callback query
+	_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+		CallbackQueryID: update.CallbackQuery.ID,
+	})
 }

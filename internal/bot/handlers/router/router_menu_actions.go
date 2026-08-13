@@ -5,6 +5,7 @@ import (
 	"log"
 
 	tgbot "github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
@@ -128,6 +129,44 @@ func (r *router) handleBioscanStart(ctx context.Context, b *tgbot.Bot, chatID in
 		Text:        locales.MsgBioscanIntro,
 		ParseMode:   "Markdown",
 		ReplyMarkup: keyboards.BackMenu(),
+	})
+	return true
+}
+
+// handleDashboard — открывает веб-дашборд (только для Premium).
+func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf(locales.LogRouterDashboard, chatID)
+
+	// TODO: В будущем заменить на проверку из БД
+	// Сейчас используем мок — всегда Premium
+	isPremium := true // TODO: r.storage.IsPremium(chatID)
+
+	if !isPremium {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgPremiumRequired,
+			ReplyMarkup: keyboards.BackMenu(),
+			ParseMode:   "Markdown",
+		})
+		return true
+	}
+
+	// Отправляем Web App ссылку
+	webAppURL := "https://your-domain.com/dashboard" // TODO: подставить реальный домен
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: chatID,
+		Text:   "📊 **Мой Дашборд**\n\nНажмите кнопку ниже, чтобы открыть интерактивный дашборд с аналитикой вашего здоровья.",
+		ReplyMarkup: models.InlineKeyboardMarkup{
+			InlineKeyboard: [][]models.InlineKeyboardButton{
+				{
+					{
+						Text:   "📊 Открыть Дашборд",
+						WebApp: &models.WebAppInfo{URL: webAppURL},
+					},
+				},
+			},
+		},
+		ParseMode: "Markdown",
 	})
 	return true
 }

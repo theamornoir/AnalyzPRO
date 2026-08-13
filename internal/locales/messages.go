@@ -18,6 +18,7 @@ const (
 // Premium Handler
 const (
 	MsgPremiumComingSoon = "💎 Premium находится в разработке. Скоро будут новые функции!"
+	MsgPremiumRequired   = "🔒 Для доступа к дашборду необходим Premium-подписка.\n\nНажмите 💎 Premium для оформления."
 )
 
 // About Handler
