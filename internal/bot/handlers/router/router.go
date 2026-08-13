@@ -9,10 +9,10 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
-	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
+	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/service"
@@ -92,6 +92,34 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 	// Проверка соглашения
 	if r.handleAgreement(ctx, b, chatID, text) {
 		return
+	}
+
+	// Режим «Быстрая консультация (с ИИ)»: перехватываем ЛЮБОЕ сообщение
+	// пользователя (текстовый вопрос или фото), чтобы отправить его ИИ.
+	// Перехват идёт ДО режима отзыва и ДО обычной загрузки файлов (иначе
+	// фото «проглотилось» бы загрузчиком анализов). Нажатие кнопки главного
+	// меню во время консультации выходит из режима и навигирует как обычно.
+	if r.stateManager.GetState(chatID) == states.StateWaitingConsultation {
+		if text != "" && r.isMainMenuButton(text) {
+			r.stateManager.SetState(chatID, states.StateIdle)
+		} else if r.handleConsultationMessage(ctx, b, chatID, text, update) {
+			return
+		}
+	}
+
+	// Режим ввода отзыва: перехватываем ЛЮБОЕ сообщение пользователя
+	// (текст/фото/документ), чтобы переслать его разработчику. Перехват
+	// идёт до приоритета кнопок главного меню — иначе отзыв, случайно
+	// совпадающий по тексту с кнопкой меню, «проглотился» бы как команда.
+	// Исключение: нажатие самой кнопки главного меню во время ввода отзыва
+	// выходит из режима отзыва и навигирует как обычно (иначе меню
+	// «залипло» бы в режиме ввода).
+	if r.stateManager.GetState(chatID) == states.StateWaitingFeedback {
+		if text != "" && r.isMainMenuButton(text) {
+			r.stateManager.SetState(chatID, states.StateIdle)
+		} else if r.handleFeedbackMessage(ctx, b, chatID, text, update) {
+			return
+		}
 	}
 
 	// Кнопки главного меню имеют приоритет над «зависшим» состоянием потока
@@ -194,6 +222,27 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 			CallbackQueryID: update.CallbackQuery.ID,
 		})
 		return
+	}
+
+	// Под-действия из карточек разделов-хабов («Диагностика» и
+	// «Здоровье в динамике»). Диспетчеризуем на существующие обработчики;
+	// сам callback-запрос отвечается в конце функции (спиннер кнопки).
+	switch callbackData {
+	case "section_diag_regular":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_regular")
+		r.handleRegularAnalysis(ctx, b, chatID)
+	case "section_diag_extended":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_extended")
+		r.handleExtendedAnalysis(ctx, b, chatID)
+	case "section_health_summary":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_summary")
+		r.handleDashboard(ctx, b, chatID)
+	case "section_health_monitoring":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_monitoring")
+		r.handleMonitoring(ctx, b, chatID)
+	case "section_consult_start":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_consult_start")
+		r.handleConsultationStart(ctx, b, chatID)
 	}
 
 	// Answer callback query

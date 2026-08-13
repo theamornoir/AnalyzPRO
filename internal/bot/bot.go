@@ -174,7 +174,7 @@ func (b *Bot) SetupMenuButton(ctx context.Context) {
 
 	btn := &models.MenuButtonWebApp{
 		Type:   models.MenuButtonTypeWebApp,
-		Text:   "📊 Дашборд",
+		Text:   "💡 Сводка здоровья",
 		WebApp: models.WebAppInfo{URL: b.webAppURL},
 	}
 	if _, err := b.client.SetChatMenuButton(ctx, &tgbot.SetChatMenuButtonParams{

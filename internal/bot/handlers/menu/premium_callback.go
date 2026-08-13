@@ -178,7 +178,7 @@ func HandlePremiumConfirm(
 			strings.HasPrefix(webAppTarget, "http://localhost") ||
 			strings.HasPrefix(webAppTarget, "http://127.0.0.1") {
 			rows = append(rows, []models.InlineKeyboardButton{
-				{Text: "📊 Открыть Дашборд (Mini App)", WebApp: &models.WebAppInfo{URL: webAppTarget}},
+				{Text: "💡 Открыть Сводку здоровья (Mini App)", WebApp: &models.WebAppInfo{URL: webAppTarget}},
 			})
 		}
 		if linkURL != "" {
@@ -197,7 +197,7 @@ func HandlePremiumConfirm(
 		if expiry != "" {
 			confirmText += "\nДействует до: " + expiry
 		}
-		confirmText += "\n\nТеперь вам доступен 📊 **Мой Дашборд** — откройте его кнопкой ниже " +
+		confirmText += "\n\nТеперь вам доступна 💡 **Сводка здоровья** — откройте её кнопкой ниже " +
 			"или из главного меню."
 
 		msgID, sendErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{

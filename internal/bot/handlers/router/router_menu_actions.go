@@ -2,7 +2,9 @@ package router
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	tgbot "github.com/go-telegram/bot"
@@ -10,14 +12,33 @@ import (
 
 	"github.com/theamornoir/analyzpro/internal/bot/botutil"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// handleDiagnostics - показывает меню выбора типа анализа.
+// handleDiagnostics - раздел-хаб «Диагностика»: показывает описание
+// раздела и под-действия (Обычный/Расширенный анализ, Bioscan). Сама
+// проверка соглашения остаётся внутри под-действий.
 func (r *router) handleDiagnostics(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf(locales.LogRouterDiagnostics, chatID)
+
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        locales.MsgDiagnosticsSectionIntro,
+		ReplyMarkup: keyboards.DiagnosticsHubMenu(),
+		ParseMode:   "Markdown",
+	})
+	return true
+}
+
+// handleFeedbackStart - запускает режим ввода отзыва/предложения: описывает
+// раздел и переводит пользователя в StateWaitingFeedback, ожидая следующее
+// сообщение (текст/фото/документ), которое будет переслано разработчику.
+func (r *router) handleFeedbackStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf("[FEEDBACK] открытие раздела для chatID=%d", chatID)
+
 	if !r.agreementStorage.IsAgreed(chatID) {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
@@ -27,10 +48,112 @@ func (r *router) handleDiagnostics(ctx context.Context, b *tgbot.Bot, chatID int
 		return true
 	}
 
+	r.stateManager.SetState(chatID, states.StateWaitingFeedback)
+
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
-		Text:        locales.MsgDiagnosticsIntro,
-		ReplyMarkup: keyboards.AnalysisTypeMenu(),
+		Text:        locales.MsgFeedbackIntro,
+		ReplyMarkup: keyboards.FeedbackMenu(),
+		ParseMode:   "Markdown",
+	})
+	return true
+}
+
+// handleFeedbackMessage - пересылает сообщение пользователя (текст/фото/
+// документ) разработчику (adminChatID) и подтверждает доставку. Срабатывает
+// при любом сообщении в режиме StateWaitingFeedback. Возвращает true, если
+// сообщение обработано как отзыв.
+func (r *router) handleFeedbackMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string, update *models.Update) bool {
+	log.Printf("[FEEDBACK] ввод сообщения от chatID=%d", chatID)
+
+	// Отмена / возврат из режима ввода отзыва.
+	if text == locales.BtnCancel || text == locales.BtnBack {
+		log.Printf("[FEEDBACK] отмена ввода chatID=%d", chatID)
+		r.stateManager.SetState(chatID, states.StateIdle)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgFeedbackCancelled,
+			ReplyMarkup: keyboards.MainMenu(),
+		})
+		return true
+	}
+
+	// Получатель не настроен — отзыв некуда доставлять.
+	if r.adminChatID == 0 {
+		log.Printf("[FEEDBACK] adminChatID не задан, доставка невозможна chatID=%d", chatID)
+		r.stateManager.SetState(chatID, states.StateIdle)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgFeedbackUnavailable,
+			ReplyMarkup: keyboards.MainMenu(),
+		})
+		return true
+	}
+
+	from := update.Message.From
+	fullName := "—"
+	username := "—"
+	if from != nil {
+		name := strings.TrimSpace(from.FirstName + " " + from.LastName)
+		if name != "" {
+			fullName = name
+		}
+		if from.Username != "" {
+			username = from.Username
+		}
+	}
+
+	// Служебная «шапка» админу перед пересланным сообщением.
+	_, metaErr := b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:    r.adminChatID,
+		Text:      fmt.Sprintf(locales.MsgFeedbackMeta, fullName, chatID, username),
+		ParseMode: "Markdown",
+	})
+
+	// Пересылаем само сообщение (текст/фото/документ) как есть — так
+	// разработчик видит оригинал, включая вложения.
+	if update.Message != nil {
+		if _, fErr := b.ForwardMessage(ctx, &tgbot.ForwardMessageParams{
+			ChatID:     r.adminChatID,
+			FromChatID: chatID,
+			MessageID:  update.Message.ID,
+		}); fErr != nil {
+			log.Printf("[FEEDBACK] ошибка пересылки chatID=%d: %v", chatID, fErr)
+		}
+	}
+
+	if metaErr != nil {
+		log.Printf("[FEEDBACK] ошибка отправки админу chatID=%d: %v", chatID, metaErr)
+		r.stateManager.SetState(chatID, states.StateIdle)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgFeedbackSendError,
+			ReplyMarkup: keyboards.MainMenu(),
+		})
+		return true
+	}
+
+	r.stateManager.SetState(chatID, states.StateIdle)
+	log.Printf("[FEEDBACK] отзыв доставлен админу от chatID=%d", chatID)
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        locales.MsgFeedbackConfirmed,
+		ReplyMarkup: keyboards.MainMenu(),
+		ParseMode:   "Markdown",
+	})
+	return true
+}
+
+// handleHealthDynamics - раздел-хаб «Здоровье в динамике»: описание раздела
+// и под-действия (Сводка здоровья / Мониторинг). Проверка Premium остаётся
+// внутри под-действий (handleDashboard / handleMonitoring).
+func (r *router) handleHealthDynamics(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf("[HEALTH-DYNAMICS] открытие хаба для chatID=%d", chatID)
+
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        locales.MsgHealthDynamicsIntro,
+		ReplyMarkup: keyboards.HealthDynamicsHubMenu(),
 		ParseMode:   "Markdown",
 	})
 	return true
@@ -195,9 +318,9 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 	secure := isSecureWebAppURL(webAppTarget)
 	linkIsLAN := !isSecureWebAppURL(linkURL)
 
-	text := "📊 Мой Дашборд\n\n"
+	text := locales.MsgHealthSummaryIntro + "\n\n"
 	if secure {
-		text += "Нажмите кнопку ниже, чтобы открыть дашборд прямо в Telegram (Mini App).\n\n"
+		text += "Нажмите кнопку ниже, чтобы открыть Сводку здоровья прямо в Telegram (Mini App).\n\n"
 	}
 	if linkIsLAN {
 		text += "Ссылка ниже ведёт на этот компьютер по локальной сети — откройте её в " +
@@ -208,7 +331,7 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 		text += "Встроенная кнопка Mini App требует HTTPS. Откройте ссылку ниже в " +
 			"браузере. Для Mini App в телефоне запустите make tunnel.\n\n"
 	}
-	text += "Открыть дашборд: " + linkURL
+	text += "Открыть Сводку здоровья: " + linkURL
 
 	// Клавиатура: WebApp-кнопка (только для защищённых/локальных URL,
 	// иначе она «мертвая» на телефоне) + обычная кнопка-ссылка как запасной
@@ -216,7 +339,7 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 	rows := [][]models.InlineKeyboardButton{}
 	if secure {
 		rows = append(rows, []models.InlineKeyboardButton{
-			{Text: "📊 Открыть Дашборд (Mini App)", WebApp: &models.WebAppInfo{URL: webAppTarget}},
+			{Text: "💡 Открыть Сводку здоровья (Mini App)", WebApp: &models.WebAppInfo{URL: webAppTarget}},
 		})
 	}
 	rows = append(rows, []models.InlineKeyboardButton{
@@ -325,4 +448,279 @@ func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int6
 		log.Printf("[MONITORING] сообщение отправлено chatID=%d msgID=%d url=%s кнопок=%d", chatID, msgID, linkURL, len(rows))
 	}
 	return true
+}
+
+// ============================================================================
+// Быстрая консультация (с ИИ)
+// ============================================================================
+
+// freeConsultationLimit — сколько бесплатных консультаций доступно
+// не-Premium пользователю. Premium — безлимит.
+const freeConsultationLimit = 3
+
+// consultUserKey — ключ счётчика использованных бесплатных консультаций
+// в user-data состояния.
+const consultUserKey = "ai_consult_count"
+
+// consultCount — сколько бесплатных консультаций уже использовано.
+func (r *router) consultCount(chatID int64) int {
+	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, consultUserKey))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+// consultSetCount — сохраняет счётчик использованных бесплатных консультаций.
+func (r *router) consultSetCount(chatID int64, n int) {
+	r.stateManager.SetUserData(chatID, consultUserKey, strconv.Itoa(n))
+}
+
+// consultationTextPrompt — формирует запрос к ИИ для текстовой консультации:
+// задаёт роль консультанта и просит дать рекомендации + дисклеймер.
+func consultationTextPrompt(question string) string {
+	return "Вопрос пользователя о здоровье: " + strings.TrimSpace(question) +
+		"\n\nТвоя задача — дать медицинскую консультацию: ответь на вопрос, " +
+		"объясни возможные причины, дай практические рекомендации по облегчению " +
+		"состояния. В конце обязательно напомни, что это информационная " +
+		"консультация и не заменяет очный визит к врачу."
+}
+
+// consultationImageContext — формирует контекст к ИИ для консультации по
+// фотографии (травма/проблемная зона). При наличии добавляет текстовый
+// вопрос пользователя к фото.
+func consultationImageContext(question string) string {
+	base := "Это фото травмы или проблемной зоны пользователя. Пожалуйста, дай " +
+		"медицинскую консультацию по фото: опиши, что видишь, возможные причины, " +
+		"рекомендации по облегчению состояния и напомни, что это не заменяет " +
+		"очный визит к врачу."
+	question = strings.TrimSpace(question)
+	if question != "" {
+		base += "\n\nВопрос пользователя к фото: " + question
+	}
+	return base
+}
+
+// handleConsultation — раздел-хаб «Быстрая консультация (с ИИ)»: показывает
+// описание раздела, сколько бесплатных консультаций осталось, и под-действие
+// «Начать консультацию». Сама проверка соглашения/Premium и бесплатной квоты
+// остаётся внутри действия (handleConsultationStart).
+func (r *router) handleConsultation(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf("[CONSULT] открытие хаба для chatID=%d", chatID)
+
+	if !r.agreementStorage.IsAgreed(chatID) {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgBioscanAgreementRequired,
+			ReplyMarkup: keyboards.StartMenu(),
+		})
+		return true
+	}
+
+	freeLeft := freeConsultationLimit - r.consultCount(chatID)
+	if freeLeft < 0 {
+		freeLeft = 0
+	}
+
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        fmt.Sprintf(locales.MsgConsultationIntro, freeLeft, freeConsultationLimit),
+		ReplyMarkup: keyboards.ConsultationHubMenu(),
+		ParseMode:   "Markdown",
+	})
+	return true
+}
+
+// handleConsultationStart — запускает режим консультации: проверяет
+// соглашение, Premium и оставшуюся бесплатную квоту. Если квота исчерпана и
+// Premium нет — предлагает оформить подписку. Иначе переводит пользователя
+// в StateWaitingConsultation, ожидая вопрос (текст) или фото.
+func (r *router) handleConsultationStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf("[CONSULT] запуск для chatID=%d", chatID)
+
+	if !r.agreementStorage.IsAgreed(chatID) {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgBioscanAgreementRequired,
+			ReplyMarkup: keyboards.StartMenu(),
+		})
+		return true
+	}
+
+	isPremium := r.paymentService.IsUserPremium(chatID)
+	if !isPremium && r.consultCount(chatID) >= freeConsultationLimit {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgConsultationPremiumRequired,
+			ReplyMarkup: keyboards.BackMenu(),
+			ParseMode:   "Markdown",
+		})
+		return true
+	}
+
+	r.stateManager.SetState(chatID, states.StateWaitingConsultation)
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        locales.MsgConsultationStart,
+		ReplyMarkup: keyboards.FeedbackMenu(),
+		ParseMode:   "Markdown",
+	})
+	return true
+}
+
+// handleConsultationMessage — обрабатывает сообщение пользователя в режиме
+// StateWaitingConsultation: текстовый вопрос или фото травмы. Отправляет его
+// ИИ (GenerateAnalysisSummary / анализ фото) и возвращает консультацию.
+// Возвращает true, если сообщение обработано как консультация.
+func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string, update *models.Update) bool {
+	log.Printf("[CONSULT] ввод сообщения от chatID=%d", chatID)
+
+	// Отмена / возврат из режима консультации.
+	if text == locales.BtnCancel || text == locales.BtnBack {
+		log.Printf("[CONSULT] отмена chatID=%d", chatID)
+		r.stateManager.SetState(chatID, states.StateIdle)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgConsultationCancelled,
+			ReplyMarkup: keyboards.MainMenu(),
+		})
+		return true
+	}
+
+	hasPhoto := update.Message != nil && len(update.Message.Photo) > 0
+
+	// Пустое/неподдерживаемое сообщение (стикер, голос, ничего) — просим
+	// прислать вопрос или фото.
+	if strings.TrimSpace(text) == "" && !hasPhoto {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgConsultationEmpty,
+			ReplyMarkup: keyboards.FeedbackMenu(),
+		})
+		return true
+	}
+
+	isPremium := r.paymentService.IsUserPremium(chatID)
+
+	// Повторная проверка квоты на случай «залипшего» состояния.
+	if !isPremium && r.consultCount(chatID) >= freeConsultationLimit {
+		r.stateManager.SetState(chatID, states.StateIdle)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgConsultationPremiumRequired,
+			ReplyMarkup: keyboards.MainMenu(),
+			ParseMode:   "Markdown",
+		})
+		return true
+	}
+
+	// Индикатор «ИИ думает».
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: chatID,
+		Text:   locales.MsgConsultationProcessing,
+	})
+
+	var (
+		result string
+		err    error
+	)
+
+	if hasPhoto {
+		photos := update.Message.Photo
+		largest := photos[len(photos)-1]
+		data, mimeType, dlErr := helpers.DownloadFileByID(ctx, b, largest.FileID, r.uploadDir)
+		if dlErr != nil {
+			log.Printf("[CONSULT] ошибка загрузки фото chatID=%d: %v", chatID, dlErr)
+			r.stateManager.SetState(chatID, states.StateIdle)
+			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+				ChatID:      chatID,
+				Text:        locales.MsgConsultationError,
+				ReplyMarkup: keyboards.MainMenu(),
+			})
+			return true
+		}
+		result, err = r.analysisService.HandleAnalysisFromFileWithContext(ctx, data, mimeType, consultationImageContext(text))
+	} else {
+		result, err = r.analysisService.HandleAnalysis(ctx, consultationTextPrompt(text))
+	}
+
+	if err != nil || strings.TrimSpace(result) == "" {
+		log.Printf("[CONSULT] ошибка генерации chatID=%d: %v", chatID, err)
+		r.stateManager.SetState(chatID, states.StateIdle)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgConsultationError,
+			ReplyMarkup: keyboards.MainMenu(),
+		})
+		return true
+	}
+
+	// Успех: считаем бесплатную квоту только для не-Premium пользователей.
+	if !isPremium {
+		r.consultSetCount(chatID, r.consultCount(chatID)+1)
+	}
+	r.stateManager.SetState(chatID, states.StateIdle)
+
+	// Собираем итоговый текст (без Markdown — результат ИИ неконтролируем,
+	// чтобы не сломать разметку). Клавиатуру (главное меню) крепим к
+	// последнему куску через sendLongMessage.
+	full := locales.MsgConsultationResultIntro + result
+	if !isPremium {
+		freeLeft := freeConsultationLimit - r.consultCount(chatID)
+		if freeLeft < 0 {
+			freeLeft = 0
+		}
+		if freeLeft > 0 {
+			full += fmt.Sprintf(locales.MsgConsultationQuotaLeft, freeLeft)
+		}
+	}
+
+	sendLongMessage(ctx, b, chatID, full, keyboards.MainMenu())
+	return true
+}
+
+// sendLongMessage — отправляет текст, разбивая его на куски ≤ 4000 символов
+// по границам строк, чтобы не упереться в лимит Telegram (4096). Клавиатура
+// (keyboard) крепится только к последнему куску.
+func sendLongMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string, keyboard models.ReplyKeyboardMarkup) {
+	const maxChunk = 4000
+	runes := []rune(text)
+	n := len(runes)
+	if n <= maxChunk {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        text,
+			ReplyMarkup: keyboard,
+		})
+		return
+	}
+
+	chunks := []string{}
+	for start := 0; start < n; {
+		end := start + maxChunk
+		if end > n {
+			end = n
+		}
+		chunk := string(runes[start:end])
+		if end < n {
+			if idx := strings.LastIndex(chunk, "\n"); idx > 0 {
+				end = start + idx + 1
+				chunk = string(runes[start:end])
+			}
+		}
+		chunks = append(chunks, chunk)
+		start = end
+	}
+
+	for i, chunk := range chunks {
+		kb := models.ReplyKeyboardMarkup{}
+		if i == len(chunks)-1 {
+			kb = keyboard
+		}
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        chunk,
+			ReplyMarkup: kb,
+		})
+	}
 }

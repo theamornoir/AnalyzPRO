@@ -2,16 +2,27 @@ package locales
 
 // Keyboard button texts
 const (
-	BtnProcessAnalysis  = "✅ Обработать анализы"
-	BtnBack             = "⬅️ Назад"
-	BtnCancel           = "❌ Отмена"
-	BtnAgreement        = "📝 Пользовательское соглашение"
-	BtnAbout            = "ℹ️ О сервисе"
-	BtnDiagnostics      = "🏥 Диагностика анализов"
-	BtnBioscan          = "📸 Bioscan"
-	BtnDashboard        = "📊 Мой Дашборд"
-	BtnMonitoring       = "📊 Мониторинг"
-	BtnFeedback         = "📝 Отзывы и предложения"
+	BtnProcessAnalysis = "✅ Обработать анализы"
+	BtnBack            = "⬅️ Назад"
+	BtnCancel          = "❌ Отмена"
+	BtnAgreement       = "📝 Пользовательское соглашение"
+	BtnAbout           = "ℹ️ О сервисе"
+	BtnDiagnostics     = "🏥 Диагностика анализов"
+	BtnBioscan         = "📸 Bioscan"
+	// BtnHealthSummary — переименованный «Дашборд»: слово «дашборд»
+	// пользователям непонятно, поэтому теперь это «Сводка здоровья» —
+	// снимок состояния здоровья прямо сейчас.
+	BtnHealthSummary = "💡 Сводка здоровья"
+	BtnMonitoring    = "📊 Мониторинг"
+	// BtnHealthDynamics — новый раздел-хаб, объединяющий «Сводка здоровья»
+	// и «Мониторинг» (отслеживание показателей в динамике).
+	BtnHealthDynamics = "📈 Здоровье в динамике"
+	BtnFeedback       = "📝 Отзывы и предложения"
+	// BtnConsultation — новый раздел «Быстрая консультация (с ИИ)».
+	// Пользователю непонятно «консультация с ИИ», поэтому названо как
+	// «Быстрая консультация»: можно прислать фото травмы или задать вопрос,
+	// и ИИ даст консультацию с рекомендациями. Premium-функция (3 бесплатно).
+	BtnConsultation     = "💬 Быстрая консультация"
 	BtnPremium          = "💎 Premium"
 	BtnPremiumChange    = "🔄 Сменить тариф"
 	BtnRegularAnalysis  = "📊 Обычный анализ"

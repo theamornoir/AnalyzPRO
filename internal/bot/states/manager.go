@@ -41,6 +41,15 @@ const (
 	StateWaitingBioscanConfirm State = "waiting_bioscan_confirm"
 
 	StateWaitingUploadConfirm State = "waiting_upload_confirm"
+
+	// StateWaitingFeedback — режим ввода отзыва/предложения: следующее
+	// сообщение пользователя (текст/фото/документ) пересылается админу.
+	StateWaitingFeedback State = "waiting_feedback"
+
+	// StateWaitingConsultation — режим «Быстрая консультация (с ИИ)»:
+	// следующее сообщение пользователя (текстовый вопрос или фото травмы)
+	// отправляется ИИ для генерации консультации с рекомендациями.
+	StateWaitingConsultation State = "waiting_consultation"
 )
 
 type StateManager interface {
