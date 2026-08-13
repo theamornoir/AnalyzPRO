@@ -23,11 +23,8 @@ func ConvertHTMLToPDF(html string) ([]byte, error) {
 		return nil, fmt.Errorf(locales.ErrHTML2PDFKeyNotSet)
 	}
 
-	log.Printf(locales.LogPDFKeyFound, apiKey[:10])
-
 	// Пробуем передавать ключ в URL (без Authorization)
 	url := fmt.Sprintf("https://api.html2pdf.app/v1/generate?apiKey=%s", apiKey)
-	log.Printf(locales.LogPDFURL, url)
 
 	payload := map[string]interface{}{
 		"html": html,

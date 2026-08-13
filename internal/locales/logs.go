@@ -41,8 +41,6 @@ const (
 	LogProcessingUploadText      = "📝 Обработка текста: %q"
 	LogStartingPDFConversion     = "🔄 Начинаем конвертацию HTML в PDF..."
 	LogPDFKeyNotFound            = "❌ HTML2PDF_API_KEY не найден"
-	LogPDFKeyFound               = "🔑 API ключ найден: %s..."
-	LogPDFURL                    = "🌐 URL: %s"
 	LogSendingRequest            = "⏳ Отправка запроса..."
 	LogPDFStatus                 = "📊 Статус: %d"
 	LogPDFReceived               = "✅ PDF получен, размер: %d байт"

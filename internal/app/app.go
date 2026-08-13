@@ -66,6 +66,13 @@ func New() (*App, error) {
 
 	agreementStorage := storage.NewAgreementStorage("./data/agreements.json")
 
+	// Мок-хранилище (будет заменено на GORM при внедрении реальной БД)
+	appStorage := storage.NewMockStorage()
+	log.Printf("🗄️ Мок-хранилище инициализировано: Users=%T, Diagnoses=%T, Cycles=%T, Preferences=%T",
+		appStorage.Users, appStorage.Diagnoses, appStorage.Cycles, appStorage.Preferences)
+
+	_ = appStorage // Будет передано в хендлеры при следующем этапе
+
 	telegramBot, err := bot.New(
 		cfg.BotToken,
 		stateManager,
@@ -83,7 +90,6 @@ func New() (*App, error) {
 	log.Printf(locales.LogAppInitialized)
 	log.Printf(locales.LogConfiguration)
 	log.Printf(locales.LogAppEnv, cfg.AppEnv)
-	log.Printf(locales.LogBotToken, cfg.BotToken[:10])
 	log.Printf(locales.LogGeminiModel, cfg.GoogleAIModel)
 	log.Printf(locales.LogUploadDir, cfg.UploadDir)
 	log.Printf(locales.LogMockMode, useMock)

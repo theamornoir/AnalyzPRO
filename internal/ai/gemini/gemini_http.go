@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"time"
 
+	httpclient "github.com/theamornoir/analyzpro/internal/ai/httpclient"
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
@@ -26,44 +25,22 @@ func (c *GeminiClient) doRequest(ctx context.Context, body []byte) (*rawResponse
 		c.apiKey,
 	)
 
-	if len(c.apiKey) > 10 {
-		loggedURL := fmt.Sprintf(
-			"https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s...%s",
-			c.model,
-			c.apiKey[:10],
-			c.apiKey[len(c.apiKey)-4:],
-		)
-		log.Printf(locales.LogGeminiRequestURL, loggedURL)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		log.Printf(locales.LogGeminiRequestErr, err)
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
+	log.Printf(locales.LogGeminiRequestModel, c.model)
 
 	log.Printf(locales.LogGeminiSendingRequest)
 	startTime := time.Now()
 
-	resp, err := c.client.Do(req)
+	respBody, err := httpclient.FetchWithRetry(ctx, url, bytes.NewReader(body), 3)
 	if err != nil {
 		log.Printf(locales.LogGeminiHTTPFailed, err)
-		return &rawResponse{status: http.StatusServiceUnavailable, body: nil}, nil
+		return &rawResponse{status: 503, body: nil}, nil
 	}
-	defer resp.Body.Close()
 
 	elapsed := time.Since(startTime)
 	log.Printf(locales.LogGeminiRequestDuration, elapsed)
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf(locales.LogGeminiReadBodyErr, err)
-		return nil, err
-	}
-
 	return &rawResponse{
-		status: resp.StatusCode,
+		status: 200,
 		body:   respBody,
 	}, nil
 }

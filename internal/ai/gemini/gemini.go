@@ -3,9 +3,7 @@ package gemini
 import (
 	"context"
 	"log"
-	"net/http"
 	"strings"
-	"time"
 
 	"github.com/theamornoir/analyzpro/internal/ai/mock"
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -15,7 +13,6 @@ import (
 type GeminiClient struct {
 	model  string
 	apiKey string
-	client *http.Client
 }
 
 // NewGeminiClient создаёт новый клиент Gemini.
@@ -31,7 +28,6 @@ func NewGeminiClient(apiKey, model string) *GeminiClient {
 	return &GeminiClient{
 		model:  model,
 		apiKey: apiKey,
-		client: &http.Client{Timeout: 60 * time.Second},
 	}
 }
 

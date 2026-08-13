@@ -24,7 +24,7 @@ const (
 	LogGeminiRawJSONLen        = "📝 RAW JSON response length: %d"
 	LogGeminiNonOKStatus       = "❌ Non-OK status: %d"
 	LogGeminiErrorDetails      = "📋 Gemini error details: Code=%d, Message=%s"
-	LogGeminiRequestURL        = "🌐 Request URL: %s"
+	LogGeminiRequestModel      = "🌐 Request model: %s"
 	LogGeminiRequestErr        = "❌ Failed to create request: %v"
 	LogGeminiSendingRequest    = "⏳ Sending request to Gemini..."
 	LogGeminiHTTPFailed        = "❌ HTTP request failed: %v"
