@@ -19,6 +19,9 @@ const (
 const (
 	MsgPremiumComingSoon = "💎 Premium находится в разработке. Скоро будут новые функции!"
 	MsgPremiumRequired   = "🔒 Для доступа к дашборду необходим Premium-подписка.\n\nНажмите 💎 Premium для оформления."
+	// MsgMonitoringPremiumRequired — сообщение при попытке открыть
+	// Мониторинг без Premium-подписки.
+	MsgMonitoringPremiumRequired = "🔒 **Модуль «Мониторинг» — функция Premium**\n\nОтслеживайте курсы препаратов, диабет, похудение и здоровье по вашим анализам и биосканам в виде графиков.\n\nОформите 💎 Premium, чтобы открыть Мониторинг."
 	// MsgPremiumCurrent — экран активного Premium: текущий тариф + опция смены.
 	// Параметры: имя тарифа, дата окончания (YYYY-MM-DD).
 	MsgPremiumCurrent = "💎 **Ваш Premium активен!**\n\n" +

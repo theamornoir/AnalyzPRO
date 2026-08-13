@@ -11,6 +11,7 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
+	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -18,6 +19,7 @@ import (
 )
 
 // ProcessBioscanWithPhotos - обработка подтверждения и отправка в AI.
+// saver сохраняет результат биоскана в историю пользователя (для Мониторинга).
 func ProcessBioscanWithPhotos(
 	ctx context.Context,
 	b *tgbot.Bot,
@@ -26,6 +28,7 @@ func ProcessBioscanWithPhotos(
 	uploadDir string,
 	stickerID string,
 	chatID int64,
+	saver monitoring.HistorySaver,
 ) {
 	// Собираем все данные
 	name := sm.GetUserData(chatID, "bioscan_name")
@@ -122,6 +125,22 @@ func ProcessBioscanWithPhotos(
 
 	if err != nil {
 		log.Printf(locales.LogBioscanSendDocError, err)
+	}
+
+	// Авто-сохранение результата биоскана в историю (для Мониторинга).
+	if saver != nil {
+		if saveErr := saver.SaveResult(ctx, &monitoring.HistoryEntry{
+			TelegramID: chatID,
+			Type:       "bioscan",
+			Title:      "Bioscan",
+			Date:       time.Now(),
+			JsonData:   "",
+			ReportHTML: htmlReport,
+		}); saveErr != nil {
+			log.Printf("[MONITORING] не удалось сохранить биоскан chatID=%d: %v", chatID, saveErr)
+		} else {
+			log.Printf("[MONITORING] история сохранена chatID=%d type=bioscan", chatID)
+		}
 	}
 
 	sm.SetState(chatID, states.StateIdle)

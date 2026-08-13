@@ -9,6 +9,7 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
+	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -29,6 +30,7 @@ func processSingleFile(
 	file UploadedFile,
 	isExtended bool,
 	contextInfo string,
+	saver monitoring.HistorySaver,
 ) {
 	fileData, err := file.readData()
 	if err != nil {
@@ -45,7 +47,7 @@ func processSingleFile(
 		)
 
 		if err == nil && jsonResult != "" {
-			renderAndSendReport(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, jsonResult)
+			renderAndSendReport(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, jsonResult, saver)
 			return
 		}
 
@@ -89,6 +91,7 @@ func processMultipleFiles(
 	files []UploadedFile,
 	isExtended bool,
 	contextInfo string,
+	saver monitoring.HistorySaver,
 ) {
 	var collectedTexts []string
 
@@ -120,7 +123,7 @@ func processMultipleFiles(
 	if isExtended {
 		jsonResult, err := analysisService.HandleAnalysisJSON(ctx, combinedPayload)
 		if err == nil && jsonResult != "" {
-			renderAndSendReport(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, jsonResult)
+			renderAndSendReport(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, jsonResult, saver)
 			return
 		}
 

@@ -9,6 +9,7 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
+	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -28,6 +29,7 @@ type router struct {
 	adminChatID      int64
 	agreementStorage *storage.AgreementStorage
 	paymentService   *payment.MockPaymentService
+	monitorRepo      monitoring.HistorySaver
 	webAppURL        string
 	dashboardURL     string
 }
@@ -42,6 +44,7 @@ func MessageRouter(
 	adminChatID int64,
 	agreementStorage *storage.AgreementStorage,
 	paymentService *payment.MockPaymentService,
+	monitorRepo monitoring.HistorySaver,
 	webAppURL string,
 	dashboardURL string,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
@@ -55,6 +58,7 @@ func MessageRouter(
 		adminChatID:      adminChatID,
 		agreementStorage: agreementStorage,
 		paymentService:   paymentService,
+		monitorRepo:      monitorRepo,
 		webAppURL:        webAppURL,
 		dashboardURL:     dashboardURL,
 	}

@@ -21,7 +21,8 @@ func (r *router) isMainMenuButton(text string) bool {
 		locales.BtnBioscan,
 		locales.BtnFeedback,
 		locales.BtnPremium,
-		locales.BtnDashboard:
+		locales.BtnDashboard,
+		locales.BtnMonitoring:
 		return true
 	}
 	return false
@@ -65,6 +66,9 @@ func (r *router) handleMenuButtons(ctx context.Context, b *tgbot.Bot, chatID int
 
 	case locales.BtnDashboard:
 		return r.handleDashboard(ctx, b, chatID)
+
+	case locales.BtnMonitoring:
+		return r.handleMonitoring(ctx, b, chatID)
 	}
 
 	return false

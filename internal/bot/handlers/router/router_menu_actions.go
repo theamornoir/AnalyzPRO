@@ -236,3 +236,93 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 	}
 	return true
 }
+
+// monitoringWebAppURL подменяет суффикс /dashboard на /monitoring в базовом
+// URL, сохраняя хост/протокол (туннель и локальный сервер обслуживают оба
+// пути). Если суффикса нет — возвращает URL как есть.
+func monitoringWebAppURL(base string) string {
+	if base == "" {
+		return ""
+	}
+	const dash = "/dashboard"
+	if i := strings.LastIndex(base, dash); i >= 0 {
+		return base[:i] + "/monitoring" + base[i+len(dash):]
+	}
+	return base
+}
+
+// handleMonitoring — открывает веб-приложение «Мониторинг» (Premium-функция).
+func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf("[MONITORING] открытие для chatID=%d", chatID)
+
+	isPremium := r.paymentService.IsUserPremium(chatID)
+	if !isPremium {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgMonitoringPremiumRequired,
+			ReplyMarkup: keyboards.BackMenu(),
+			ParseMode:   "Markdown",
+		})
+		return true
+	}
+
+	linkURL := r.dashboardURL
+	if linkURL == "" {
+		linkURL = r.webAppURL
+	}
+	linkURL = monitoringWebAppURL(linkURL)
+
+	webAppTarget := r.webAppURL
+	if webAppTarget == "" {
+		webAppTarget = r.dashboardURL
+	}
+	webAppTarget = monitoringWebAppURL(webAppTarget)
+
+	if webAppTarget == "" {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        "⚠️ URL мониторинга не настроен. Задайте WEBAPP_URL или запустите `make mini`.",
+			ReplyMarkup: keyboards.BackMenu(),
+			ParseMode:   "Markdown",
+		})
+		return true
+	}
+
+	secure := isSecureWebAppURL(webAppTarget)
+	linkIsLAN := !isSecureWebAppURL(linkURL)
+
+	text := "📊 **Мониторинг**\n\n" +
+		"Создавайте проекты и отслеживайте показатели во времени: курсы препаратов, диабет, похудение, здоровье.\n\n"
+	if secure {
+		text += "Нажмите кнопку ниже, чтобы открыть Мониторинг прямо в Telegram (Mini App).\n\n"
+	}
+	if linkIsLAN {
+		text += "Ссылка ведёт на этот компьютер по локальной сети — откройте её в браузере/встроенном браузере Telegram (телефон в той же Wi-Fi). Для Mini App в телефоне запустите `make mini`.\n\n"
+	} else if !secure {
+		text += "Встроенная кнопка Mini App требует HTTPS. Откройте ссылку в браузере или запустите `make mini`.\n\n"
+	}
+	text += "Открыть Мониторинг: " + linkURL
+
+	rows := [][]models.InlineKeyboardButton{}
+	if secure {
+		rows = append(rows, []models.InlineKeyboardButton{
+			{Text: "📊 Открыть Мониторинг (Mini App)", WebApp: &models.WebAppInfo{URL: webAppTarget}},
+		})
+	}
+	rows = append(rows, []models.InlineKeyboardButton{
+		{Text: "🌐 Открыть в браузере", URL: linkURL},
+	})
+
+	msgID, sendErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        text,
+		ReplyMarkup: models.InlineKeyboardMarkup{InlineKeyboard: rows},
+		ParseMode:   "Markdown",
+	})
+	if sendErr != nil {
+		log.Printf("[MONITORING] ошибка отправки chatID=%d: %v", chatID, sendErr)
+	} else {
+		log.Printf("[MONITORING] сообщение отправлено chatID=%d msgID=%d url=%s кнопок=%d", chatID, msgID, linkURL, len(rows))
+	}
+	return true
+}

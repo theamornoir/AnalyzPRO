@@ -8,6 +8,7 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -26,6 +27,7 @@ func handleUploadConfirm(
 	stickerID string,
 	chatID int64,
 	message *models.Message,
+	saver monitoring.HistorySaver,
 ) {
 	text := strings.TrimSpace(strings.ToLower(message.Text))
 
@@ -43,7 +45,7 @@ func handleUploadConfirm(
 
 	if text == locales.BtnProcessAnalysisLower || text == locales.BtnProcessAnalysisLowerShort {
 		log.Printf(locales.LogUploadStartAnalysis)
-		startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, uploadDir, stickerID, chatID)
+		startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, uploadDir, stickerID, chatID, saver)
 		return
 	}
 

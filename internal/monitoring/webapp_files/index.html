@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AnalyzPRO — Мониторинг</title>
+    <!-- Обязательный скрипт Telegram Mini App: делает доступным
+         window.Telegram.WebApp и подписывает initData (tg.initData),
+         который используется для авторизации API мониторинга. -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app">
+        <!-- HEADER -->
+        <header class="header">
+            <div class="header-top">
+                <div class="brand">ANALYZPRO</div>
+                <div class="badge">📊 Мониторинг</div>
+            </div>
+            <h1 id="headerTitle">Мои проекты</h1>
+            <p class="header-subtitle" id="headerSub">Отслеживайте показатели во времени</p>
+        </header>
+
+        <!-- MAIN -->
+        <main class="main">
+            <!-- VIEW: PROJECTS LIST -->
+            <section id="view-projects" class="view">
+                <div id="projectsList" class="projects"></div>
+                <div id="emptyState" class="empty hidden">
+                    <div class="empty-icon">📊</div>
+                    <h2>Создайте первый проект</h2>
+                    <p>Мониторинг помогает отслеживать здоровье, курсы препаратов или тренировки по вашим анализам и биосканам.</p>
+                    <button class="btn-primary" id="emptyCreateBtn">➕ Создать проект</button>
+                </div>
+            </section>
+
+            <!-- VIEW: CREATE PROJECT -->
+            <section id="view-create" class="view hidden">
+                <div class="card">
+                    <h2>Новый проект мониторинга</h2>
+                    <label class="field">
+                        <span>Название проекта</span>
+                        <input type="text" id="inpName" placeholder="Например: Курс весны 2026" maxlength="80">
+                    </label>
+                    <label class="field">
+                        <span>Тип мониторинга</span>
+                        <select id="inpType"></select>
+                    </label>
+                    <div class="field-row">
+                        <label class="field">
+                            <span>Дата начала</span>
+                            <input type="date" id="inpStart">
+                        </label>
+                        <label class="field">
+                            <span>Дата окончания</span>
+                            <input type="date" id="inpEnd">
+                        </label>
+                    </div>
+                    <p class="hint">Дата окончания не обязательна — оставьте пустой для открытого мониторинга.</p>
+                    <div class="actions">
+                        <button class="btn-ghost" id="createCancel">Отмена</button>
+                        <button class="btn-primary" id="createSubmit">Создать</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: PROJECT DETAIL -->
+            <section id="view-project" class="view hidden">
+                <div class="card project-head">
+                    <div>
+                        <h2 id="projName">—</h2>
+                        <div class="proj-meta" id="projMeta"></div>
+                    </div>
+                    <button class="btn-ghost small" id="projBack">← К проектам</button>
+                </div>
+
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="info">ℹ️ Инфо</button>
+                    <button class="tab-btn" data-tab="entries">📎 Записи</button>
+                    <button class="tab-btn" data-tab="charts">📈 Графики</button>
+                </div>
+
+                <!-- TAB: INFO -->
+                <div id="tab-info" class="tab-content active">
+                    <div class="card" id="projInfoCard"></div>
+                    <div class="card" id="projEntriesMini"></div>
+                </div>
+
+                <!-- TAB: ENTRIES -->
+                <div id="tab-entries" class="tab-content">
+                    <div class="card">
+                        <div class="section-header">
+                            <h2>Привязанные записи</h2>
+                            <button class="btn-primary small" id="addEntryBtn">+ Добавить</button>
+                        </div>
+                        <div id="entriesList" class="entries"></div>
+                        <div id="noEntries" class="empty-inline hidden">
+                            К проекту пока не привязано ни одной записи. Нажмите «+ Добавить», чтобы выбрать анализ или биоскан из истории.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: CHARTS -->
+                <div id="tab-charts" class="tab-content">
+                    <div class="card">
+                        <div class="section-header">
+                            <h2>Показатели</h2>
+                        </div>
+                        <div id="metricPicker" class="metric-picker"></div>
+                    </div>
+                    <div id="chartsWrap"></div>
+                    <div id="noCharts" class="empty-inline hidden">
+                        Нет данных для графиков. Привяжите записи с числовыми показателями во вкладке «Записи».
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- HISTORY MODAL -->
+        <div id="modal" class="modal hidden">
+            <div class="modal-backdrop" id="modalBackdrop"></div>
+            <div class="modal-card">
+                <div class="section-header">
+                    <h2>История — добавить запись</h2>
+                    <button class="btn-ghost small" id="modalClose">✕</button>
+                </div>
+                <div class="filter-group" id="historyFilters"></div>
+                <div id="historyList" class="history-list"></div>
+                <div id="noHistory" class="empty-inline hidden">В истории пока нет записей. Загрузите анализ или сделайте Bioscan в боте — он появится здесь автоматически.</div>
+            </div>
+        </div>
+
+        <!-- TOAST -->
+        <div id="toast" class="toast hidden"></div>
+
+        <!-- LOADING -->
+        <div id="loading" class="loading hidden"><div class="spinner"></div></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

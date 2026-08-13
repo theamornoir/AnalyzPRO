@@ -48,6 +48,7 @@ func MainMenu() models.ReplyKeyboardMarkup {
 				{Text: locales.BtnDashboard},
 			},
 			{
+				{Text: locales.BtnMonitoring},
 				{Text: locales.BtnPremium},
 				{Text: locales.BtnAbout},
 			},

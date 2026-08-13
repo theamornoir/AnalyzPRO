@@ -8,6 +8,7 @@ import (
 	tgbot "github.com/go-telegram/bot"
 
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
+	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/report"
@@ -15,6 +16,7 @@ import (
 )
 
 // startAnalysis - запускает анализ всех накопленных файлов.
+// saver сохраняет результат в историю (для Мониторинга).
 func startAnalysis(
 	ctx context.Context,
 	b *tgbot.Bot,
@@ -24,6 +26,7 @@ func startAnalysis(
 	uploadDir string,
 	stickerID string,
 	chatID int64,
+	saver monitoring.HistorySaver,
 ) {
 	filesJSON := stateManager.GetUserData(chatID, "uploaded_files")
 	if filesJSON == "" {
@@ -66,9 +69,9 @@ func startAnalysis(
 
 	if len(uploadedFiles) == 1 {
 		file := uploadedFiles[0]
-		processSingleFile(ctx, b, stateManager, analysisService, reportRenderer, chatID, loadingMsg, textMsg, file, isExtended, contextInfo)
+		processSingleFile(ctx, b, stateManager, analysisService, reportRenderer, chatID, loadingMsg, textMsg, file, isExtended, contextInfo, saver)
 	} else {
-		processMultipleFiles(ctx, b, stateManager, analysisService, reportRenderer, chatID, loadingMsg, textMsg, uploadedFiles, isExtended, contextInfo)
+		processMultipleFiles(ctx, b, stateManager, analysisService, reportRenderer, chatID, loadingMsg, textMsg, uploadedFiles, isExtended, contextInfo, saver)
 	}
 }
 

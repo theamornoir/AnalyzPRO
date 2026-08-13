@@ -60,7 +60,7 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		BotToken:           os.Getenv("BOT_TOKEN"),
+		BotToken:           strings.TrimSpace(os.Getenv("BOT_TOKEN")),
 		GoogleGeminiAPIKey: os.Getenv("GOOGLE_GEMINI_API_KEY"),
 		GoogleAIModel:      getEnv("GOOGLE_AI_MODEL", "gemini-3.6-flash"),
 		DeepSeekAPIKey:     os.Getenv("DEEPSEEK_API_KEY"),

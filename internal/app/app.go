@@ -13,6 +13,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/config"
 	"github.com/theamornoir/analyzpro/internal/locales"
+	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/service"
@@ -66,6 +67,11 @@ func New() (*App, error) {
 
 	_ = appStorage // Будет передано в хендлеры при следующем этапе
 
+	// Репозиторий модуля Мониторинг (проекты + история), in-memory.
+	// Один и тот же экземпляр используется и API (чтение), и слоями
+	// загрузки (запись истории), поэтому создаётся здесь и инжектируется в бота.
+	monitorRepo := monitoring.NewMockRepository()
+
 	// Сервис платежей (Mock YooKassa)
 	paymentService := payment.NewMockPaymentService("./data/premium_users.json")
 	log.Printf(locales.LogPaymentServiceInit)
@@ -80,6 +86,7 @@ func New() (*App, error) {
 		cfg.AdminChatID,
 		agreementStorage,
 		paymentService,
+		monitorRepo,
 		cfg.WebAppURL,
 		cfg.DashboardURL,
 		cfg.HTTPAddr,

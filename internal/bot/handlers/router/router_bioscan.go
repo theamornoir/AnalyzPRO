@@ -69,7 +69,7 @@ func (r *router) handleBioscanStates(ctx context.Context, b *tgbot.Bot, chatID i
 		log.Printf(locales.LogRouterBioscanConfirm, chatID, text)
 		switch text {
 		case locales.BtnBioscanConfirm:
-			bioscan.ProcessBioscanWithPhotos(ctx, b, r.stateManager, r.analysisService, r.uploadDir, r.stickerID, chatID)
+			bioscan.ProcessBioscanWithPhotos(ctx, b, r.stateManager, r.analysisService, r.uploadDir, r.stickerID, chatID, r.monitorRepo)
 		case locales.BtnBioscanRestart:
 			bioscan.StartBioscanFlow(ctx, b, r.stateManager, chatID)
 		default:

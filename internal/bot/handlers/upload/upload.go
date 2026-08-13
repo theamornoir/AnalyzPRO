@@ -7,6 +7,7 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/report"
@@ -14,12 +15,14 @@ import (
 )
 
 // UploadHandler - главный обработчик загрузки файлов и запуска анализа.
+// saver сохраняет готовый результат в историю пользователя (для Мониторинга).
 func UploadHandler(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
 	reportRenderer *report.Renderer,
 	uploadDir string,
 	stickerID string,
+	saver monitoring.HistorySaver,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
 
 	return func(
@@ -41,7 +44,7 @@ func UploadHandler(
 
 		if state == states.StateWaitingUploadConfirm {
 			log.Printf(locales.LogUploadWaitingConfirm)
-			handleUploadConfirm(ctx, b, stateManager, analysisService, reportRenderer, uploadDir, stickerID, chatID, update.Message)
+			handleUploadConfirm(ctx, b, stateManager, analysisService, reportRenderer, uploadDir, stickerID, chatID, update.Message, saver)
 			return
 		}
 
@@ -68,7 +71,7 @@ func UploadHandler(
 
 		if update.Message.Text != "" {
 			log.Printf(locales.LogProcessingUploadText, update.Message.Text)
-			handleTextUpload(ctx, b, stateManager, analysisService, reportRenderer, uploadDir, stickerID, chatID, update.Message.Text)
+			handleTextUpload(ctx, b, stateManager, analysisService, reportRenderer, uploadDir, stickerID, chatID, update.Message.Text, saver)
 			return
 		}
 

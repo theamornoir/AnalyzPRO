@@ -15,6 +15,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/router"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
+	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/service"
@@ -34,6 +35,9 @@ type Bot struct {
 	webAppURL        string
 	dashboardURL     string
 	httpAddr         string
+	botToken         string
+	monitorRepo      monitoring.Repository
+	monitorSvc       *monitoring.Service
 }
 
 func New(
@@ -46,6 +50,7 @@ func New(
 	adminChatID int64,
 	agreementStorage *storage.AgreementStorage,
 	paymentService *payment.MockPaymentService,
+	monitorRepo monitoring.Repository,
 	webAppURL string,
 	dashboardURL string,
 	httpAddr string,
@@ -77,7 +82,19 @@ func New(
 		webAppURL:        webAppURL,
 		dashboardURL:     dashboardURL,
 		httpAddr:         httpAddr,
+		botToken:         token,
+		monitorRepo:      monitorRepo,
+		monitorSvc:       monitoring.NewService(monitorRepo),
 	}
+
+	// Диагностика: логируем id бота из токена, чтобы при ошибках валидации
+	// initData можно было сверить — тот ли BOT_TOKEN запущен на сервере, что
+	// подписал initData (serverBotID должен совпадать с ботом, с которым общается пользователь).
+	bid := token
+	if strings.Contains(bid, ":") {
+		bid = bid[:strings.Index(bid, ":")]
+	}
+	log.Printf("[MONITORING] serverBotID=%q (из BOT_TOKEN), botTokenLen=%d", bid, len(token))
 
 	botInstance.registerHandlers()
 
@@ -100,6 +117,14 @@ func (b *Bot) Start(ctx context.Context) {
 			dashboard.HandleWebApp(w, r, true)
 		})
 		mux.HandleFunc("/api/metrics", dashboard.HandleAPIMetrics)
+
+		// Мониторинг: веб-апп (статика) + API с защитой initData.
+		mux.HandleFunc("/monitoring", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/monitoring/", http.StatusMovedPermanently)
+		})
+		mux.HandleFunc("/monitoring/", monitoring.ServeWebApp)
+		mux.HandleFunc("/api/monitoring/", monitoring.NewAPIHandler(b.monitorSvc, b.botToken).Handler())
+
 		log.Printf("❌ HTTP-сервер ошибка: %v", http.ListenAndServe(listenAddr, mux))
 	}()
 
@@ -172,6 +197,7 @@ func (b *Bot) registerHandlers() {
 		b.adminChatID,
 		b.agreementStorage,
 		b.paymentService,
+		b.monitorRepo,
 		b.webAppURL,
 		b.dashboardURL,
 	)

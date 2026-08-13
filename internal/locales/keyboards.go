@@ -10,6 +10,7 @@ const (
 	BtnDiagnostics      = "🏥 Диагностика анализов"
 	BtnBioscan          = "📸 Bioscan"
 	BtnDashboard        = "📊 Мой Дашборд"
+	BtnMonitoring       = "📊 Мониторинг"
 	BtnFeedback         = "📝 Отзывы и предложения"
 	BtnPremium          = "💎 Premium"
 	BtnPremiumChange    = "🔄 Сменить тариф"
