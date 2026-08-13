@@ -11,26 +11,24 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// isMainMenuButton - true, если text совпадает с одной из кнопок главного меню.
+// isMainMenuButton - true, если text совпадает с одной из кнопок главного
+// меню (4 верхних раздела-хаба). Под-действия хабов (Обычный/Расширенный
+// анализ, Bioscan, Сводка, Мониторинг, Консультация, Отзывы, О сервисе)
+// доступны через inline-кнопки (callback), а не через кнопки reply-клавиатуры,
+// поэтому здесь не перечисляются.
 func (r *router) isMainMenuButton(text string) bool {
 	switch text {
-	case locales.BtnAbout,
-		locales.BtnDiagnostics,
-		locales.BtnRegularAnalysis,
-		locales.BtnExtendedAnalysis,
-		locales.BtnBioscan,
-		locales.BtnFeedback,
+	case locales.BtnAnalysisHub,
+		locales.BtnHealthHub,
 		locales.BtnPremium,
-		locales.BtnHealthSummary,
-		locales.BtnHealthDynamics,
-		locales.BtnConsultation,
-		locales.BtnMonitoring:
+		locales.BtnServiceHub:
 		return true
 	}
 	return false
 }
 
-// handleMenuButtons - обработка кнопок главного меню. Возвращает true, если обработано.
+// handleMenuButtons - обработка кнопок главного меню (4 раздела-хаба).
+// Возвращает true, если обработано.
 func (r *router) handleMenuButtons(ctx context.Context, b *tgbot.Bot, chatID int64, text string, update *models.Update) bool {
 	if text == "" {
 		return true
@@ -39,43 +37,19 @@ func (r *router) handleMenuButtons(ctx context.Context, b *tgbot.Bot, chatID int
 	log.Printf(locales.LogRouterMenuButton, text, chatID)
 
 	switch text {
-	case locales.BtnAbout:
-		log.Printf(locales.LogRouterMenuAbout, chatID)
-		menu.AboutHandler()(ctx, b, update)
-		return true
+	case locales.BtnAnalysisHub:
+		return r.handleAnalysisHub(ctx, b, chatID)
 
-	case locales.BtnDiagnostics:
-		return r.handleDiagnostics(ctx, b, chatID)
+	case locales.BtnHealthHub:
+		return r.handleHealthHub(ctx, b, chatID)
 
-	case locales.BtnRegularAnalysis:
-		return r.handleRegularAnalysis(ctx, b, chatID)
-
-	case locales.BtnExtendedAnalysis:
-		return r.handleExtendedAnalysis(ctx, b, chatID)
-
-	case locales.BtnBioscan:
-		return r.handleBioscanStart(ctx, b, chatID)
-
-	case locales.BtnFeedback:
-		log.Printf(locales.LogProcessingFeedback, chatID)
-		return r.handleFeedbackStart(ctx, b, chatID)
+	case locales.BtnServiceHub:
+		return r.handleServiceHub(ctx, b, chatID)
 
 	case locales.BtnPremium:
 		log.Printf(locales.LogRouterMenuPremium, chatID)
 		menu.PremiumHandler(r.stateManager, r.paymentService)(ctx, b, update)
 		return true
-
-	case locales.BtnHealthSummary:
-		return r.handleDashboard(ctx, b, chatID)
-
-	case locales.BtnHealthDynamics:
-		return r.handleHealthDynamics(ctx, b, chatID)
-
-	case locales.BtnConsultation:
-		return r.handleConsultation(ctx, b, chatID)
-
-	case locales.BtnMonitoring:
-		return r.handleMonitoring(ctx, b, chatID)
 	}
 
 	return false

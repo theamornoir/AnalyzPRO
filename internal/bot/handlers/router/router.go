@@ -224,16 +224,28 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		return
 	}
 
-	// Под-действия из карточек разделов-хабов («Диагностика» и
-	// «Здоровье в динамике»). Диспетчеризуем на существующие обработчики;
-	// сам callback-запрос отвечается в конце функции (спиннер кнопки).
+	// Под-действия из карточек разделов-хабов («Анализы», «Здоровье»,
+	// «Сервис»). Диспетчеризуем на существующие обработчики; сам
+	// callback-запрос отвечается в конце функции (спиннер кнопки).
 	switch callbackData {
+	case "section_analysis":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_analysis")
+		r.handleAnalysisHub(ctx, b, chatID)
+	case "section_health":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health")
+		r.handleHealthHub(ctx, b, chatID)
+	case "section_service":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_service")
+		r.handleServiceHub(ctx, b, chatID)
 	case "section_diag_regular":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_regular")
 		r.handleRegularAnalysis(ctx, b, chatID)
 	case "section_diag_extended":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_extended")
 		r.handleExtendedAnalysis(ctx, b, chatID)
+	case "section_bioscan":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan")
+		r.handleBioscanStart(ctx, b, chatID)
 	case "section_health_summary":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_summary")
 		r.handleDashboard(ctx, b, chatID)
@@ -243,6 +255,12 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	case "section_consult_start":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_consult_start")
 		r.handleConsultationStart(ctx, b, chatID)
+	case "section_feedback_start":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_feedback_start")
+		r.handleFeedbackStart(ctx, b, chatID)
+	case "section_about":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_about")
+		menu.AboutHandler()(ctx, b, update)
 	}
 
 	// Answer callback query

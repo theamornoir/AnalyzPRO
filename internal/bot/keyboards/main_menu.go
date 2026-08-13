@@ -37,69 +37,60 @@ func StartMenu() models.ReplyKeyboardMarkup {
 }
 
 // MainMenu - основное меню (после принятия соглашения).
-// Сгруппировано в разделы, чтобы главный экран не был перегружен; каждый
-// раздел-хаб при входе даёт описание и под-действия. Bioscan и «Отзывы и
-// предложения» вынесены отдельными кнопками (Bioscan — это не лабораторный
-// анализ, а фотографический анализ тела; отзывы — прямая связь с разработчиком).
+// Разгружено: вместо 6 плоских кнопок — 4 понятных раздела-хаба в сетке 2×2.
+// Каждый хаб при входе даёт описание и под-действия. 💎 Premium оставлен
+// плоской кнопкой (это точка продажи, её важно держать на виду), остальные
+// функции сгруппированы: «Анализы» (лаб. анализы + Bioscan), «Здоровье»
+// (Сводка/Мониторинг/Консультация ИИ), «Сервис» (Отзывы/О сервисе).
 func MainMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
 			{
-				{Text: locales.BtnDiagnostics},
-			},
-			{
-				{Text: locales.BtnBioscan},
-			},
-			{
-				{Text: locales.BtnHealthDynamics},
-			},
-			{
-				{Text: locales.BtnConsultation},
-			},
-			{
-				{Text: locales.BtnFeedback},
+				{Text: locales.BtnAnalysisHub},
+				{Text: locales.BtnHealthHub},
 			},
 			{
 				{Text: locales.BtnPremium},
-				{Text: locales.BtnAbout},
+				{Text: locales.BtnServiceHub},
 			},
 		},
 		ResizeKeyboard: true,
 	}
 }
 
-// DiagnosticsHubMenu - раздел «Диагностика»: описание + под-действия
-// (Обычный анализ / Расширенный анализ) + назад в меню. Bioscan здесь
-// намеренно отсутствует — он вынесен отдельной кнопкой в главном меню.
-func DiagnosticsHubMenu() models.InlineKeyboardMarkup {
+// AnalysisHubMenu - раздел-хаб «Анализы»: описание + под-действия
+// (Обычный / Расширенный анализ / Bioscan) + назад в меню.
+func AnalysisHubMenu() models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
 			{{Text: locales.BtnRegularAnalysis, CallbackData: "section_diag_regular"}},
 			{{Text: locales.BtnExtendedAnalysis, CallbackData: "section_diag_extended"}},
+			{{Text: locales.BtnBioscan, CallbackData: "section_bioscan"}},
 			{{Text: "⬅️ Назад в меню", CallbackData: "back_main"}},
 		},
 	}
 }
 
-// HealthDynamicsHubMenu - раздел «Здоровье в динамике»: под-действия
-// (Сводка здоровья / Мониторинг) + назад в меню.
-func HealthDynamicsHubMenu() models.InlineKeyboardMarkup {
+// HealthHubMenu - раздел-хаб «Здоровье»: под-действия
+// (Сводка здоровья / Мониторинг / Консультация ИИ) + назад в меню.
+func HealthHubMenu() models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
 			{{Text: locales.BtnHealthSummary, CallbackData: "section_health_summary"}},
 			{{Text: locales.BtnMonitoring, CallbackData: "section_health_monitoring"}},
+			{{Text: locales.BtnConsultation, CallbackData: "section_consult_start"}},
 			{{Text: "⬅️ Назад в меню", CallbackData: "back_main"}},
 		},
 	}
 }
 
-// ConsultationHubMenu - раздел «Быстрая консультация»: описание + действие
-// «Начать консультацию» + назад в меню. Сама проверка соглашения/Premium и
-// бесплатной квоты остаётся внутри действия (handleConsultationStart).
-func ConsultationHubMenu() models.InlineKeyboardMarkup {
+// ServiceHubMenu - раздел-хаб «Сервис»: под-действия
+// (Отзывы и предложения / О сервисе) + назад в меню.
+func ServiceHubMenu() models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{{Text: "💬 Начать консультацию", CallbackData: "section_consult_start"}},
+			{{Text: locales.BtnFeedback, CallbackData: "section_feedback_start"}},
+			{{Text: locales.BtnAbout, CallbackData: "section_about"}},
 			{{Text: "⬅️ Назад в меню", CallbackData: "back_main"}},
 		},
 	}

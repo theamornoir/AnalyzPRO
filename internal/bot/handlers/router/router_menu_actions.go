@@ -18,16 +18,30 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// handleDiagnostics - раздел-хаб «Диагностика»: показывает описание
-// раздела и под-действия (Обычный/Расширенный анализ, Bioscan). Сама
-// проверка соглашения остаётся внутри под-действий.
-func (r *router) handleDiagnostics(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+// handleAnalysisHub - раздел-хаб «Анализы» (верхняя кнопка главного меню):
+// показывает описание раздела и под-действия (Обычный/Расширенный анализ,
+// Bioscan). Проверка соглашения остаётся внутри под-действий.
+func (r *router) handleAnalysisHub(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf(locales.LogRouterDiagnostics, chatID)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
-		Text:        locales.MsgDiagnosticsSectionIntro,
-		ReplyMarkup: keyboards.DiagnosticsHubMenu(),
+		Text:        locales.MsgAnalysisHubIntro,
+		ReplyMarkup: keyboards.AnalysisHubMenu(),
+		ParseMode:   "Markdown",
+	})
+	return true
+}
+
+// handleServiceHub - раздел-хаб «Сервис» (верхняя кнопка главного меню):
+// описание раздела и под-действия (Отзывы и предложения / О сервисе).
+func (r *router) handleServiceHub(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf("[SERVICE-HUB] открытие хаба для chatID=%d", chatID)
+
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        locales.MsgServiceHubIntro,
+		ReplyMarkup: keyboards.ServiceHubMenu(),
 		ParseMode:   "Markdown",
 	})
 	return true
@@ -144,16 +158,18 @@ func (r *router) handleFeedbackMessage(ctx context.Context, b *tgbot.Bot, chatID
 	return true
 }
 
-// handleHealthDynamics - раздел-хаб «Здоровье в динамике»: описание раздела
-// и под-действия (Сводка здоровья / Мониторинг). Проверка Premium остаётся
-// внутри под-действий (handleDashboard / handleMonitoring).
-func (r *router) handleHealthDynamics(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
-	log.Printf("[HEALTH-DYNAMICS] открытие хаба для chatID=%d", chatID)
+// handleHealthHub - раздел-хаб «Здоровье» (верхняя кнопка главного меню):
+// описание раздела и под-действия (Сводка здоровья / Мониторинг /
+// Консультация ИИ). Проверка Premium остаётся внутри под-действий
+// (handleDashboard / handleMonitoring), запуск консультации — внутри
+// handleConsultationStart (section_consult_start).
+func (r *router) handleHealthHub(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf("[HEALTH-HUB] открытие хаба для chatID=%d", chatID)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
-		Text:        locales.MsgHealthDynamicsIntro,
-		ReplyMarkup: keyboards.HealthDynamicsHubMenu(),
+		Text:        locales.MsgHealthHubIntro,
+		ReplyMarkup: keyboards.HealthHubMenu(),
 		ParseMode:   "Markdown",
 	})
 	return true
@@ -499,36 +515,6 @@ func consultationImageContext(question string) string {
 		base += "\n\nВопрос пользователя к фото: " + question
 	}
 	return base
-}
-
-// handleConsultation — раздел-хаб «Быстрая консультация (с ИИ)»: показывает
-// описание раздела, сколько бесплатных консультаций осталось, и под-действие
-// «Начать консультацию». Сама проверка соглашения/Premium и бесплатной квоты
-// остаётся внутри действия (handleConsultationStart).
-func (r *router) handleConsultation(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
-	log.Printf("[CONSULT] открытие хаба для chatID=%d", chatID)
-
-	if !r.agreementStorage.IsAgreed(chatID) {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgBioscanAgreementRequired,
-			ReplyMarkup: keyboards.StartMenu(),
-		})
-		return true
-	}
-
-	freeLeft := freeConsultationLimit - r.consultCount(chatID)
-	if freeLeft < 0 {
-		freeLeft = 0
-	}
-
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        fmt.Sprintf(locales.MsgConsultationIntro, freeLeft, freeConsultationLimit),
-		ReplyMarkup: keyboards.ConsultationHubMenu(),
-		ParseMode:   "Markdown",
-	})
-	return true
 }
 
 // handleConsultationStart — запускает режим консультации: проверяет
