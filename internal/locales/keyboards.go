@@ -44,10 +44,9 @@ const UserAgreementText = `📝 **ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШ�
 
 // Misc messages not yet in other files
 const (
-	MsgAgreementAlreadyAcceptedShort = "✅ Вы уже приняли пользовательское соглашение.\n\nВыберите действие в главном меню:"
-	MsgAnalysisComplete              = "✅ <b>Анализ завершён!</b>\n\nВыберите действие в главном меню:"
-	MsgBioscanIntro                  = "📸 **Bioscan - комплексный анализ тела**\n\nЯ проведу детальный анализ вашей фигуры и дам персональные рекомендации.\n\n📋 **Шаг 1 из 6: Введите ваше имя**"
-	MsgUserDataSummaryHeader         = "📋 **Ваши данные:**"
+	MsgAnalysisComplete      = "✅ <b>Анализ завершён!</b>\n\nВыберите действие в главном меню:"
+	MsgBioscanIntro          = "📸 **Bioscan - комплексный анализ тела**\n\nЯ проведу детальный анализ вашей фигуры и дам персональные рекомендации.\n\n📋 **Шаг 1 из 6: Введите ваше имя**"
+	MsgUserDataSummaryHeader = "📋 **Ваши данные:**"
 )
 
 // Bioscan animation statuses

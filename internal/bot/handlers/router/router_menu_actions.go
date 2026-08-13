@@ -12,51 +12,6 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// handleAgreementButton - показывает текст соглашения, если оно ещё не принято.
-func (r *router) handleAgreementButton(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
-	log.Printf(locales.LogProcessingAgreement, chatID)
-	if r.agreementStorage.IsAgreed(chatID) {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgAgreementAlreadyAcceptedShort,
-			ReplyMarkup: keyboards.MainMenu(),
-		})
-		return true
-	}
-
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        keyboards.UserAgreementText(),
-		ReplyMarkup: keyboards.AgreementMenu(),
-		ParseMode:   "Markdown",
-	})
-	return true
-}
-
-// handleAcceptAgreement - принимает соглашение.
-func (r *router) handleAcceptAgreement(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
-	log.Printf(locales.LogRouterAcceptAgreement, chatID)
-	if r.agreementStorage.IsAgreed(chatID) {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgAgreementAlreadyAcceptedShort,
-			ReplyMarkup: keyboards.MainMenu(),
-		})
-		return true
-	}
-
-	r.agreementStorage.SetAgreed(chatID)
-	r.stateManager.SetState(chatID, states.StateIdle)
-
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgAgreementAccepted,
-		ReplyMarkup: keyboards.MainMenu(),
-		ParseMode:   "Markdown",
-	})
-	return true
-}
-
 // handleDiagnostics - показывает меню выбора типа анализа.
 func (r *router) handleDiagnostics(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf(locales.LogRouterDiagnostics, chatID)

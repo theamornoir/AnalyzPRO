@@ -20,12 +20,6 @@ func (r *router) handleMenuButtons(ctx context.Context, b *tgbot.Bot, chatID int
 	log.Printf(locales.LogRouterMenuButton, text, chatID)
 
 	switch text {
-	case locales.BtnAgreement:
-		return r.handleAgreementButton(ctx, b, chatID)
-
-	case locales.BtnAcceptAgreement:
-		return r.handleAcceptAgreement(ctx, b, chatID)
-
 	case locales.BtnAbout:
 		log.Printf(locales.LogRouterMenuAbout, chatID)
 		menu.AboutHandler()(ctx, b, update)
