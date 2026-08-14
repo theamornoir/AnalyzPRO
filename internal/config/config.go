@@ -17,6 +17,8 @@ type Config struct {
 	BotToken           string
 	GoogleGeminiAPIKey string
 	GoogleAIModel      string
+	YandexGPTAPIKey    string
+	YandexGPTFolderID  string
 	DeepSeekAPIKey     string
 	AnthropicAPIKey    string
 	UploadDir          string
@@ -63,6 +65,8 @@ func Load() (*Config, error) {
 		BotToken:           strings.TrimSpace(os.Getenv("BOT_TOKEN")),
 		GoogleGeminiAPIKey: os.Getenv("GOOGLE_GEMINI_API_KEY"),
 		GoogleAIModel:      getEnv("GOOGLE_AI_MODEL", "gemini-3.6-flash"),
+		YandexGPTAPIKey:    os.Getenv("YANDEX_GPT_API_KEY"),
+		YandexGPTFolderID:  os.Getenv("YANDEX_GPT_FOLDER_ID"),
 		DeepSeekAPIKey:     os.Getenv("DEEPSEEK_API_KEY"),
 		AnthropicAPIKey:    os.Getenv("ANTHROPIC_API_KEY"),
 		UploadDir:          getEnv("UPLOAD_DIR", "./uploads"),
