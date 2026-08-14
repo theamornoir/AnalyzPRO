@@ -120,15 +120,32 @@ func (b *Bot) Start(ctx context.Context) {
 			_, _ = w.Write([]byte("OK"))
 		})
 		mux.HandleFunc("/dashboard", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "/dashboard/", http.StatusMovedPermanently)
+			target := "/dashboard/"
+			if r.URL.RawQuery != "" {
+				target += "?" + r.URL.RawQuery
+			}
+			// 307 (а не 301): редирект НЕ кэшируется браузером/WebView.
+			// Иначе при повторном открытии Mini App Telegram мог бы
+			// использовать устаревший закэшированный редирект, и
+			// tgWebAppData (параметр запуска) подставился бы из прошлой
+			// сессии → initData оказался бы пустым/чужим.
+			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 		})
 		dashHandler := dashboard.NewHandler(b.paymentService, b.botToken, b.monitorRepo)
 		mux.HandleFunc("/dashboard/", dashHandler.ServeWebApp)
 		mux.HandleFunc("/api/metrics", dashHandler.Metrics)
+		mux.HandleFunc("/api/profile", dashHandler.SaveProfile)
 
 		// Мониторинг: веб-апп (статика) + API с защитой initData.
 		mux.HandleFunc("/monitoring", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "/monitoring/", http.StatusMovedPermanently)
+			target := "/monitoring/"
+			if r.URL.RawQuery != "" {
+				target += "?" + r.URL.RawQuery
+			}
+			// 307 (а не 301): редирект НЕ кэшируется — см. обоснование у
+			// /dashboard. Важно, чтобы tgWebAppData не терялся между
+			// открытиями Mini App.
+			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 		})
 		mux.HandleFunc("/monitoring/", monitoring.ServeWebApp)
 		mux.HandleFunc("/api/monitoring/", monitoring.NewAPIHandler(b.monitorSvc, b.botToken).Handler())
@@ -145,62 +162,41 @@ func (b *Bot) Start(ctx context.Context) {
 		}
 	}()
 
-	// Настраиваем Menu Button (кнопка рядом с полем ввода внизу чата) так,
-	// чтобы она открывала Дашборд как Telegram Mini App. Это то же самое, что
-	// предлагают делать вручную в BotFather → Menu Button, но выполняется
-	// программно через Bot API (setChatMenuButton), поэтому BotFather не
-	// нужен, а URL перенастраивается при каждом старте (актуально для
-	// динамического https-туннеля `make mini`). Запускаем в горутине — сетевой
-	// вызов к API не должен блокировать старт бота; ошибки логируются, но не
-	// фатальны.
+	// Menu Button (кнопка слева в чате бота) оставляем дефолтной — Сводка
+	// здоровья открывается ТОЛЬКО из клавиатуры бота («📊 Здоровье» → «Открыть»),
+	// а не через постоянную кнопку в чате. Сбрасываем в дефолт при каждом
+	// старте (актуально для динамического https-туннеля `make mini`) — на
+	// случай, если ранее кнопка была настроена на Mini App. Запускаем в
+	// горутине — сетевой вызов к API не должен блокировать старт бота;
+	// ошибки логируются, но не фатальны.
 	go b.SetupMenuButton(ctx)
 
 	b.client.Start(ctx)
 }
 
-// SetupMenuButton настраивает кнопку меню (рядом с полем ввода внизу чата) так,
-// чтобы она открывала Дашборд как Telegram Mini App. Работает только для
-// HTTPS-URL — Telegram требует https для web_app-кнопки меню. Поэтому Mini App
-// в Menu Button имеет смысл только при https-URL (например, при запуске через
-// `make mini`); во всех остальных случаях (localhost/LAN, http) кнопка
-// сбрасывается в дефолт (команды), чтобы не висела нерабочая http-ссылка.
+// SetupMenuButton сбрасывает кнопку меню (слева в чате бота) в дефолтное
+// состояние. Мы НЕ делаем из неё постоянную Mini App-кнопку «Сводка здоровья»:
+// доступ к дашборду пользователь получает только из клавиатуры бота
+// («📊 Здоровье» → хаб → «Открыть»). Дефолтная кнопка меню у неё показывает
+// список команд бота и не мешает интерфейсу.
 //
 // Глобальная установка (без ChatID) применяется ко всем пользователям бота —
-// именно это нужно для «кнопки дашборда у всех».
+// сброс нужен на случай, если ранее кнопка была настроена на Mini App (старые
+// запуски), иначе у пользователей осталась бы «висеть» web_app-кнопка после
+// обновления кода.
+//
+// ВАЖНО: у индивидуальных типов MenuButton* поле Type не заполняется
+// автоматически (в отличие от обёртки MenuButton), поэтому его нужно ставить
+// явно, иначе сериализуется {"type":""} и Telegram вернёт
+// "can't parse menu button: MenuButton has unsupported type".
 func (b *Bot) SetupMenuButton(ctx context.Context) {
-	if b.webAppURL == "" {
-		return
-	}
-
-	if !strings.HasPrefix(b.webAppURL, "https") {
-		// Нет HTTPS — сбрасываем Menu Button в дефолт, чтобы не висела
-		// нерабочая web_app-кнопка с http-ссылкой. ВАЖНО: у индивидуальных
-		// типов MenuButton* поле Type не заполняется автоматически (в отличие
-		// от обёртки MenuButton), поэтому его нужно ставить явно, иначе
-		// сериализуется {"type":""} и Telegram вернёт
-		// "can't parse menu button: MenuButton has unsupported type".
-		if _, err := b.client.SetChatMenuButton(ctx, &tgbot.SetChatMenuButtonParams{
-			MenuButton: &models.MenuButtonDefault{Type: models.MenuButtonTypeDefault},
-		}); err != nil {
-			log.Printf("⚠️ Не удалось сбросить Menu Button в default: %v", err)
-		} else {
-			log.Printf("🔘 Menu Button: оставлен дефолтным (нет HTTPS для Mini App).")
-		}
-		return
-	}
-
-	btn := &models.MenuButtonWebApp{
-		Type:   models.MenuButtonTypeWebApp,
-		Text:   "💡 Сводка здоровья",
-		WebApp: models.WebAppInfo{URL: b.webAppURL},
-	}
 	if _, err := b.client.SetChatMenuButton(ctx, &tgbot.SetChatMenuButtonParams{
-		MenuButton: btn,
+		MenuButton: &models.MenuButtonDefault{Type: models.MenuButtonTypeDefault},
 	}); err != nil {
-		log.Printf("⚠️ Не удалось установить Menu Button (Mini App): %v", err)
+		log.Printf("⚠️ Не удалось сбросить Menu Button в default: %v", err)
 		return
 	}
-	log.Printf("🔘 Menu Button настроен: открывает Дашборд как Mini App (%s)", btn.WebApp.URL)
+	log.Printf("🔘 Menu Button: дефолтная (Сводка здоровья — только из меню бота).")
 }
 
 func (b *Bot) registerHandlers() {

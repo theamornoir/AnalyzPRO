@@ -32,8 +32,14 @@ type Orchestrator struct {
 func NewOrchestrator() *Orchestrator {
 	var providers []AIProvider
 
-	// YandexGPT — основной провайдер: работает из РФ без гео-блоков и имеет
-	// бесплатную квоту. Ставим первым, чтобы запросы шли через него.
+	// OpenRouter — основной бесплатный провайдер: OpenAI-совместимый API без
+	// гео-блоков, умеет text + vision (фото) + PDF (через извлечение текста).
+	// Ставим первым, чтобы запросы шли через бесплатные модели OpenRouter.
+	if p := NewOpenRouterProvider(); p != nil {
+		providers = append(providers, p)
+		log.Printf(locales.LogOrchestratorProviderAdd, "OpenRouter")
+	}
+	// YandexGPT — бесплатный провайдер с квотой (работает из РФ без гео-блоков).
 	if p := NewYandexGPTProvider(); p != nil {
 		providers = append(providers, p)
 		log.Printf(locales.LogOrchestratorProviderAdd, "YandexGPT")
@@ -132,6 +138,8 @@ func providerName(p AIProvider) string {
 	switch p.(type) {
 	case *YandexGPTProvider:
 		return "YandexGPT"
+	case *OpenRouterProvider:
+		return "OpenRouter"
 	case *GeminiProvider:
 		return "Gemini"
 	case *DeepSeekProvider:

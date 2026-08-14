@@ -166,31 +166,16 @@ func HandlePremiumConfirm(
 		// Кнопки открытия дашборда: WebApp (десктоп/HTTPS) + ссылка (телефон
 		// в той же Wi-Fi сети через браузер). linkURL берём из dashboardURL,
 		// который при localhost-конфиге указывает на LAN-IP машины.
-		linkURL := dashboardURL
-		if linkURL == "" {
-			linkURL = webAppURL
-		}
 		webAppTarget := webAppURL
 		if webAppTarget == "" {
 			webAppTarget = dashboardURL
 		}
 
+		// Только Mini App — без ссылок и «открыть в браузере».
 		rows := [][]models.InlineKeyboardButton{}
-		// WebApp-кнопка требует HTTPS ИЛИ localhost/127.0.0.1 (для тестов на
-		// той же машине, например в Telegram Desktop). LAN-IP и прочие http
-		// отклоняются API на телефоне (400) и ломают всё сообщение — поэтому
-		// добавляем её только для https/localhost. В остальных случаях даём
-		// обычную кнопку-ссылку, которая открывается в браузере.
-		if strings.HasPrefix(webAppTarget, "https") ||
-			strings.HasPrefix(webAppTarget, "http://localhost") ||
-			strings.HasPrefix(webAppTarget, "http://127.0.0.1") {
+		if webAppTarget != "" {
 			rows = append(rows, []models.InlineKeyboardButton{
-				{Text: "💡 Открыть Сводку здоровья (Mini App)", WebApp: &models.WebAppInfo{URL: webAppTarget}},
-			})
-		}
-		if linkURL != "" {
-			rows = append(rows, []models.InlineKeyboardButton{
-				{Text: "🌐 Открыть в браузере", URL: linkURL},
+				{Text: "Открыть", WebApp: &models.WebAppInfo{URL: webAppTarget}},
 			})
 		}
 

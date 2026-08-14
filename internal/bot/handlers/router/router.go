@@ -8,6 +8,7 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
@@ -227,19 +228,44 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		return
 	}
 
+	// «Назад» изнутри блока-хаба: удаляем сам блок и сбрасываем его id.
+	// Reply-клавиатура (главное меню) внизу экрана остаётся — пользователь
+	// возвращается в меню без лишних сообщений.
+	if callbackData == "hub_back" {
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "hub_back")
+		r.deleteHubBlock(ctx, b, chatID)
+		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
+		return
+	}
+
+	// «Назад» из сообщения под-действия (например, Сводка/Мониторинг):
+	// удаляем именно это сообщение (его id не хранится как hub_message_id).
+	if callbackData == "msg_back" {
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "msg_back")
+		if mm := update.CallbackQuery.Message; mm.Message != nil {
+			helpers.DeleteMessage(ctx, b, chatID, mm.Message.ID)
+		}
+		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
+		return
+	}
+
 	// Под-действия из карточек разделов-хабов («Анализы», «Здоровье»,
 	// «Сервис»). Диспетчеризуем на существующие обработчики; сам
 	// callback-запрос отвечается в конце функции (спиннер кнопки).
 	switch callbackData {
 	case "section_analysis":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_analysis")
-		r.handleAnalysisHub(ctx, b, chatID)
+		r.renderHub(ctx, b, chatID, "analysis")
 	case "section_health":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health")
-		r.handleHealthHub(ctx, b, chatID)
+		r.renderHub(ctx, b, chatID, "health")
 	case "section_service":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_service")
-		r.handleServiceHub(ctx, b, chatID)
+		r.renderHub(ctx, b, chatID, "service")
 	case "section_diag_regular":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_regular")
 		r.handleRegularAnalysis(ctx, b, chatID)
@@ -263,6 +289,8 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		r.handleFeedbackStart(ctx, b, chatID)
 	case "section_about":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_about")
+		// Выбрано под-действие — убираем блок-хаб.
+		r.deleteHubBlock(ctx, b, chatID)
 		menu.AboutHandler()(ctx, b, update)
 	}
 

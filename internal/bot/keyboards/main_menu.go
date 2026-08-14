@@ -58,57 +58,41 @@ func MainMenu() models.ReplyKeyboardMarkup {
 	}
 }
 
-// AnalysisHubMenu - раздел-хаб «Анализы»: описание + под-действия
-// (Обычный / Расширенный анализ / Bioscan) + назад в меню.
+// AnalysisHubMenu - раздел-хаб «Анализы»: под-действия
+// (Обычный / Расширенный анализ / Bioscan). Кнопка «Назад в меню» не нужна:
+// основное меню (reply-клавиатура) и так всегда видно внизу экрана.
 func AnalysisHubMenu() models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
 			{{Text: locales.BtnRegularAnalysis, CallbackData: "section_diag_regular"}},
 			{{Text: locales.BtnExtendedAnalysis, CallbackData: "section_diag_extended"}},
 			{{Text: locales.BtnBioscan, CallbackData: "section_bioscan"}},
-			{{Text: "⬅️ Назад в меню", CallbackData: "back_main"}},
 		},
 	}
 }
 
 // HealthHubMenu - раздел-хаб «Здоровье»: под-действия
-// (Сводка здоровья / Мониторинг / Консультация ИИ) + назад в меню.
+// (Сводка здоровья / Мониторинг / Консультация ИИ). Кнопка «Назад в меню»
+// не нужна: основное меню (reply-клавиатура) и так всегда видно внизу.
 func HealthHubMenu() models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
 			{{Text: locales.BtnHealthSummary, CallbackData: "section_health_summary"}},
 			{{Text: locales.BtnMonitoring, CallbackData: "section_health_monitoring"}},
 			{{Text: locales.BtnConsultation, CallbackData: "section_consult_start"}},
-			{{Text: "⬅️ Назад в меню", CallbackData: "back_main"}},
 		},
 	}
 }
 
 // ServiceHubMenu - раздел-хаб «Сервис»: под-действия
-// (Отзывы и предложения / О сервисе) + назад в меню.
+// (Отзывы и предложения / О сервисе). Кнопка «Назад в меню» не нужна:
+// основное меню (reply-клавиатура) и так всегда видно внизу экрана.
 func ServiceHubMenu() models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
 			{{Text: locales.BtnFeedback, CallbackData: "section_feedback_start"}},
 			{{Text: locales.BtnAbout, CallbackData: "section_about"}},
-			{{Text: "⬅️ Назад в меню", CallbackData: "back_main"}},
 		},
-	}
-}
-
-// AnalysisTypeMenu - меню выбора типа анализа
-func AnalysisTypeMenu() models.ReplyKeyboardMarkup {
-	return models.ReplyKeyboardMarkup{
-		Keyboard: [][]models.KeyboardButton{
-			{
-				{Text: locales.BtnRegularAnalysis},
-				{Text: locales.BtnExtendedAnalysis},
-			},
-			{
-				{Text: locales.BtnBack},
-			},
-		},
-		ResizeKeyboard: true,
 	}
 }
 

@@ -18,7 +18,7 @@ type GeminiClient struct {
 // NewGeminiClient создаёт новый клиент Gemini.
 func NewGeminiClient(apiKey, model string) *GeminiClient {
 	if model == "" {
-		model = "gemini-3.6-flash"
+		model = "gemini-2.5-flash-latest"
 	}
 
 	model = strings.TrimPrefix(model, "models/")

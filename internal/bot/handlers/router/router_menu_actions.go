@@ -18,33 +18,140 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// handleAnalysisHub - раздел-хаб «Анализы» (верхняя кнопка главного меню):
-// показывает описание раздела и под-действия (Обычный/Расширенный анализ,
-// Bioscan). Проверка соглашения остаётся внутри под-действий.
-func (r *router) handleAnalysisHub(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
-	log.Printf(locales.LogRouterDiagnostics, chatID)
+// WebAppAssetsVersion — версия статических активов Mini App (Сводка здоровья
+// и Мониторинг). Увеличивайте при изменении index.html/app.js/style.css,
+// чтобы Telegram WebView перезапросил свежие файлы (иначе отдаёт
+// закэшированную старую версию — отсюда «пустой/старый» дашборд после правок).
+// Должна совпадать с ?v= в ссылках на активы в webapp_files/index.html.
+const WebAppAssetsVersion = "v8"
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+// WithWebAppVersion добавляет ?v=<version> к URL Mini App, сбрасывая кэш
+// Telegram WebView при обновлении активов. Пустой URL не трогает.
+func WithWebAppVersion(u string) string {
+	if u == "" {
+		return u
+	}
+	if strings.Contains(u, "?") {
+		return u + "&v=" + WebAppAssetsVersion
+	}
+	return u + "?v=" + WebAppAssetsVersion
+}
+
+// hubMessageKey — ключ в user-data, в котором хранится message_id текущего
+// «блока-хаба» (раздел Анализы/Здоровье/Сервис). Блок редактируется на месте
+// (editMessage) при переключении разделов, чтобы не плодить сообщения: один
+// блок перерисовывается вкладками, а результаты под-действий приходят
+// отдельными сообщениями.
+const hubMessageKey = "hub_message_id"
+
+// hubSection описывает содержимое одного раздела-хаба.
+type hubSection struct {
+	text    string
+	actions models.InlineKeyboardMarkup
+}
+
+// hubSections возвращает содержимое каждого раздела-хаба по его коду.
+func hubSections() map[string]hubSection {
+	return map[string]hubSection{
+		"analysis": {text: locales.MsgAnalysisHubIntro, actions: keyboards.AnalysisHubMenu()},
+		"health":   {text: locales.MsgHealthHubIntro, actions: keyboards.HealthHubMenu()},
+		"service":  {text: locales.MsgServiceHubIntro, actions: keyboards.ServiceHubMenu()},
+	}
+}
+
+// renderHub — показывает/переключает «блок-хаб» раздела. Если у пользователя
+// уже открыт блок-хаб (сохранён hub_message_id), раздел перерисовывается прямо
+// в нём (editMessage на месте), иначе отправляется новое сообщение. Результаты
+// под-действий (анализ, консультация и т.п.) приходят отдельными сообщениями.
+//
+// Внутри блока НЕТ верхних вкладок разделов (Анализы/Здоровье/Сервис) — они
+// дублировали бы reply-клавиатуру внизу экрана и сбивали с толку (казалось,
+// будто разделов «аж 6»). Переключение между разделами идёт через reply-меню
+// внизу; внутри блока — только под-действия раздела и кнопка «⬅️ Назад»
+// (hub_back), которая удаляет блок и возвращает в главное меню.
+func (r *router) renderHub(ctx context.Context, b *tgbot.Bot, chatID int64, section string) bool {
+	sections := hubSections()
+	sec, ok := sections[section]
+	if !ok {
+		section = "analysis"
+		sec = sections[section]
+	}
+
+	// Под-действия раздела + кнопка «⬅️ Назад» внизу (удаляет блок).
+	kb := models.InlineKeyboardMarkup{
+		InlineKeyboard: append(
+			sec.actions.InlineKeyboard,
+			[]models.InlineKeyboardButton{{Text: locales.BtnBack, CallbackData: "hub_back"}},
+		),
+	}
+
+	msgID := r.hubMessageID(chatID)
+	if msgID > 0 && r.editHubMessage(ctx, b, chatID, msgID, sec.text, kb) {
+		return true
+	}
+
+	// Новый блок (или старый недоступен для редактирования — отправляем заново).
+	newID, err := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
 		ChatID:      chatID,
-		Text:        locales.MsgAnalysisHubIntro,
-		ReplyMarkup: keyboards.AnalysisHubMenu(),
+		Text:        sec.text,
+		ReplyMarkup: kb,
 		ParseMode:   "Markdown",
 	})
+	if err == nil && newID > 0 {
+		r.setHubMessageID(chatID, newID)
+	}
 	return true
 }
 
-// handleServiceHub - раздел-хаб «Сервис» (верхняя кнопка главного меню):
-// описание раздела и под-действия (Отзывы и предложения / О сервисе).
-func (r *router) handleServiceHub(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
-	log.Printf("[SERVICE-HUB] открытие хаба для chatID=%d", chatID)
-
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+// editHubMessage пытается перерисовать существующий блок-хаб на месте.
+// Возвращает true, если редактирование удалось (в т.ч. при «not modified»).
+func (r *router) editHubMessage(ctx context.Context, b *tgbot.Bot, chatID int64, msgID int, text string, kb models.InlineKeyboardMarkup) bool {
+	_, err := b.EditMessageText(ctx, &tgbot.EditMessageTextParams{
 		ChatID:      chatID,
-		Text:        locales.MsgServiceHubIntro,
-		ReplyMarkup: keyboards.ServiceHubMenu(),
+		MessageID:   msgID,
+		Text:        text,
 		ParseMode:   "Markdown",
+		ReplyMarkup: kb,
 	})
+	if err != nil {
+		// Сообщение удалено пользователем или недоступно — caller отправит
+		// новое. Игнорируем «message is not modified» (повторное переключение
+		// на ту же вкладку) — блок и так на месте.
+		if strings.Contains(err.Error(), "message is not modified") {
+			return true
+		}
+		log.Printf("[HUB] не удалось отредактировать блок msgID=%d chatID=%d: %v", msgID, chatID, err)
+		return false
+	}
+	log.Printf("[HUB] блок переключён на вкладку (msgID=%d chatID=%d)", msgID, chatID)
 	return true
+}
+
+// deleteHubBlock — удаляет текущий «блок-хаб» (раздел Анализы/Здоровье/
+// Сервис) из чата и сбрасывает сохранённый hub_message_id. Используется,
+// когда пользователь выбирает под-действие (анализ/консультация и т.п.) или
+// нажимает «Назад» из раздела: в чате не должно висеть устаревшее меню
+// раздела (иначе — «куча непонятно чего»). Безопасно, если блока нет.
+func (r *router) deleteHubBlock(ctx context.Context, b *tgbot.Bot, chatID int64) {
+	msgID := r.hubMessageID(chatID)
+	if msgID > 0 {
+		helpers.DeleteMessage(ctx, b, chatID, msgID)
+		log.Printf("[HUB] блок удалён (msgID=%d chatID=%d)", msgID, chatID)
+	}
+	r.setHubMessageID(chatID, 0)
+}
+
+// hubMessageID / setHubMessageID — чтение/запись message_id текущего блока-хаба.
+func (r *router) hubMessageID(chatID int64) int {
+	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, hubMessageKey))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
+
+func (r *router) setHubMessageID(chatID int64, msgID int) {
+	r.stateManager.SetUserData(chatID, hubMessageKey, strconv.Itoa(msgID))
 }
 
 // handleFeedbackStart - запускает режим ввода отзыва/предложения: описывает
@@ -52,6 +159,9 @@ func (r *router) handleServiceHub(ctx context.Context, b *tgbot.Bot, chatID int6
 // сообщение (текст/фото/документ), которое будет переслано разработчику.
 func (r *router) handleFeedbackStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf("[FEEDBACK] открытие раздела для chatID=%d", chatID)
+
+	// Выбрано под-действие — убираем блок-хаб.
+	r.deleteHubBlock(ctx, b, chatID)
 
 	if !r.agreementStorage.IsAgreed(chatID) {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
@@ -158,23 +268,6 @@ func (r *router) handleFeedbackMessage(ctx context.Context, b *tgbot.Bot, chatID
 	return true
 }
 
-// handleHealthHub - раздел-хаб «Здоровье» (верхняя кнопка главного меню):
-// описание раздела и под-действия (Сводка здоровья / Мониторинг /
-// Консультация ИИ). Проверка Premium остаётся внутри под-действий
-// (handleDashboard / handleMonitoring), запуск консультации — внутри
-// handleConsultationStart (section_consult_start).
-func (r *router) handleHealthHub(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
-	log.Printf("[HEALTH-HUB] открытие хаба для chatID=%d", chatID)
-
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgHealthHubIntro,
-		ReplyMarkup: keyboards.HealthHubMenu(),
-		ParseMode:   "Markdown",
-	})
-	return true
-}
-
 // handleRegularAnalysis - запускает обычный анализ.
 func (r *router) handleRegularAnalysis(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf(locales.LogRouterRegular, chatID)
@@ -190,6 +283,10 @@ func (r *router) handleRegularAnalysis(ctx context.Context, b *tgbot.Bot, chatID
 	r.stateManager.SetUserData(chatID, "analysis_type", "regular")
 	r.stateManager.SetUserData(chatID, "analysis_subtype", "regular")
 	r.stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
+
+	// Выбрано под-действие — убираем блок-хаб, чтобы в чате не висело меню
+	// раздела поверх начатого анализа.
+	r.deleteHubBlock(ctx, b, chatID)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
@@ -216,6 +313,9 @@ func (r *router) handleExtendedAnalysis(ctx context.Context, b *tgbot.Bot, chatI
 	r.stateManager.SetUserData(chatID, "analysis_subtype", "extended")
 
 	r.stateManager.SetState(chatID, states.StateWaitingName)
+
+	// Выбрано под-действие — убираем блок-хаб.
+	r.deleteHubBlock(ctx, b, chatID)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
@@ -263,6 +363,9 @@ func (r *router) handleBioscanStart(ctx context.Context, b *tgbot.Bot, chatID in
 	bioscan.ResetBioscanData(r.stateManager, chatID)
 	r.stateManager.SetUserData(chatID, "analysis_type", "")
 
+	// Выбрано под-действие — убираем блок-хаб.
+	r.deleteHubBlock(ctx, b, chatID)
+
 	log.Printf(locales.LogRouterBioscanLaunch, chatID)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
@@ -274,93 +377,46 @@ func (r *router) handleBioscanStart(ctx context.Context, b *tgbot.Bot, chatID in
 	return true
 }
 
-// isSecureWebAppURL — Telegram Web App (кнопка WebApp) требует HTTPS ИЛИ
-// localhost/127.0.0.1 (для тестов на той же машине, например в Telegram
-// Desktop). LAN-IP (192.168.x.x и т.п.) и прочие http:// НЕ годятся: такая
-// кнопка либо отклоняется API на телефоне (400 Bad Request), либо не
-// открывается с другого устройства. Поэтому WebApp-кнопку добавляем для
-// https и для localhost; для LAN-IP и прочих http используем обычную
-// кнопку-ссылку (URL), которая открывается в браузере / встроенном
-// браузере Telegram (при той же сети).
-func isSecureWebAppURL(rawURL string) bool {
-	if strings.HasPrefix(rawURL, "https") {
-		return true
-	}
-	if strings.HasPrefix(rawURL, "http://localhost") || strings.HasPrefix(rawURL, "http://127.0.0.1") {
-		return true
-	}
-	return false
-}
-
 // handleDashboard — открывает веб-дашборд (только для Premium).
 func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf(locales.LogRouterDashboard, chatID)
 
+	// Выбрано под-действие — убираем блок-хаб, чтобы в чате не висело меню
+	// раздела поверх открытого дашборда.
+	r.deleteHubBlock(ctx, b, chatID)
+
 	isPremium := r.paymentService.IsUserPremium(chatID)
 	log.Printf(locales.LogDashboardPremiumCheck, chatID, isPremium)
-	if !isPremium {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgPremiumRequired,
-			ReplyMarkup: keyboards.BackMenu(),
-			ParseMode:   "Markdown",
-		})
-		log.Printf(locales.LogDashboardNotPremiumSent, chatID)
-		return true
-	}
 
-	linkURL := r.dashboardURL
-	if linkURL == "" {
-		linkURL = r.webAppURL
-	}
-	webAppTarget := r.webAppURL
+	// Версия в URL сбрасывает кэш Telegram WebView (см. WebAppAssetsVersion).
+	webAppTarget := WithWebAppVersion(r.webAppURL)
 	if webAppTarget == "" {
-		webAppTarget = r.dashboardURL
-	}
-	if linkURL == "" {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
-			Text:        "⚠️ URL дашборда не настроен. Задайте WEBAPP_URL или запустите `make tunnel`.",
+			Text:        "⚠️ URL дашборда не настроен. Задайте WEBAPP_URL или запустите `make mini`.",
 			ReplyMarkup: keyboards.BackMenu(),
 			ParseMode:   "Markdown",
 		})
 		return true
 	}
-
-	// WebApp-кнопка требует HTTPS (кроме localhost в десктопе). Обычная
-	// ссылка (linkURL) всегда открывается в браузере/встроенном браузере
-	// Telegram — для неё подставляем LAN-IP, чтобы дашборд открывался с
-	// телефона в той же Wi-Fi сети.
-	secure := isSecureWebAppURL(webAppTarget)
-	linkIsLAN := !isSecureWebAppURL(linkURL)
 
 	text := locales.MsgHealthSummaryIntro + "\n\n"
-	if secure {
-		text += "Нажмите кнопку ниже, чтобы открыть Сводку здоровья прямо в Telegram (Mini App).\n\n"
+	if !isPremium {
+		// Полный доступ к показателям — по Premium, но профиль заполнить
+		// можно бесплатно (онбординг доступен всем).
+		text += "📝 Профиль можно заполнить бесплатно — после этого сводка оживёт. " +
+			"Полный доступ к показателям крови и динамике — по Premium-подписке.\n\n"
 	}
-	if linkIsLAN {
-		text += "Ссылка ниже ведёт на этот компьютер по локальной сети — откройте её в " +
-			"браузере или встроенном браузере Telegram (телефон должен быть в той же " +
-			"Wi-Fi сети, что и этот компьютер). Для полноценного Mini App в телефоне " +
-			"запустите make tunnel (HTTPS-туннель) — бот сам подхватит https-URL.\n\n"
-	} else if !secure {
-		text += "Встроенная кнопка Mini App требует HTTPS. Откройте ссылку ниже в " +
-			"браузере. Для Mini App в телефоне запустите make tunnel.\n\n"
-	}
-	text += "Открыть Сводку здоровья: " + linkURL
 
-	// Клавиатура: WebApp-кнопка (только для защищённых/локальных URL,
-	// иначе она «мертвая» на телефоне) + обычная кнопка-ссылка как запасной
-	// вариант, который всегда открывается в браузере.
-	rows := [][]models.InlineKeyboardButton{}
-	if secure {
-		rows = append(rows, []models.InlineKeyboardButton{
-			{Text: "💡 Открыть Сводку здоровья (Mini App)", WebApp: &models.WebAppInfo{URL: webAppTarget}},
-		})
+	// Только Mini App — без ссылок и «открыть в браузере».
+	rows := [][]models.InlineKeyboardButton{
+		{
+			{Text: "Открыть", WebApp: &models.WebAppInfo{URL: webAppTarget}},
+		},
+		{
+			{Text: locales.BtnBack, CallbackData: "msg_back"},
+		},
 	}
-	rows = append(rows, []models.InlineKeyboardButton{
-		{Text: "🌐 Открыть в браузере", URL: linkURL},
-	})
 
 	msgID, sendErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
 		ChatID:      chatID,
@@ -371,7 +427,7 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 	if sendErr != nil {
 		log.Printf(locales.LogDashboardSendErr, chatID, sendErr)
 	} else {
-		log.Printf(locales.LogDashboardSent, chatID, msgID, linkURL, len(rows))
+		log.Printf(locales.LogDashboardSent, chatID, msgID, webAppTarget, len(rows))
 	}
 	return true
 }
@@ -394,6 +450,9 @@ func monitoringWebAppURL(base string) string {
 func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf("[MONITORING] открытие для chatID=%d", chatID)
 
+	// Выбрано под-действие — убираем блок-хаб.
+	r.deleteHubBlock(ctx, b, chatID)
+
 	isPremium := r.paymentService.IsUserPremium(chatID)
 	if !isPremium {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
@@ -405,18 +464,8 @@ func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int6
 		return true
 	}
 
-	linkURL := r.dashboardURL
-	if linkURL == "" {
-		linkURL = r.webAppURL
-	}
-	linkURL = monitoringWebAppURL(linkURL)
-
-	webAppTarget := r.webAppURL
-	if webAppTarget == "" {
-		webAppTarget = r.dashboardURL
-	}
-	webAppTarget = monitoringWebAppURL(webAppTarget)
-
+	// Версия в URL сбрасывает кэш Telegram WebView (см. WebAppAssetsVersion).
+	webAppTarget := WithWebAppVersion(monitoringWebAppURL(r.webAppURL))
 	if webAppTarget == "" {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
@@ -427,30 +476,18 @@ func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int6
 		return true
 	}
 
-	secure := isSecureWebAppURL(webAppTarget)
-	linkIsLAN := !isSecureWebAppURL(linkURL)
-
 	text := "📊 **Мониторинг**\n\n" +
-		"Создавайте проекты и отслеживайте показатели во времени: курсы препаратов, диабет, похудение, здоровье.\n\n"
-	if secure {
-		text += "Нажмите кнопку ниже, чтобы открыть Мониторинг прямо в Telegram (Mini App).\n\n"
-	}
-	if linkIsLAN {
-		text += "Ссылка ведёт на этот компьютер по локальной сети — откройте её в браузере/встроенном браузере Telegram (телефон в той же Wi-Fi). Для Mini App в телефоне запустите `make mini`.\n\n"
-	} else if !secure {
-		text += "Встроенная кнопка Mini App требует HTTPS. Откройте ссылку в браузере или запустите `make mini`.\n\n"
-	}
-	text += "Открыть Мониторинг: " + linkURL
+		"Создавайте проекты и отслеживайте показатели во времени: курсы препаратов, диабет, похудение, здоровье."
 
-	rows := [][]models.InlineKeyboardButton{}
-	if secure {
-		rows = append(rows, []models.InlineKeyboardButton{
-			{Text: "📊 Открыть Мониторинг (Mini App)", WebApp: &models.WebAppInfo{URL: webAppTarget}},
-		})
+	// Только Mini App — без ссылок и «открыть в браузере».
+	rows := [][]models.InlineKeyboardButton{
+		{
+			{Text: "Открыть", WebApp: &models.WebAppInfo{URL: webAppTarget}},
+		},
+		{
+			{Text: locales.BtnBack, CallbackData: "msg_back"},
+		},
 	}
-	rows = append(rows, []models.InlineKeyboardButton{
-		{Text: "🌐 Открыть в браузере", URL: linkURL},
-	})
 
 	msgID, sendErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
 		ChatID:      chatID,
@@ -461,7 +498,7 @@ func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int6
 	if sendErr != nil {
 		log.Printf("[MONITORING] ошибка отправки chatID=%d: %v", chatID, sendErr)
 	} else {
-		log.Printf("[MONITORING] сообщение отправлено chatID=%d msgID=%d url=%s кнопок=%d", chatID, msgID, linkURL, len(rows))
+		log.Printf("[MONITORING] сообщение отправлено chatID=%d msgID=%d url=%s кнопок=%d", chatID, msgID, webAppTarget, len(rows))
 	}
 	return true
 }
@@ -523,6 +560,9 @@ func consultationImageContext(question string) string {
 // в StateWaitingConsultation, ожидая вопрос (текст) или фото.
 func (r *router) handleConsultationStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf("[CONSULT] запуск для chatID=%d", chatID)
+
+	// Выбрано под-действие — убираем блок-хаб.
+	r.deleteHubBlock(ctx, b, chatID)
 
 	if !r.agreementStorage.IsAgreed(chatID) {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{

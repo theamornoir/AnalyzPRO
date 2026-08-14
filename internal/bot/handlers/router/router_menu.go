@@ -21,7 +21,13 @@ func (r *router) isMainMenuButton(text string) bool {
 	case locales.BtnAnalysisHub,
 		locales.BtnHealthHub,
 		locales.BtnPremium,
-		locales.BtnServiceHub:
+		locales.BtnServiceHub,
+		// Под-действия раздела «Анализы» могут прийти как текстовые кнопки
+		// (например, из сохранённой клавиатуры). Чтобы они не ушли в
+		// анализ текста/ИИ, ловим их до состояний потока.
+		locales.BtnRegularAnalysis,
+		locales.BtnExtendedAnalysis,
+		locales.BtnBioscan:
 		return true
 	}
 	return false
@@ -38,18 +44,28 @@ func (r *router) handleMenuButtons(ctx context.Context, b *tgbot.Bot, chatID int
 
 	switch text {
 	case locales.BtnAnalysisHub:
-		return r.handleAnalysisHub(ctx, b, chatID)
+		return r.renderHub(ctx, b, chatID, "analysis")
 
 	case locales.BtnHealthHub:
-		return r.handleHealthHub(ctx, b, chatID)
+		return r.renderHub(ctx, b, chatID, "health")
 
 	case locales.BtnServiceHub:
-		return r.handleServiceHub(ctx, b, chatID)
+		return r.renderHub(ctx, b, chatID, "service")
 
 	case locales.BtnPremium:
 		log.Printf(locales.LogRouterMenuPremium, chatID)
 		menu.PremiumHandler(r.stateManager, r.paymentService)(ctx, b, update)
 		return true
+
+	// Под-действия раздела «Анализы»: если пришли как текстовые кнопки
+	// (старая/сохранённая клавиатура), запускаем соответствующий анализ,
+	// а не отправляем текст в ИИ (handleText).
+	case locales.BtnRegularAnalysis:
+		return r.handleRegularAnalysis(ctx, b, chatID)
+	case locales.BtnExtendedAnalysis:
+		return r.handleExtendedAnalysis(ctx, b, chatID)
+	case locales.BtnBioscan:
+		return r.handleBioscanStart(ctx, b, chatID)
 	}
 
 	return false

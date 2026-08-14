@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/theamornoir/analyzpro/internal/ai/httpclient"
 	"github.com/theamornoir/analyzpro/internal/ai/orchestrator"
 	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/bot"
@@ -33,6 +34,11 @@ func New() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Настраиваем AI-HTTP-клиент с учётом прокси (GEMINI_PROXY / системный
+	// HTTP_PROXY/HTTPS_PROXY). Должно идти сразу после config.Load(), чтобы
+	// прокси подхватился ДО первых AI-вызовов (гео-блок Gemini во Франции и т.п.).
+	httpclient.Configure(cfg.GeminiProxy)
 
 	// Проверяем, нужно ли использовать моки
 	// Моки используются если:

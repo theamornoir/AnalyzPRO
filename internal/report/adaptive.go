@@ -255,7 +255,7 @@ body {
 <div class="container">
 
     <div class="header">
-        <div class="brand">ANALYZPRO</div>
+        <div class="brand">PRISMA</div>
         <h1>{{.Title}}</h1>
     </div>
 

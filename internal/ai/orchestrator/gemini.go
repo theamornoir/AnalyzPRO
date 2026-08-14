@@ -21,7 +21,7 @@ func NewGeminiProvider() *GeminiProvider {
 	}
 	model := os.Getenv("GOOGLE_AI_MODEL")
 	if model == "" {
-		model = "gemini-3.5-flash"
+		model = "gemini-2.5-flash-latest"
 	}
 	return &GeminiProvider{
 		client: gemini.NewGeminiClient(apiKey, model),

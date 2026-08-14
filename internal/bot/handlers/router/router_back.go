@@ -30,6 +30,9 @@ func (r *router) handleBack(ctx context.Context, b *tgbot.Bot, chatID int64, tex
 		bioscan.ResetBioscanData(r.stateManager, chatID)
 		r.stateManager.SetUserData(chatID, "analysis_type", "")
 
+		// Убираем блок-хаб раздела (если открыт), чтобы не висел в чате.
+		r.deleteHubBlock(ctx, b, chatID)
+
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBackToMainMenu,
@@ -45,11 +48,13 @@ func (r *router) handleBack(ctx context.Context, b *tgbot.Bot, chatID int64, tex
 		r.stateManager.SetUserData(chatID, "analysis_type", "")
 		r.stateManager.SetUserData(chatID, "analysis_subtype", "")
 
+		// Возврат в главное меню + удаление блока-хаба раздела.
+		r.deleteHubBlock(ctx, b, chatID)
+
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
-			Text:        locales.MsgBackToAnalysisType,
-			ReplyMarkup: keyboards.AnalysisTypeMenu(),
-			ParseMode:   "Markdown",
+			Text:        locales.MsgBackToMainMenu,
+			ReplyMarkup: keyboards.MainMenu(),
 		})
 		return true
 	}
@@ -59,6 +64,8 @@ func (r *router) handleBack(ctx context.Context, b *tgbot.Bot, chatID int64, tex
 		r.stateManager.SetState(chatID, states.StateIdle)
 		r.stateManager.SetUserData(chatID, "analysis_type", "")
 		r.stateManager.SetUserData(chatID, "analysis_subtype", "")
+
+		r.deleteHubBlock(ctx, b, chatID)
 
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
@@ -74,11 +81,15 @@ func (r *router) handleBack(ctx context.Context, b *tgbot.Bot, chatID int64, tex
 		r.stateManager.SetUserData(chatID, "analysis_type", "")
 		r.stateManager.SetUserData(chatID, "analysis_subtype", "")
 
+		// Возврат в главное меню + удаление блока-хаба раздела (вместо
+		// промежуточного меню выбора типа, чьи текстовые кнопки не имели
+		// обработчика и падали в анализ текста/ИИ).
+		r.deleteHubBlock(ctx, b, chatID)
+
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
-			Text:        locales.MsgBackToAnalysisType,
-			ReplyMarkup: keyboards.AnalysisTypeMenu(),
-			ParseMode:   "Markdown",
+			Text:        locales.MsgBackToMainMenu,
+			ReplyMarkup: keyboards.MainMenu(),
 		})
 		return true
 	}

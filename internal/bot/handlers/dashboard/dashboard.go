@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
@@ -21,6 +23,7 @@ type MetricsResponse struct {
 	UserName        string    `json:"userName"`
 	UserAge         int       `json:"userAge"`
 	NoData          bool      `json:"noData"`
+	PremiumRequired bool      `json:"premiumRequired"`
 	HealthIndex     int       `json:"healthIndex"`
 	EnergyLevel     string    `json:"energyLevel"`
 	AnalysisDate    string    `json:"analysisDate"`
@@ -72,12 +75,24 @@ func NewHandler(pay *payment.MockPaymentService, botToken string, repo monitorin
 // Премиум-проверка здесь НЕ нужна: сама страница не содержит данных,
 // данные грузит /api/metrics (который и требует Premium).
 func (h *Handler) ServeWebApp(w http.ResponseWriter, r *http.Request) {
+	// Telegram WebView агрессивно кэширует статики Mini App и неохотно
+	// отдаёт свежие файлы (отсюда «пустой/старый» дашборд после правок).
+	// Запрещаем кэширование и поддерживаем ?v= для явного сброса по URL.
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+
 	// Убираем префикс /dashboard/
 	filePath := r.URL.Path
 	if filePath == "/dashboard/" || filePath == "/" {
 		filePath = "index.html"
 	} else {
 		filePath = strings.TrimPrefix(filePath, "/dashboard/")
+	}
+
+	// Отрезаем query (?v=...) — файл ищем по чистому имени.
+	if i := strings.IndexByte(filePath, '?'); i >= 0 {
+		filePath = filePath[:i]
 	}
 
 	switch filePath {
@@ -111,6 +126,7 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 
 	initData := r.URL.Query().Get("initData")
 	if initData == "" {
@@ -124,13 +140,24 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.pay.IsPremium(telegramID) {
-		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "premium_required"})
-		return
-	}
-
 	metrics := h.buildMetrics(r.Context(), telegramID)
+
+	// Премиум-гейт: «богатые» метрики (кровь/питание/активность/тренды)
+	// доступны только Premium. Но ОНБОРДИНГ (регистрация профиля) — для
+	// ВСЕХ: при отсутствии данных не-Premium пользователь тоже видит форму
+	// заполнения, а не пустой экран с «нужна Premium». Поэтому не отдаём
+	// 403, а помечаем premiumRequired и скрываем rich-поля, оставляя
+	// noData/имя профиля — чтобы Mini App мог показать карточку регистрации.
+	isPremium := h.pay.IsPremium(telegramID)
+	metrics.PremiumRequired = !isPremium
+	if !isPremium {
+		metrics.HealthIndex = 0
+		metrics.EnergyLevel = "—"
+		metrics.Blood = BloodData{}
+		metrics.Nutrition = NutData{}
+		metrics.Activity = ActData{}
+		metrics.Trend = TrendData{}
+	}
 
 	if err := json.NewEncoder(w).Encode(metrics); err != nil {
 		log.Printf(locales.LogAPIEncodeError, err)
@@ -138,6 +165,123 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[DASHBOARD] /api/metrics отданы для user=%d (noData=%v)", telegramID, metrics.NoData)
+}
+
+// ProfileRequest — тело запроса регистрации профиля из Mini App «Сводка
+// здоровья». Минимальный набор полей, чтобы дашборд перестал быть пустым.
+type ProfileRequest struct {
+	Name   string `json:"name"`
+	Age    int    `json:"age"`
+	Gender string `json:"gender"`
+	Height int    `json:"height"`
+	Weight int    `json:"weight"`
+	Goal   string `json:"goal"`
+}
+
+// SaveProfile — обработчик POST /api/profile. Принимает минимальный профиль
+// пользователя (регистрация) из Mini App и сохраняет его как запись истории
+// типа "questionnaire", чтобы дашборд при следующем открытии был непустым.
+//
+// Премиум-гейт НЕ применяется: профиль можно заполнить на любом тарифе.
+// Выдача самих метрик (/api/metrics) по-прежнему требует Premium.
+func (h *Handler) SaveProfile(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	initData := r.URL.Query().Get("initData")
+	if initData == "" {
+		initData = r.Header.Get("X-Telegram-Init-Data")
+	}
+	telegramID, ok := monitoring.ValidateInitData(initData, h.botToken)
+	if !ok || telegramID == 0 {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	var req ProfileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON"})
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if utf8.RuneCountInString(name) < 2 || utf8.RuneCountInString(name) > 50 {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid name"})
+		return
+	}
+	if req.Age < 5 || req.Age > 90 {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid age"})
+		return
+	}
+
+	gender := strings.TrimSpace(req.Gender)
+	switch strings.ToLower(gender) {
+	case "мужской", "м", "male":
+		gender = "Мужской"
+	case "женский", "ж", "female":
+		gender = "Женский"
+	default:
+		gender = ""
+	}
+
+	profile := map[string]interface{}{
+		"name":   name,
+		"age":    req.Age,
+		"gender": gender,
+	}
+	if req.Height > 0 {
+		profile["height"] = req.Height
+	}
+	if req.Weight > 0 {
+		profile["weight"] = req.Weight
+	}
+
+	payload := map[string]interface{}{
+		"profile":         profile,
+		"recommendations": profileRecommendations(strings.TrimSpace(req.Goal)),
+	}
+	payloadBytes, _ := json.Marshal(payload)
+
+	entry := &monitoring.HistoryEntry{
+		TelegramID: telegramID,
+		Type:       "questionnaire",
+		Title:      "Профиль пользователя",
+		Date:       time.Now(),
+		JsonData:   string(payloadBytes),
+	}
+	if err := h.repo.SaveResult(r.Context(), entry); err != nil {
+		log.Printf("[DASHBOARD] не удалось сохранить профиль user=%d: %v", telegramID, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal"})
+		return
+	}
+	log.Printf("[DASHBOARD] профиль сохранён user=%d name=%q", telegramID, name)
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// profileRecommendations — стартовые рекомендации на основе цели пользователя.
+func profileRecommendations(goal string) []string {
+	base := "Регулярно загружайте анализы и биосканы, чтобы отслеживать динамику здоровья."
+	if goal == "" {
+		return []string{
+			base,
+			"Укажите цель в профиле, чтобы получать персональные рекомендации.",
+		}
+	}
+	return []string{
+		base,
+		"Ваша цель: " + goal + ". Зафиксируйте исходные показатели, затем повторяйте замеры раз в 2–4 недели.",
+	}
 }
 
 // buildMetrics строит метрики на основе реальной истории пользователя.

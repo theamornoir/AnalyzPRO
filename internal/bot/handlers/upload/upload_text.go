@@ -61,7 +61,7 @@ func handleTextUpload(
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
 	if err != nil {
-		helpers.SendError(ctx, b, chatID)
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
 		return
 	}
 

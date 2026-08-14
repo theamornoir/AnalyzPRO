@@ -19,7 +19,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	log.Printf("🚀 AnalyzPRO запускается...")
+	log.Printf("🚀 Prisma запускается...")
 
 	application.Run(ctx)
 }

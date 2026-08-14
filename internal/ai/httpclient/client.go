@@ -16,8 +16,62 @@ import (
 
 var AIHTTPClient *http.Client
 
+// explicitProxy — явно заданный egress-прокси ТОЛЬКО для AI-вызовов
+// (Gemini/DeepSeek/Claude). Задаётся через config.GeminiProxy (.env
+// GEMINI_PROXY) либо env-переменными GEMINI_PROXY / AI_HTTP_PROXY.
+// Если пуст — транспорт сам подхватывает системный прокси через
+// http.ProxyFromEnvironment (HTTP_PROXY / HTTPS_PROXY / NO_PROXY), а при его
+// отсутствии работает напрямую.
+//
+// Это решает гео-блок Gemini (например, "User location is not supported" во
+// Франции): включите VPN/прокси (Clash/Proxifier, локальный SOCKS5-порт) и
+// укажите его в GEMINI_PROXY — трафик Telegram и всё остальное прокси
+// НЕ затрагиваются.
+var explicitProxy string
+
 func init() {
+	// Фоллбэк для тестов/standalone: читаем env прямо здесь, до config.Load().
+	explicitProxy = resolveExplicitProxy("")
+	AIHTTPClient = newAIClient()
+	logProxyMode()
+}
+
+// Configure применяет явный прокси из конфигурации (config.GeminiProxy).
+// Вызывается из app.New() ПОСЛЕ config.Load(), чтобы GEMINI_PROXY из .env имел
+// приоритет над системным прокси и над env-фоллбэком init().
+// Если proxy пуст — оставляем выбранное в init() поведение (env-фоллбэк или
+// системный прокси).
+func Configure(proxy string) {
+	if proxy == "" {
+		logProxyMode()
+		return
+	}
+	explicitProxy = proxy
+	AIHTTPClient = newAIClient()
+	logProxyMode()
+}
+
+// resolveExplicitProxy возвращает первый заданный явный прокси по приоритету:
+// cfgProxy → GEMINI_PROXY → AI_HTTP_PROXY. Пустая строка = явный прокси не
+// задан (будем использовать системный через http.ProxyFromEnvironment).
+func resolveExplicitProxy(cfgProxy string) string {
+	if cfgProxy != "" {
+		return cfgProxy
+	}
+	if v := os.Getenv("GEMINI_PROXY"); v != "" {
+		return v
+	}
+	return os.Getenv("AI_HTTP_PROXY")
+}
+
+// newAIClient строит *http.Client с прокси-совместимым транспортом.
+//  1. Если explicitProxy задан — используем его (http/https через CONNECT,
+//     socks5 через кастомный дайалер).
+//  2. Иначе — системный прокси (http.ProxyFromEnvironment); если его нет —
+//     прямое соединение.
+func newAIClient() *http.Client {
 	transport := &http.Transport{
+		Proxy: proxyResolver,
 		DialContext: (&net.Dialer{
 			Timeout:   5 * time.Second,
 			KeepAlive: 30 * time.Second,
@@ -28,38 +82,93 @@ func init() {
 		MaxIdleConns:          50,
 	}
 
-	// AI_HTTP_PROXY — необязательный egress-прокси ТОЛЬКО для AI-вызовов
-	// (Gemini/DeepSeek/Claude). Полезно, когда исходящий IP сервера попадает под
-	// гео-блок (например, "User location is not supported" от Gemini). При этом
-	// трафик Telegram и всё остальное прокси НЕ затрагиваются.
-	// Поддерживаются http/https-прокси и socks5:// (например, локальный порт
-	// VPN/Clash-клиента: socks5://127.0.0.1:7891).
-	if proxyURL := os.Getenv("AI_HTTP_PROXY"); proxyURL != "" {
-		pu, err := url.Parse(proxyURL)
-		if err != nil {
-			log.Printf("AI_HTTP_PROXY invalid, ignored: %v", err)
-		} else {
-			switch pu.Scheme {
-			case "http", "https":
-				transport.Proxy = http.ProxyURL(pu)
-				log.Printf("AI HTTP client using HTTP proxy: %s", pu.Host)
-			case "socks5":
-				transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-					return dialThroughSOCKS5(pu.Host, network, addr)
+	// SOCKS5 не поддерживается stdlib-транспортом как схема ProxyURL, поэтому
+	// для него подменяем DialContext на туннель до цели (поверх — TLS), а
+	// Proxy оставляем nil (запрос идёт напрямую к цели через туннель).
+	if explicitProxy != "" {
+		if pu, err := url.Parse(explicitProxy); err == nil && pu.Scheme == "socks5" {
+			baseDial := transport.DialContext
+			transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+				conn, err := dialThroughSOCKS5(pu.Host, network, addr)
+				if err != nil {
+					log.Printf("⚠️ SOCKS5 proxy %s failed (%v), falling back to direct", redactProxy(pu), err)
+					return baseDial(ctx, network, addr)
 				}
-				log.Printf("AI HTTP client using SOCKS5 proxy: %s", pu.Host)
-			default:
-				log.Printf("AI_HTTP_PROXY unsupported scheme %q, ignored", pu.Scheme)
+				return conn, nil
 			}
 		}
 	}
 
-	AIHTTPClient = &http.Client{
+	return &http.Client{
 		Transport: transport,
 		Timeout:   45 * time.Second,
 	}
+}
 
-	log.Printf("HTTP client initialized (timeout=45s, MaxIdleConns=50)")
+// proxyResolver — функция транспорта: выбирает прокси на каждый запрос.
+//  1. explicitProxy задан (http/https) → отдаём его (CONNECT-прокси).
+//  2. explicitProxy = socks5 → проксируем сами через DialContext, поэтому
+//     Proxy не ставим (возвращаем nil).
+//  3. explicitProxy пуст → системный прокси через http.ProxyFromEnvironment
+//     (подхватывает HTTP_PROXY/HTTPS_PROXY/NO_PROXY), при отсутствии —
+//     прямое соединение.
+func proxyResolver(req *http.Request) (*url.URL, error) {
+	if explicitProxy != "" {
+		pu, err := url.Parse(explicitProxy)
+		if err != nil {
+			log.Printf("⚠️ explicit proxy %q invalid (%v), falling back to system/direct", redactProxyStr(explicitProxy), err)
+		} else if pu.Scheme == "socks5" {
+			// socks5 проксируем через DialContext — Proxy не ставим
+			return nil, nil
+		} else {
+			return pu, nil
+		}
+	}
+	return http.ProxyFromEnvironment(req)
+}
+
+// logProxyMode выводит, через что пойдёт AI-трафик. По логам сразу видно,
+// работает прокси или соединение напрямую (диагностика гео-блока Gemini).
+func logProxyMode() {
+	if explicitProxy != "" {
+		if pu, err := url.Parse(explicitProxy); err == nil {
+			log.Printf("✅ Gemini client using proxy: %s", redactProxy(pu))
+		} else {
+			log.Printf("✅ Gemini client using proxy: %s", redactProxyStr(explicitProxy))
+		}
+		return
+	}
+	// Что реально увидит http.ProxyFromEnvironment для Gemini-хоста?
+	probe := &http.Request{URL: &url.URL{Scheme: "https", Host: "generativelanguage.googleapis.com"}}
+	if u, err := http.ProxyFromEnvironment(probe); err == nil && u != nil {
+		log.Printf("✅ Gemini client using proxy: %s (system HTTP_PROXY/HTTPS_PROXY)", redactProxy(u))
+		return
+	}
+	log.Printf("⚠️ Gemini client using DIRECT connection (no proxy)")
+}
+
+// redactProxy скрывает учётные данные прокси в логах (user:pass@host).
+func redactProxy(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	host := u.Host
+	if u.User != nil {
+		if _, hasPass := u.User.Password(); hasPass {
+			host = "***:***@" + u.Host
+		} else if u.User.Username() != "" {
+			host = "***@" + u.Host
+		}
+	}
+	return u.Scheme + "://" + host
+}
+
+// redactProxyStr — обёртка для сырой строки прокси.
+func redactProxyStr(s string) string {
+	if u, err := url.Parse(s); err == nil {
+		return redactProxy(u)
+	}
+	return s
 }
 
 func FetchWithRetry(ctx context.Context, url string, body io.Reader, maxRetries int) ([]byte, error) {
@@ -96,7 +205,16 @@ func FetchWithRetry(ctx context.Context, url string, body io.Reader, maxRetries 
 			return nil, err
 		}
 
+		// 4xx (кроме 429) — клиентские ошибки (400/401/403/404), повторять
+		// бесполезно. 429 (rate limit) и 5xx повторяем с эксп. отступом.
 		if resp.StatusCode >= 400 && resp.StatusCode < 600 {
+			retryable := resp.StatusCode == http.StatusTooManyRequests ||
+				(resp.StatusCode >= 500 && resp.StatusCode < 600)
+			if retryable && attempt < maxRetries {
+				time.Sleep(backoff)
+				backoff *= 2
+				continue
+			}
 			if resp.StatusCode == http.StatusTooManyRequests {
 				return nil, &HTTPError{StatusCode: resp.StatusCode, Message: "rate limit exceeded"}
 			}

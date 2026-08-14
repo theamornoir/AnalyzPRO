@@ -36,7 +36,7 @@ func processSingleFile(
 ) {
 	fileData, err := file.readData()
 	if err != nil {
-		helpers.SendError(ctx, b, chatID)
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
 		return
 	}
 
@@ -53,8 +53,7 @@ func processSingleFile(
 			return
 		}
 
-		deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
-		helpers.SendError(ctx, b, chatID)
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
 		return
 	}
 
@@ -68,7 +67,7 @@ func processSingleFile(
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
 	if err != nil {
-		helpers.SendError(ctx, b, chatID)
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
 		return
 	}
 
@@ -116,8 +115,7 @@ func processMultipleFiles(
 	}
 
 	if len(collectedTexts) == 0 {
-		deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
-		helpers.SendError(ctx, b, chatID)
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
 		return
 	}
 
@@ -130,8 +128,7 @@ func processMultipleFiles(
 			return
 		}
 
-		deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
-		helpers.SendError(ctx, b, chatID)
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
 		return
 	}
 
@@ -155,6 +152,22 @@ func deleteLoadingMessages(ctx context.Context, b *tgbot.Bot, chatID int64, load
 	if textMsg != nil {
 		helpers.DeleteMessage(ctx, b, chatID, textMsg.ID)
 	}
+}
+
+// sendAnalysisError - отправляет сообщение об ошибке обработки анализа
+// вместе с главным меню и сбрасывает состояние. Это гарантирует, что после
+// неудачной обработки пользователь не «зависает» без клавиатуры и может
+// вернуться в меню. Раньше ошибка отправлялась через helpers.SendError без
+// клавиатуры и без сброса состояния — из-за этого пропадало меню и не было
+// пути назад. loadingMsg/textMsg безопасно обрабатываются, если nil.
+func sendAnalysisError(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64, loadingMsg, textMsg *models.Message) {
+	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
+	stateManager.Reset(chatID)
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        locales.MsgTextProcessingError,
+		ReplyMarkup: keyboards.MainMenu(),
+	})
 }
 
 // sendAnalysisComplete - отправляет сообщение о завершении анализа и сбрасывает состояние.
