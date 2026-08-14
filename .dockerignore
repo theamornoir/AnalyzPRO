@@ -1,0 +1,9 @@
+.git
+node_modules
+bin
+data
+uploads
+*.db.json
+.env
+.tunnel_url
+*.log

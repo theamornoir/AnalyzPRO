@@ -1,0 +1,26 @@
+# AnalyzPRO systemd service unit
+#
+# NOTE: Only ONE instance of the bot may run at a time. The bot enforces a
+# single instance via a flock on /tmp/analyzpro.lock; a second copy will fail
+# to start. Do not enable multiple replicas of this service.
+#
+# Install:
+#   sudo cp analyzpro.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now analyzpro
+
+[Unit]
+Description=AnalyzPRO Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=vladislav
+WorkingDirectory=/app
+ExecStart=/app/bin/analyzpro
+EnvironmentFile=/app/.env
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

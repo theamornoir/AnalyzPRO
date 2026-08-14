@@ -7,7 +7,7 @@ BINARY := bin/analyzpro
 ENTRY  := ./cmd/bot
 GO     ?= go
 
-.PHONY: build run start dev kill clean test
+.PHONY: build run start dev kill clean test docker-build deploy mini mini-stop
 
 ## build - compile bin/analyzpro
 build:
@@ -52,23 +52,31 @@ test:
 
 ## tunnel - поднять HTTPS-туннель к локальному :8080, чтобы Mini App
 ## дашборда открывался на телефоне (Telegram Web App требует HTTPS).
-## Сначала пробуем cloudflared (бесплатно, без аккаунта), иначе ngrok.
-## Запускай в отдельном терминале. Для ngrok бот сам подхватит https-URL
-## через локальное API; для cloudflared скопируй https-URL из вывода в
-## переменную WEBAPP_URL и перезапусти `make run`.
+## ⚠️  cloudflared Quick-туннель (trycloudflare.com) НЕ используется — он
+##     часто НЕ открывается с мобильных сетей (ошибка Cloudflare).
+##     Используйте ngrok (нужен бесплатный токен:
+##     `ngrok config add-authtoken <токен>`) или именованный Cloudflare-
+##     туннель со своим доменом (задайте CF_TUNNEL_URL).
+## Запускай в отдельном терминале. Бот сам подхватит https-URL ngrok через
+## локальное API (127.0.0.1:4040). См. docs/DEPLOY.md (про прод и про
+## именованный Cloudflare-туннель со своим доменом).
 tunnel:
-	@if command -v cloudflared >/dev/null 2>&1; then \
-		echo "==> Запуск cloudflared туннеля на :8080 (HTTPS)..."; \
-		echo "==> Скопируй https-URL из вывода в WEBAPP_URL и перезапусти make run"; \
-		cloudflared tunnel --url http://localhost:8080; \
-	elif command -v ngrok >/dev/null 2>&1; then \
-		echo "==> Запуск ngrok туннеля на :8080 (HTTPS)..."; \
+	@if command -v ngrok >/dev/null 2>&1; then \
+		echo "==> Запуск ngrok туннеля на :8080 (HTTPS, стабилен на телефоне)..."; \
+		echo "==> Бот сам подхватит https-URL через локальное API ngrok."; \
+		echo "==> Если ngrok пишет про authtoken — добавьте его:"; \
+		echo "==>   ngrok config add-authtoken <токен>  (https://dashboard.ngrok.com/get-started/your-authtoken)"; \
 		ngrok http 8080; \
+	elif [ -n "$${CF_TUNNEL_URL:-}" ] && command -v cloudflared >/dev/null 2>&1; then \
+		echo "==> Запуск NAMED cloudflared туннеля -> $${CF_TUNNEL_URL}"; \
+		cloudflared tunnel run "$${CF_TUNNEL:-analyzpro}"; \
 	else \
-		echo "❌ Не найден ни cloudflared, ни ngrok."; \
-		echo "   Установи один из них:"; \
-		echo "   brew install cloudflared"; \
-		echo "   brew install ngrok/ngrok/ngrok"; \
+		echo "❌ Нет ngrok и не задан CF_TUNNEL_URL."; \
+		echo "   Самый надёжный вариант для телефона — ngrok (бесплатно):"; \
+		echo "     brew install ngrok/ngrok/ngrok"; \
+		echo "     ngrok config add-authtoken <токен>"; \
+		echo "     ngrok http 8080"; \
+		echo "   Или поднимите бота на своём домене с HTTPS (см. docs/DEPLOY.md)."; \
 		exit 1; \
 	fi
 
@@ -78,3 +86,9 @@ tunnel:
 ## Ctrl+C останавливает и бота, и туннель.
 mini:
 	@bash scripts/run-miniapp.sh
+
+## mini-stop - остановить запущенный 'make mini' ИЗ ЛЮБОГО терминала
+## (без Ctrl+C в нужном окне). Убивает оболочку по lock-PID, туннель и бота,
+## освобождает :8080 и снимает lock.
+mini-stop:
+	@bash scripts/mini-stop.sh

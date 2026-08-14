@@ -10,16 +10,19 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
-	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
+	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/service"
+	"github.com/theamornoir/analyzpro/internal/storage"
 )
 
 // ProcessBioscanWithPhotos - обработка подтверждения и отправка в AI.
 // saver сохраняет результат биоскана в историю пользователя (для Мониторинга).
+// appStorage персистит результат как Diagnosis (для профиля пользователя).
 func ProcessBioscanWithPhotos(
 	ctx context.Context,
 	b *tgbot.Bot,
@@ -28,6 +31,7 @@ func ProcessBioscanWithPhotos(
 	uploadDir string,
 	stickerID string,
 	chatID int64,
+	appStorage *storage.Storage,
 	saver monitoring.HistorySaver,
 ) {
 	// Собираем все данные
@@ -142,6 +146,20 @@ func ProcessBioscanWithPhotos(
 			log.Printf("[MONITORING] история сохранена chatID=%d type=bioscan", chatID)
 		}
 	}
+
+	// Персистим результат биоскана как Diagnosis (для профиля пользователя).
+	if appStorage != nil {
+		if derr := appStorage.SaveDiagnosisForUser(ctx, chatID, "bioscan", "", htmlReport); derr != nil {
+			log.Printf("[STORAGE] не удалось сохранить диагноз-биоскан chatID=%d: %v", chatID, derr)
+		} else {
+			log.Printf("[STORAGE] диагноз сохранён chatID=%d type=bioscan", chatID)
+		}
+	}
+
+	analytics.EmitEvent(ctx, analytics.Event{
+		Type:       analytics.EventBioscan,
+		TelegramID: chatID,
+	})
 
 	sm.SetState(chatID, states.StateIdle)
 

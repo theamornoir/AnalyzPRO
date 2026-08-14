@@ -1,0 +1,54 @@
+# ============================================================
+# AnalyzPRO — Environment Variables (EXAMPLE)
+# Copy to .env and fill in real values:  cp .env.example .env
+# ============================================================
+#
+# DEPLOY NOTES
+#   • Production: set APP_ENV=production.
+#   • Provide WEBAPP_URL / DASHBOARD_URL as REAL HTTPS URLs (Telegram
+#     Mini Apps require HTTPS). On a server behind a reverse proxy / TLS
+#     terminator point these at your public https://... addresses.
+#   • Mount ./data as a PERSISTENT VOLUME (Docker volume or bind mount)
+#     so analyses, premium users and state survive container restarts.
+#   • Payments: YooKassa integration is still in MOCK MODE — no real
+#     charges are made. Keep test/mock values until it is switched on.
+#   • Only ONE instance may run (flock on /tmp/analyzpro.lock).
+# ============================================================
+
+# Общие настройки
+APP_ENV=development
+LOG_LEVEL=info
+USE_MOCK=false
+HTTP_ADDR=:8080
+
+# Telegram Bot
+BOT_TOKEN=your_bot_token_here
+LOADING_STICKER_ID=your_sticker_id
+ADMIN_CHAT_ID=your_admin_chat_id
+
+# AI Models — Gemini
+GOOGLE_GEMINI_API_KEY=your_gemini_api_key_here
+GOOGLE_AI_MODEL=gemini-2.0-flash
+
+# AI Models — DeepSeek (опционально)
+DEEPSEEK_API_KEY=
+
+# AI Models — Claude (опционально)
+ANTHROPIC_API_KEY=
+
+# AI Models — Yandex (опционально)
+YANDEX_GPT_API_KEY=
+YANDEX_GPT_FOLDER_ID=
+YANDEX_GPT_MODEL=yandexgpt-lite
+YANDEX_GPT_VISION_MODEL=yandexgpt
+
+# Хранение данных
+UPLOAD_DIR=./uploads
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/analyzpro?sslmode=disable
+
+# PDF Generation
+HTML2PDF_API_KEY=your_html2pdf_api_key_here
+
+# Web App (Дашборд)
+WEBAPP_URL=http://localhost:8080/dashboard
+DASHBOARD_URL=http://localhost:8080/dashboard

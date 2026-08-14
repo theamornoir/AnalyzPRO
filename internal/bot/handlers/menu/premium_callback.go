@@ -8,6 +8,7 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/bot/botutil"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
@@ -145,6 +146,12 @@ func HandlePremiumConfirm(
 		}
 
 		log.Printf(locales.LogPaymentActivated, chatID, tariffID)
+
+		analytics.EmitEvent(ctx, analytics.Event{
+			Type:       analytics.EventPremium,
+			TelegramID: chatID,
+			Meta:       map[string]interface{}{"tariff": tariffID, "changed": wasPremium},
+		})
 
 		botutil.AnswerLogged(ctx, b, tgbot.AnswerCallbackQueryParams{
 			CallbackQueryID: update.CallbackQuery.ID,

@@ -28,6 +28,10 @@ type Config struct {
 	WebAppURL          string
 	DashboardURL       string
 	HTTPAddr           string
+	StoragePath        string
+	MonitoringPath     string
+	AnalyticsPath      string
+	DBPath             string
 }
 
 func Load() (*Config, error) {
@@ -76,6 +80,10 @@ func Load() (*Config, error) {
 		WebAppURL:          webAppURL,
 		DashboardURL:       dashboardURL,
 		HTTPAddr:           httpAddr,
+		StoragePath:        getEnv("STORAGE_PATH", "./data/analyzpro.db.json"),
+		MonitoringPath:     getEnv("MONITORING_PATH", "./data/monitoring.db.json"),
+		AnalyticsPath:      getEnv("ANALYTICS_PATH", "./data/analytics.jsonl"),
+		DBPath:             getEnv("DB_PATH", "./data/analyzpro.db"),
 	}, nil
 }
 

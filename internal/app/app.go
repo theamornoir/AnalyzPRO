@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
 	"syscall"
 
 	"github.com/theamornoir/analyzpro/internal/ai/orchestrator"
+	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/bot"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/config"
+	"github.com/theamornoir/analyzpro/internal/db"
 	"github.com/theamornoir/analyzpro/internal/locales"
-	"github.com/theamornoir/analyzpro/internal/monitoring"
+	monitoring_sqlrepo "github.com/theamornoir/analyzpro/internal/monitoring/sqlrepo"
 	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/service"
@@ -35,11 +38,22 @@ func New() (*App, error) {
 	// Моки используются если:
 	// 1. APP_ENV=development и API ключ пустой или содержит "mock"
 	// 2. Или явно установлена переменная USE_MOCK=true
-	useMock := os.Getenv("USE_MOCK") == "true" ||
-		(cfg.AppEnv == "development" && (cfg.GoogleGeminiAPIKey == "" || cfg.GoogleGeminiAPIKey == "mock"))
+	useMock := os.Getenv("USE_MOCK") == "true"
 
 	log.Printf(locales.LogUseMockMode, useMock)
 	log.Printf(locales.LogAppEnvironment, cfg.AppEnv)
+
+	// Единая реляционная БД (SQLite по умолчанию, см. internal/db). Хранит
+	// профили/диагнозы/курсы/предпочтения И историю мониторинга. Создаётся и
+	// мигрируется при старте; данные переживают перезапуск бота.
+	dbConn, err := db.Open(cfg.DBPath)
+	if err != nil {
+		return nil, fmt.Errorf("не удалось открыть БД: %w", err)
+	}
+	if err := db.Migrate(dbConn); err != nil {
+		return nil, fmt.Errorf("не удалось применить миграции БД: %w", err)
+	}
+	log.Printf("🗄️ База данных инициализирована: path=%s", cfg.DBPath)
 
 	stateManager := states.NewMemoryStateManager("./data/states.json")
 
@@ -60,21 +74,31 @@ func New() (*App, error) {
 
 	agreementStorage := storage.NewAgreementStorage("./data/agreements.json")
 
-	// Мок-хранилище (будет заменено на GORM при внедрении реальной БД)
-	appStorage := storage.NewMockStorage()
-	log.Printf("🗄️ Мок-хранилище инициализировано: Users=%T, Diagnoses=%T, Cycles=%T, Preferences=%T",
-		appStorage.Users, appStorage.Diagnoses, appStorage.Cycles, appStorage.Preferences)
+	// Хранилище профилей пользователей / диагнозов / курсов / предпочтений.
+	// По умолчанию — реальная БД (SQLite/Postgres через *sql.DB). В режиме
+	// USE_MOCK=true — мок (для локальной разработки без БД).
+	var appStorage *storage.Storage
+	if useMock {
+		appStorage = storage.NewMockStorage()
+		log.Printf("🗄️ Используется МОК-хранилище (USE_MOCK=true)")
+	} else {
+		appStorage = storage.NewSQLStorage(dbConn)
+		log.Printf("🗄️ SQL-хранилище инициализировано (Users=%T, Diagnoses=%T, Cycles=%T, Preferences=%T)",
+			appStorage.Users, appStorage.Diagnoses, appStorage.Cycles, appStorage.Preferences)
+	}
 
-	_ = appStorage // Будет передано в хендлеры при следующем этапе
-
-	// Репозиторий модуля Мониторинг (проекты + история), in-memory.
-	// Один и тот же экземпляр используется и API (чтение), и слоями
-	// загрузки (запись истории), поэтому создаётся здесь и инжектируется в бота.
-	monitorRepo := monitoring.NewMockRepository()
+	// Репозиторий модуля Мониторинг (проекты + история) поверх той же БД.
+	// История анализов/биосканов сохраняется между перезапусками бота.
+	monitorRepo := monitoring_sqlrepo.New(dbConn)
 
 	// Сервис платежей (Mock YooKassa)
 	paymentService := payment.NewMockPaymentService("./data/premium_users.json")
 	log.Printf(locales.LogPaymentServiceInit)
+
+	// Слой аналитики (события: старт, анализ, премиум, ошибки). Персистентный
+	// JSONL-файл (ANALYTICS_PATH).
+	analytics.Init(cfg.AnalyticsPath)
+	log.Printf("📈 Аналитика инициализирована: path=%s", cfg.AnalyticsPath)
 
 	telegramBot, err := bot.New(
 		cfg.BotToken,
@@ -86,6 +110,7 @@ func New() (*App, error) {
 		cfg.AdminChatID,
 		agreementStorage,
 		paymentService,
+		appStorage,
 		monitorRepo,
 		cfg.WebAppURL,
 		cfg.DashboardURL,
@@ -120,7 +145,12 @@ func New() (*App, error) {
 	}, nil
 }
 
-func (a *App) Run(ctx context.Context) {
+func (a *App) Run(parent context.Context) {
+	// Завершаем работу корректно по SIGINT/SIGTERM: отменяем контекст,
+	// HTTP-сервер и long-polling Telegram останавливаются сами.
+	ctx, stop := signal.NotifyContext(parent, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	// Запрещаем запуск второго экземпляра с тем же токеном. Два long-polling
 	// инстанса конкурируют за обновления Telegram — из-за этого часть ответов
 	// (например, подтверждение Premium или сообщение дашборда) «молча» не

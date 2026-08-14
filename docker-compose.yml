@@ -1,0 +1,42 @@
+# AnalyzPRO — single-instance Telegram bot deployment
+#
+# The bot persists everything to a SQLite database (./data/analyzpro.db) plus a
+# few JSON files (agreements, premium, states, analytics). No external database
+# service is required — keep it simple.
+#
+# Only ONE replica may run: the bot holds an exclusive flock on
+# /tmp/analyzpro.lock. Running a second container will fail to start.
+#
+# Usage:
+#   make docker-build   # build image analyzpro:latest
+#   make deploy         # build + docker compose up -d
+#   docker compose down
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: analyzpro:latest
+    container_name: analyzpro-bot
+    restart: unless-stopped
+
+    # Load runtime configuration (BOT_TOKEN, APP_ENV, AI keys, ...) from .env
+    env_file:
+      - ./.env
+
+    ports:
+      - "8080:8080"
+
+    # Persist state and uploads across restarts / redeploys.
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+
+    # The bot serves GET /healthz (200 OK) once it is up.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -9,12 +9,13 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
-	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
+	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/service"
+	"github.com/theamornoir/analyzpro/internal/storage"
 )
 
 // processSingleFile - обрабатывает один файл.
@@ -30,6 +31,7 @@ func processSingleFile(
 	file UploadedFile,
 	isExtended bool,
 	contextInfo string,
+	appStorage *storage.Storage,
 	saver monitoring.HistorySaver,
 ) {
 	fileData, err := file.readData()
@@ -47,7 +49,7 @@ func processSingleFile(
 		)
 
 		if err == nil && jsonResult != "" {
-			renderAndSendReport(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, jsonResult, saver)
+			renderAndSendReport(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, jsonResult, appStorage, saver)
 			return
 		}
 
@@ -91,6 +93,7 @@ func processMultipleFiles(
 	files []UploadedFile,
 	isExtended bool,
 	contextInfo string,
+	appStorage *storage.Storage,
 	saver monitoring.HistorySaver,
 ) {
 	var collectedTexts []string
@@ -123,7 +126,7 @@ func processMultipleFiles(
 	if isExtended {
 		jsonResult, err := analysisService.HandleAnalysisJSON(ctx, combinedPayload)
 		if err == nil && jsonResult != "" {
-			renderAndSendReport(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, jsonResult, saver)
+			renderAndSendReport(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, jsonResult, appStorage, saver)
 			return
 		}
 

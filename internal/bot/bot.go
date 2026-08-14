@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -32,6 +33,7 @@ type Bot struct {
 	adminChatID      int64
 	agreementStorage *storage.AgreementStorage
 	paymentService   *payment.MockPaymentService
+	appStorage       *storage.Storage
 	webAppURL        string
 	dashboardURL     string
 	httpAddr         string
@@ -50,6 +52,7 @@ func New(
 	adminChatID int64,
 	agreementStorage *storage.AgreementStorage,
 	paymentService *payment.MockPaymentService,
+	appStorage *storage.Storage,
 	monitorRepo monitoring.Repository,
 	webAppURL string,
 	dashboardURL string,
@@ -79,6 +82,7 @@ func New(
 		adminChatID:      adminChatID,
 		agreementStorage: agreementStorage,
 		paymentService:   paymentService,
+		appStorage:       appStorage,
 		webAppURL:        webAppURL,
 		dashboardURL:     dashboardURL,
 		httpAddr:         httpAddr,
@@ -110,13 +114,17 @@ func (b *Bot) Start(ctx context.Context) {
 
 	go func() {
 		mux := http.NewServeMux()
+		mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("OK"))
+		})
 		mux.HandleFunc("/dashboard", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/dashboard/", http.StatusMovedPermanently)
 		})
-		mux.HandleFunc("/dashboard/", func(w http.ResponseWriter, r *http.Request) {
-			dashboard.HandleWebApp(w, r, true)
-		})
-		mux.HandleFunc("/api/metrics", dashboard.HandleAPIMetrics)
+		dashHandler := dashboard.NewHandler(b.paymentService, b.botToken, b.monitorRepo)
+		mux.HandleFunc("/dashboard/", dashHandler.ServeWebApp)
+		mux.HandleFunc("/api/metrics", dashHandler.Metrics)
 
 		// Мониторинг: веб-апп (статика) + API с защитой initData.
 		mux.HandleFunc("/monitoring", func(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +133,16 @@ func (b *Bot) Start(ctx context.Context) {
 		mux.HandleFunc("/monitoring/", monitoring.ServeWebApp)
 		mux.HandleFunc("/api/monitoring/", monitoring.NewAPIHandler(b.monitorSvc, b.botToken).Handler())
 
-		log.Printf("❌ HTTP-сервер ошибка: %v", http.ListenAndServe(listenAddr, mux))
+		srv := &http.Server{Addr: listenAddr, Handler: mux}
+		go func() {
+			<-ctx.Done()
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = srv.Shutdown(shutdownCtx)
+		}()
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("❌ HTTP-сервер ошибка: %v", err)
+		}
 	}()
 
 	// Настраиваем Menu Button (кнопка рядом с полем ввода внизу чата) так,
@@ -197,6 +214,7 @@ func (b *Bot) registerHandlers() {
 		b.adminChatID,
 		b.agreementStorage,
 		b.paymentService,
+		b.appStorage,
 		b.monitorRepo,
 		b.webAppURL,
 		b.dashboardURL,
@@ -207,7 +225,7 @@ func (b *Bot) registerHandlers() {
 		tgbot.HandlerTypeMessageText,
 		"/start",
 		tgbot.MatchTypeExact,
-		menu.StartHandler(b.stateManager, b.agreementStorage),
+		menu.StartHandler(b.stateManager, b.agreementStorage, b.appStorage),
 	)
 
 	// Premium — кнопка меню

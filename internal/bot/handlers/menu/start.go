@@ -6,6 +6,7 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -15,6 +16,7 @@ import (
 func StartHandler(
 	stateManager states.StateManager,
 	agreementStorage *storage.AgreementStorage, // <-- ДОБАВЛЕНО
+	appStorage *storage.Storage,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update) {
 		if update.Message == nil {
@@ -22,6 +24,19 @@ func StartHandler(
 		}
 
 		chatID := update.Message.Chat.ID
+
+		// Персистим пользователя (и дефолтные предпочтения) при первом /start,
+		// чтобы последующие анализы/биосканы привязывались к реальному User.
+		if appStorage != nil {
+			if _, err := appStorage.EnsureUser(ctx, chatID); err != nil {
+				// Не фатально — онбординг продолжается.
+				_ = err
+			}
+		}
+		analytics.EmitEvent(ctx, analytics.Event{
+			Type:       analytics.EventStart,
+			TelegramID: chatID,
+		})
 
 		// /start всегда освобождает «зависшее» состояние от прошлых сессий
 		// (оно персистится в states.json между перезапусками бота), чтобы

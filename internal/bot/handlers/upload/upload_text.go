@@ -8,11 +8,12 @@ import (
 	tgbot "github.com/go-telegram/bot"
 
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
-	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
+	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/service"
+	"github.com/theamornoir/analyzpro/internal/storage"
 )
 
 // handleTextUpload - обрабатывает текст с показателями анализов.
@@ -26,6 +27,7 @@ func handleTextUpload(
 	stickerID string,
 	chatID int64,
 	text string,
+	appStorage *storage.Storage,
 	saver monitoring.HistorySaver,
 ) {
 	payload := strings.TrimSpace(text)
@@ -49,7 +51,7 @@ func handleTextUpload(
 
 		jsonResult, err := analysisService.HandleAnalysisJSON(ctx, payload)
 		if err == nil && jsonResult != "" {
-			renderAndSendReport(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, jsonResult, saver)
+			renderAndSendReport(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, jsonResult, appStorage, saver)
 			return
 		}
 	}

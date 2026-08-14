@@ -29,6 +29,7 @@ type router struct {
 	adminChatID      int64
 	agreementStorage *storage.AgreementStorage
 	paymentService   *payment.MockPaymentService
+	appStorage       *storage.Storage
 	monitorRepo      monitoring.HistorySaver
 	webAppURL        string
 	dashboardURL     string
@@ -44,6 +45,7 @@ func MessageRouter(
 	adminChatID int64,
 	agreementStorage *storage.AgreementStorage,
 	paymentService *payment.MockPaymentService,
+	appStorage *storage.Storage,
 	monitorRepo monitoring.HistorySaver,
 	webAppURL string,
 	dashboardURL string,
@@ -58,6 +60,7 @@ func MessageRouter(
 		adminChatID:      adminChatID,
 		agreementStorage: agreementStorage,
 		paymentService:   paymentService,
+		appStorage:       appStorage,
 		monitorRepo:      monitorRepo,
 		webAppURL:        webAppURL,
 		dashboardURL:     dashboardURL,
