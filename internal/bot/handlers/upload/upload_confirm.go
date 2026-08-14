@@ -17,6 +17,24 @@ import (
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
 
+// CancelUpload — отмена загрузки из inline-кнопки «Отмена»: очищает
+// накопленные файлы и возвращает в шаг ожидания файла.
+func CancelUpload(
+	ctx context.Context,
+	b *tgbot.Bot,
+	stateManager states.StateManager,
+	chatID int64,
+) {
+	stateManager.SetUserData(chatID, "uploaded_files", "")
+	stateManager.SetUserData(chatID, "file_count", "")
+	stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        locales.MsgUploadCancelled,
+		ReplyMarkup: keyboards.MainMenu(),
+	})
+}
+
 // handleUploadConfirm - обрабатывает подтверждение/отмену загрузки.
 func handleUploadConfirm(
 	ctx context.Context,

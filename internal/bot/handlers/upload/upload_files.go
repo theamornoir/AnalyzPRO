@@ -6,16 +6,28 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
-	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
+
+// uploadConfirmKeyboard — inline-кнопки подтверждения загрузки. Reply-
+// клавиатура при этом остаётся единой [Назад] (наследуется от предыдущего
+// шага анализа), поэтому действия «Обработать/Отмена» вынесены в inline.
+func uploadConfirmKeyboard() models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{{Text: locales.BtnProcessAnalysis, CallbackData: "upload_process"}},
+			{{Text: locales.BtnCancel, CallbackData: "upload_cancel"}},
+		},
+	}
+}
 
 // handleFileUpload - обрабатывает загрузку документа (PDF/изображение).
 func handleFileUpload(
@@ -60,14 +72,16 @@ func handleFileUpload(
 	messageText := fmt.Sprintf(locales.MsgUploadFileAdded,
 		safeFileName, len(uploadedFiles))
 
-	_, err = b.SendMessage(ctx, &tgbot.SendMessageParams{
+	msg, err := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        messageText,
-		ReplyMarkup: keyboards.UploadConfirm(),
+		ReplyMarkup: uploadConfirmKeyboard(),
 		ParseMode:   "HTML",
 	})
 	if err != nil {
 		log.Printf(locales.LogUploadConfirmDocErr, err)
+	} else if msg != nil {
+		stateManager.SetUserData(chatID, "last_msg_id", strconv.Itoa(msg.ID))
 	}
 
 	stateManager.SetState(chatID, states.StateWaitingUploadConfirm)
@@ -119,14 +133,16 @@ func handlePhotoUpload(
 	messageText := fmt.Sprintf(locales.MsgUploadPhotoAdded,
 		len(uploadedFiles), len(uploadedFiles))
 
-	_, err = b.SendMessage(ctx, &tgbot.SendMessageParams{
+	msg, err := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        messageText,
-		ReplyMarkup: keyboards.UploadConfirm(),
+		ReplyMarkup: uploadConfirmKeyboard(),
 		ParseMode:   "HTML",
 	})
 	if err != nil {
 		log.Printf(locales.LogUploadConfirmPhotoErr, err)
+	} else if msg != nil {
+		stateManager.SetUserData(chatID, "last_msg_id", strconv.Itoa(msg.ID))
 	}
 
 	stateManager.SetState(chatID, states.StateWaitingUploadConfirm)

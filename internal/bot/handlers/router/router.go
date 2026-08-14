@@ -8,9 +8,10 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
-	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/upload"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
@@ -213,40 +214,20 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		return
 	}
 
-	// Back callback
-	if callbackData == "back_main" {
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "back_main")
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgStartWelcome,
-			ReplyMarkup: keyboards.MainMenu(),
-			ParseMode:   "Markdown",
-		})
-		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
-			CallbackQueryID: update.CallbackQuery.ID,
-		})
-		return
-	}
+	// «Назад» из любого раздела/флоу (блок-хаб или сообщение под-действия
+	// вроде Сводки/Мониторинга). Удаляем само сообщение с inline-кнопкой, а
+	// дальше — иерархический возврат (на уровень выше: в хаб раздела, либо из
+	// хаба — в Главное меню). Поведение совпадает с reply-кнопкой «⬅️ Назад»
+	// (handleBack) — единый UX на всех этапах.
+	if callbackData == "hub_back" || callbackData == "msg_back" {
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, callbackData)
 
-	// «Назад» изнутри блока-хаба: удаляем сам блок и сбрасываем его id.
-	// Reply-клавиатура (главное меню) внизу экрана остаётся — пользователь
-	// возвращается в меню без лишних сообщений.
-	if callbackData == "hub_back" {
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "hub_back")
-		r.deleteHubBlock(ctx, b, chatID)
-		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
-			CallbackQueryID: update.CallbackQuery.ID,
-		})
-		return
-	}
-
-	// «Назад» из сообщения под-действия (например, Сводка/Мониторинг):
-	// удаляем именно это сообщение (его id не хранится как hub_message_id).
-	if callbackData == "msg_back" {
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "msg_back")
+		// Удаляем именно это сообщение (id сообщения под-действия).
 		if mm := update.CallbackQuery.Message; mm.Message != nil {
 			helpers.DeleteMessage(ctx, b, chatID, mm.Message.ID)
 		}
+		r.backToParent(ctx, b, chatID)
+
 		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
 			CallbackQueryID: update.CallbackQuery.ID,
 		})
@@ -291,7 +272,24 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_about")
 		// Выбрано под-действие — убираем блок-хаб.
 		r.deleteHubBlock(ctx, b, chatID)
+		r.setCurrentSection(chatID, "service")
 		menu.AboutHandler()(ctx, b, update)
+
+	// Подтверждение загрузки файлов (inline-кнопки «Обработать/Отмена»).
+	case "upload_process":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "upload_process")
+		upload.StartAnalysis(ctx, b, r.stateManager, r.analysisService, r.reportRenderer, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo)
+	case "upload_cancel":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "upload_cancel")
+		upload.CancelUpload(ctx, b, r.stateManager, chatID)
+
+	// Подтверждение/перезапуск Bioscan (inline-кнопки на экране фото).
+	case "bioscan_confirm":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "bioscan_confirm")
+		bioscan.ProcessBioscanWithPhotos(ctx, b, r.stateManager, r.analysisService, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo)
+	case "bioscan_restart":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "bioscan_restart")
+		bioscan.StartBioscanFlow(ctx, b, r.stateManager, chatID)
 	}
 
 	// Answer callback query

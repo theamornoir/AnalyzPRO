@@ -259,7 +259,7 @@ func (b *Bot) registerHandlers() {
 	)
 
 	// Callback-запросы (inline-кнопки: выбор тарифа premium_<id>,
-	// подтверждение оплаты premium_confirm_<id>, «Назад» back_main).
+	// подтверждение оплаты premium_confirm_<id>).
 	// Без этой регистрации router.handle() никогда не получал callback'и,
 	// поэтому клики по тарифам/оплате «ничего не делали».
 	b.client.RegisterHandler(

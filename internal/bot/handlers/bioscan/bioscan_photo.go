@@ -3,6 +3,7 @@ package bioscan
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -27,21 +28,21 @@ func HandleBioscanPhoto(ctx context.Context, b *tgbot.Bot, sm states.StateManage
 		sm.SetState(chatID, states.StateWaitingBioscanPhoto2)
 		sm.SetUserData(chatID, "bioscan_photo_count", "1")
 
-		sendPhotoPrompt(ctx, b, chatID, states.StateWaitingBioscanPhoto2)
+		sendPhotoPrompt(ctx, b, sm, chatID, states.StateWaitingBioscanPhoto2)
 
 	case states.StateWaitingBioscanPhoto2:
 		sm.SetUserData(chatID, "bioscan_photo2", photo.FileID)
 		sm.SetState(chatID, states.StateWaitingBioscanPhoto3)
 		sm.SetUserData(chatID, "bioscan_photo_count", "2")
 
-		sendPhotoPrompt(ctx, b, chatID, states.StateWaitingBioscanPhoto3)
+		sendPhotoPrompt(ctx, b, sm, chatID, states.StateWaitingBioscanPhoto3)
 
 	case states.StateWaitingBioscanPhoto3:
 		sm.SetUserData(chatID, "bioscan_photo3", photo.FileID)
 		sm.SetState(chatID, states.StateWaitingBioscanPhoto4)
 		sm.SetUserData(chatID, "bioscan_photo_count", "3")
 
-		sendPhotoPrompt(ctx, b, chatID, states.StateWaitingBioscanPhoto4)
+		sendPhotoPrompt(ctx, b, sm, chatID, states.StateWaitingBioscanPhoto4)
 
 	case states.StateWaitingBioscanPhoto4:
 		sm.SetUserData(chatID, "bioscan_photo4", photo.FileID)
@@ -54,23 +55,22 @@ func HandleBioscanPhoto(ctx context.Context, b *tgbot.Bot, sm states.StateManage
 		weight := sm.GetUserData(chatID, "bioscan_weight")
 		goal := sm.GetUserData(chatID, "bioscan_goal")
 
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		// Подтверждение — inline-кнопки, чтобы единая Reply-клавиатура
+		// [Назад] (установлена на предыдущем шаге) оставалась внизу.
+		msg, err := b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:    chatID,
 			Text:      fmt.Sprintf(locales.MsgBioscanAllPhotosReceived, name, age, height, weight, goal),
 			ParseMode: "Markdown",
-			ReplyMarkup: &models.ReplyKeyboardMarkup{
-				Keyboard: [][]models.KeyboardButton{
-					{
-						{Text: locales.MsgBioscanConfirmPhoto},
-					},
-					{
-						{Text: locales.MsgBioscanRestart},
-						{Text: locales.BtnBack},
-					},
+			ReplyMarkup: models.InlineKeyboardMarkup{
+				InlineKeyboard: [][]models.InlineKeyboardButton{
+					{{Text: locales.BtnBioscanConfirm, CallbackData: "bioscan_confirm"}},
+					{{Text: locales.BtnBioscanRestart, CallbackData: "bioscan_restart"}},
 				},
-				ResizeKeyboard: true,
 			},
 		})
+		if err == nil && msg != nil {
+			sm.SetUserData(chatID, "last_msg_id", strconv.Itoa(msg.ID))
+		}
 
 	default:
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
@@ -82,7 +82,7 @@ func HandleBioscanPhoto(ctx context.Context, b *tgbot.Bot, sm states.StateManage
 }
 
 // sendPhotoPrompt отправляет промпт для следующего фото.
-func sendPhotoPrompt(ctx context.Context, b *tgbot.Bot, chatID int64, nextState states.State) {
+func sendPhotoPrompt(ctx context.Context, b *tgbot.Bot, sm states.StateManager, chatID int64, nextState states.State) {
 	var prompt string
 
 	switch nextState {
@@ -96,10 +96,13 @@ func sendPhotoPrompt(ctx context.Context, b *tgbot.Bot, chatID int64, nextState 
 		prompt = locales.MsgBioscanDefaultPhotoPrompt
 	}
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+	msg, err := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        prompt,
 		ParseMode:   "Markdown",
 		ReplyMarkup: keyboards.BackMenu(),
 	})
+	if err == nil && msg != nil {
+		sm.SetUserData(chatID, "last_msg_id", strconv.Itoa(msg.ID))
+	}
 }

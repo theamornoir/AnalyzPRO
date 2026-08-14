@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	tgbot "github.com/go-telegram/bot"
@@ -14,6 +15,30 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/payment"
 )
+
+// Ключи user-data для экранов Premium (якорь с [Назад] и список тарифов).
+// Используются обработчиком «Назад» для полного удаления экрана Premium
+// при возврате в Главное меню.
+const (
+	premiumAnchorKey = "premium_anchor_id"
+	premiumMsgKey    = "premium_msg_id"
+)
+
+// sendPremiumAnchor — ставит внизу единую Reply-клавиатуру [Назад] перед
+// списком тарифов. Inline-кнопки тарифов несовместимы с Reply-клавиатурой в
+// одном сообщении, поэтому «якорем» служит отдельное короткое сообщение — оно
+// и держит [Назад] на всём протяжении раздела Premium.
+func sendPremiumAnchor(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64) {
+	msg, err := b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        "💎 **Premium**",
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
+	})
+	if err == nil && msg != nil {
+		stateManager.SetUserData(chatID, premiumAnchorKey, strconv.Itoa(msg.ID))
+	}
+}
 
 // PremiumHandler — обработчик кнопки Premium.
 //
@@ -41,18 +66,20 @@ func PremiumHandler(
 		// Если Premium уже активен — показываем текущий тариф и опцию смены.
 		if paymentService.IsUserPremium(chatID) {
 			log.Printf(locales.LogPremiumChangeTariff, chatID)
-			showPremiumCurrent(ctx, b, chatID, paymentService)
+			sendPremiumAnchor(ctx, b, stateManager, chatID)
+			showPremiumCurrent(ctx, b, stateManager, chatID, paymentService)
 			return
 		}
 
 		// Иначе — меню выбора тарифа (выбор → экран оплаты → подтверждение).
-		showPremiumMenu(ctx, b, chatID)
+		sendPremiumAnchor(ctx, b, stateManager, chatID)
+		showPremiumMenu(ctx, b, stateManager, chatID)
 	}
 }
 
 // showPremiumCurrent — экран активного Premium: показывает текущий тариф,
 // дату окончания и кнопку смены тарифа (premium_change).
-func showPremiumCurrent(ctx context.Context, b *tgbot.Bot, chatID int64, paymentService *payment.MockPaymentService) {
+func showPremiumCurrent(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64, paymentService *payment.MockPaymentService) {
 	tariffName := "—"
 	expiry := "—"
 	if info := paymentService.GetPremiumInfo(chatID); info != nil {
@@ -64,7 +91,7 @@ func showPremiumCurrent(ctx context.Context, b *tgbot.Bot, chatID int64, payment
 
 	text := fmt.Sprintf(locales.MsgPremiumCurrent, tariffName, expiry)
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID: chatID,
 		Text:   text,
 		ReplyMarkup: models.InlineKeyboardMarkup{
@@ -72,13 +99,13 @@ func showPremiumCurrent(ctx context.Context, b *tgbot.Bot, chatID int64, payment
 				{
 					{Text: locales.BtnPremiumChange, CallbackData: "premium_change"},
 				},
-				{
-					{Text: locales.BtnBack, CallbackData: "back_main"},
-				},
 			},
 		},
 		ParseMode: "Markdown",
 	})
+	if msg != nil {
+		stateManager.SetUserData(chatID, premiumMsgKey, strconv.Itoa(msg.ID))
+	}
 }
 
 // HandleChangeTariff — обработка кнопки «🔄 Сменить тариф» у активного
@@ -101,13 +128,14 @@ func HandleChangeTariff(
 		})
 
 		// Показываем то же меню выбора тарифа, что и при первой покупке.
-		showPremiumMenu(ctx, b, chatID)
+		sendPremiumAnchor(ctx, b, stateManager, chatID)
+		showPremiumMenu(ctx, b, stateManager, chatID)
 		return true
 	}
 }
 
 // showPremiumMenu — показывает меню выбора тарифа.
-func showPremiumMenu(ctx context.Context, b *tgbot.Bot, chatID int64) {
+func showPremiumMenu(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64) {
 	var lines []string
 	lines = append(lines, "💎 **Выберите тариф Premium:**")
 	lines = append(lines, "")
@@ -121,12 +149,15 @@ func showPremiumMenu(ctx context.Context, b *tgbot.Bot, chatID int64) {
 
 	lines = append(lines, "Выберите тариф кнопкой ниже:")
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        strings.Join(lines, "\n"),
 		ReplyMarkup: buildTariffKeyboard(),
 		ParseMode:   "Markdown",
 	})
+	if msg != nil {
+		stateManager.SetUserData(chatID, premiumMsgKey, strconv.Itoa(msg.ID))
+	}
 }
 
 // buildTariffKeyboard — создаёт inline-клавиатуру с тарифами.
@@ -141,13 +172,6 @@ func buildTariffKeyboard() models.InlineKeyboardMarkup {
 			},
 		})
 	}
-
-	buttons = append(buttons, []models.InlineKeyboardButton{
-		{
-			Text:         "⬅️ Назад",
-			CallbackData: "back_main",
-		},
-	})
 
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: buttons,

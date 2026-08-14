@@ -54,6 +54,7 @@ func (r *router) handleMenuButtons(ctx context.Context, b *tgbot.Bot, chatID int
 
 	case locales.BtnPremium:
 		log.Printf(locales.LogRouterMenuPremium, chatID)
+		r.setCurrentSection(chatID, "premium")
 		menu.PremiumHandler(r.stateManager, r.paymentService)(ctx, b, update)
 		return true
 

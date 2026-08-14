@@ -11,7 +11,6 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/bot/botutil"
-	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
@@ -44,6 +43,17 @@ func WithWebAppVersion(u string) string {
 // отдельными сообщениями.
 const hubMessageKey = "hub_message_id"
 
+// hubAnchorKey — ключ в user-data для message_id «якорного» сообщения раздела.
+// Оно несёт внизу единую Reply-клавиатуру [Назад] (висит на всём протяжении
+// раздела). Telegram не позволяет совместить inline-кнопки действий и эту
+// Reply-клавиатуру в одном сообщении, поэтому «якорь» и блок — два сообщения.
+const hubAnchorKey = "hub_anchor_id"
+
+// lastMsgKey — ключ в user-data для message_id последнего «шагового»
+// сообщения раздела/флоу. Используется обработчиком «Назад», чтобы удалить
+// именно текущее сообщение раздела перед возвратом в главное меню.
+const lastMsgKey = "last_msg_id"
+
 // hubSection описывает содержимое одного раздела-хаба.
 type hubSection struct {
 	text    string
@@ -59,16 +69,17 @@ func hubSections() map[string]hubSection {
 	}
 }
 
-// renderHub — показывает/переключает «блок-хаб» раздела. Если у пользователя
-// уже открыт блок-хаб (сохранён hub_message_id), раздел перерисовывается прямо
-// в нём (editMessage на месте), иначе отправляется новое сообщение. Результаты
-// под-действий (анализ, консультация и т.п.) приходят отдельными сообщениями.
+// renderHub — показывает/переключает «блок-хаб» раздела ДВУМЯ сообщениями:
+//  1. «якорь» — описание раздела + единая Reply-клавиатура [Назад] внизу;
+//  2. «блок» — инлайн-кнопки под-действий раздела + подсказка
+//     «👇 Выберите действие:». Telegram не позволяет совместить инлайн-кнопки
+//     действий и Reply-клавиатуру [Назад] в одном сообщении, поэтому хаб —
+//     два сообщения.
 //
-// Внутри блока НЕТ верхних вкладок разделов (Анализы/Здоровье/Сервис) — они
-// дублировали бы reply-клавиатуру внизу экрана и сбивали с толку (казалось,
-// будто разделов «аж 6»). Переключение между разделами идёт через reply-меню
-// внизу; внутри блока — только под-действия раздела и кнопка «⬅️ Назад»
-// (hub_back), которая удаляет блок и возвращает в главное меню.
+// Если у пользователя уже открыты оба сообщения хаба (сохранены hub_anchor_id
+// и hub_message_id), раздел перерисовывается прямо в них (editMessage на
+// месте), иначе отправляются новые. Результаты под-действий (анализ,
+// консультация и т.п.) приходят отдельными сообщениями.
 func (r *router) renderHub(ctx context.Context, b *tgbot.Bot, chatID int64, section string) bool {
 	sections := hubSections()
 	sec, ok := sections[section]
@@ -77,67 +88,94 @@ func (r *router) renderHub(ctx context.Context, b *tgbot.Bot, chatID int64, sect
 		sec = sections[section]
 	}
 
-	// Под-действия раздела + кнопка «⬅️ Назад» внизу (удаляет блок).
-	kb := models.InlineKeyboardMarkup{
-		InlineKeyboard: append(
-			sec.actions.InlineKeyboard,
-			[]models.InlineKeyboardButton{{Text: locales.BtnBack, CallbackData: "hub_back"}},
-		),
-	}
+	// Запоминаем текущий раздел для иерархического «Назад» (подшаг -> хаб).
+	r.setCurrentSection(chatID, section)
 
+	anchorID := r.hubAnchorID(chatID)
 	msgID := r.hubMessageID(chatID)
-	if msgID > 0 && r.editHubMessage(ctx, b, chatID, msgID, sec.text, kb) {
+
+	// Оба сообщения на месте — перерисовываем на месте (edit), чтобы не
+	// плодить новые сообщения при переключении разделов.
+	if anchorID > 0 && msgID > 0 && r.editHubPair(ctx, b, chatID, anchorID, msgID, sec) {
 		return true
 	}
 
-	// Новый блок (или старый недоступен для редактирования — отправляем заново).
-	newID, err := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
+	// Не удалось отредактировать (сообщения удалены пользователем и т.п.) —
+	// чистим остатки и отправляем хаб заново.
+	r.deleteHubBlock(ctx, b, chatID)
+
+	// 1) Якорь: описание раздела + единая Reply-клавиатура [Назад].
+	newAnchorID, anchorErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        sec.text,
-		ReplyMarkup: kb,
+		ReplyMarkup: keyboards.BackMenu(),
 		ParseMode:   "Markdown",
 	})
-	if err == nil && newID > 0 {
-		r.setHubMessageID(chatID, newID)
+	// 2) Блок: под-действия раздела + подсказка «👇 Выберите действие:».
+	newMsgID, blockErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        "👇 Выберите действие:",
+		ReplyMarkup: sec.actions,
+	})
+	if anchorErr == nil && newAnchorID > 0 {
+		r.setHubAnchorID(chatID, newAnchorID)
+	}
+	if blockErr == nil && newMsgID > 0 {
+		r.setHubMessageID(chatID, newMsgID)
+		r.setLastMsg(chatID, newMsgID)
 	}
 	return true
 }
 
-// editHubMessage пытается перерисовать существующий блок-хаб на месте.
-// Возвращает true, если редактирование удалось (в т.ч. при «not modified»).
-func (r *router) editHubMessage(ctx context.Context, b *tgbot.Bot, chatID int64, msgID int, text string, kb models.InlineKeyboardMarkup) bool {
-	_, err := b.EditMessageText(ctx, &tgbot.EditMessageTextParams{
-		ChatID:      chatID,
-		MessageID:   msgID,
-		Text:        text,
-		ParseMode:   "Markdown",
-		ReplyMarkup: kb,
+// editHubPair пытается перерисовать существующий хаб на месте: якорь
+// (описание раздела) и блок (подсказка + инлайн-кнопки действий). Возвращает
+// true, если редактирование удалось (в т.ч. при «message is not modified»).
+func (r *router) editHubPair(ctx context.Context, b *tgbot.Bot, chatID int64, anchorID, msgID int, sec hubSection) bool {
+	// Якорь: описание раздела.
+	_, aErr := b.EditMessageText(ctx, &tgbot.EditMessageTextParams{
+		ChatID:    chatID,
+		MessageID: anchorID,
+		Text:      sec.text,
+		ParseMode: "Markdown",
 	})
-	if err != nil {
-		// Сообщение удалено пользователем или недоступно — caller отправит
-		// новое. Игнорируем «message is not modified» (повторное переключение
-		// на ту же вкладку) — блок и так на месте.
-		if strings.Contains(err.Error(), "message is not modified") {
-			return true
-		}
-		log.Printf("[HUB] не удалось отредактировать блок msgID=%d chatID=%d: %v", msgID, chatID, err)
+	if aErr != nil && !strings.Contains(aErr.Error(), "message is not modified") {
+		log.Printf("[HUB] не удалось отредактировать якорь msgID=%d chatID=%d: %v", anchorID, chatID, aErr)
 		return false
 	}
-	log.Printf("[HUB] блок переключён на вкладку (msgID=%d chatID=%d)", msgID, chatID)
+	// Блок: подсказка + инлайн-кнопки действий.
+	_, bErr := b.EditMessageText(ctx, &tgbot.EditMessageTextParams{
+		ChatID:      chatID,
+		MessageID:   msgID,
+		Text:        "👇 Выберите действие:",
+		ReplyMarkup: sec.actions,
+	})
+	if bErr != nil && !strings.Contains(bErr.Error(), "message is not modified") {
+		log.Printf("[HUB] не удалось отредактировать блок msgID=%d chatID=%d: %v", msgID, chatID, bErr)
+		return false
+	}
+	log.Printf("[HUB] блок переключён на вкладку (anchor=%d block=%d chatID=%d)", anchorID, msgID, chatID)
 	return true
 }
 
 // deleteHubBlock — удаляет текущий «блок-хаб» (раздел Анализы/Здоровье/
-// Сервис) из чата и сбрасывает сохранённый hub_message_id. Используется,
-// когда пользователь выбирает под-действие (анализ/консультация и т.п.) или
-// нажимает «Назад» из раздела: в чате не должно висеть устаревшее меню
-// раздела (иначе — «куча непонятно чего»). Безопасно, если блока нет.
+// Сервис) из чата вместе с «якорем» (Reply-клавиатура [Назад]) и сбрасывает
+// сохранённые id. Используется, когда пользователь выбирает под-действие
+// (анализ/консультация и т.п.) или нажимает «Назад» из раздела: в чате не
+// должно висеть устаревшее меню раздела (иначе — «куча непонятно чего»).
+// Безопасно, если блока/якоря нет.
 func (r *router) deleteHubBlock(ctx context.Context, b *tgbot.Bot, chatID int64) {
 	msgID := r.hubMessageID(chatID)
+	anchorID := r.hubAnchorID(chatID)
 	if msgID > 0 {
 		helpers.DeleteMessage(ctx, b, chatID, msgID)
-		log.Printf("[HUB] блок удалён (msgID=%d chatID=%d)", msgID, chatID)
 	}
+	if anchorID > 0 {
+		helpers.DeleteMessage(ctx, b, chatID, anchorID)
+	}
+	if msgID > 0 || anchorID > 0 {
+		log.Printf("[HUB] блок удалён (msgID=%d anchorID=%d chatID=%d)", msgID, anchorID, chatID)
+	}
+	r.setHubAnchorID(chatID, 0)
 	r.setHubMessageID(chatID, 0)
 }
 
@@ -152,6 +190,34 @@ func (r *router) hubMessageID(chatID int64) int {
 
 func (r *router) setHubMessageID(chatID int64, msgID int) {
 	r.stateManager.SetUserData(chatID, hubMessageKey, strconv.Itoa(msgID))
+}
+
+// hubAnchorID / setHubAnchorID — чтение/запись message_id «якоря» раздела
+// (сообщение с Reply-клавиатурой [Назад]).
+func (r *router) hubAnchorID(chatID int64) int {
+	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, hubAnchorKey))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
+
+func (r *router) setHubAnchorID(chatID int64, msgID int) {
+	r.stateManager.SetUserData(chatID, hubAnchorKey, strconv.Itoa(msgID))
+}
+
+// lastMsgID / setLastMsg — чтение/запись message_id последнего «шагового»
+// сообщения раздела/флоу (для удаления при нажатии «Назад»).
+func (r *router) lastMsgID(chatID int64) int {
+	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, lastMsgKey))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
+
+func (r *router) setLastMsg(chatID int64, msgID int) {
+	r.stateManager.SetUserData(chatID, lastMsgKey, strconv.Itoa(msgID))
 }
 
 // handleFeedbackStart - запускает режим ввода отзыва/предложения: описывает
@@ -173,13 +239,18 @@ func (r *router) handleFeedbackStart(ctx context.Context, b *tgbot.Bot, chatID i
 	}
 
 	r.stateManager.SetState(chatID, states.StateWaitingFeedback)
+	r.setCurrentSection(chatID, "service")
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+	// Единая Reply-клавиатура [Назад] внизу на всём протяжении ввода отзыва.
+	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgFeedbackIntro,
-		ReplyMarkup: keyboards.FeedbackMenu(),
+		ReplyMarkup: keyboards.BackMenu(),
 		ParseMode:   "Markdown",
 	})
+	if msg != nil {
+		r.setLastMsg(chatID, msg.ID)
+	}
 	return true
 }
 
@@ -190,15 +261,10 @@ func (r *router) handleFeedbackStart(ctx context.Context, b *tgbot.Bot, chatID i
 func (r *router) handleFeedbackMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string, update *models.Update) bool {
 	log.Printf("[FEEDBACK] ввод сообщения от chatID=%d", chatID)
 
-	// Отмена / возврат из режима ввода отзыва.
+	// Отмена / возврат — на уровень выше (хаб Сервис), а не в главное меню.
 	if text == locales.BtnCancel || text == locales.BtnBack {
 		log.Printf("[FEEDBACK] отмена ввода chatID=%d", chatID)
-		r.stateManager.SetState(chatID, states.StateIdle)
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgFeedbackCancelled,
-			ReplyMarkup: keyboards.MainMenu(),
-		})
+		r.backToParent(ctx, b, chatID)
 		return true
 	}
 
@@ -283,17 +349,22 @@ func (r *router) handleRegularAnalysis(ctx context.Context, b *tgbot.Bot, chatID
 	r.stateManager.SetUserData(chatID, "analysis_type", "regular")
 	r.stateManager.SetUserData(chatID, "analysis_subtype", "regular")
 	r.stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
+	r.setCurrentSection(chatID, "analysis")
 
 	// Выбрано под-действие — убираем блок-хаб, чтобы в чате не висело меню
 	// раздела поверх начатого анализа.
 	r.deleteHubBlock(ctx, b, chatID)
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+	// Единая Reply-клавиатура [Назад] внизу на всём протяжении анализа.
+	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgRegularAnalysisIntro,
-		ReplyMarkup: keyboards.ProcessAnalysisMenu(),
+		ReplyMarkup: keyboards.BackMenu(),
 		ParseMode:   "Markdown",
 	})
+	if msg != nil {
+		r.setLastMsg(chatID, msg.ID)
+	}
 	return true
 }
 
@@ -313,16 +384,21 @@ func (r *router) handleExtendedAnalysis(ctx context.Context, b *tgbot.Bot, chatI
 	r.stateManager.SetUserData(chatID, "analysis_subtype", "extended")
 
 	r.stateManager.SetState(chatID, states.StateWaitingName)
+	r.setCurrentSection(chatID, "analysis")
 
 	// Выбрано под-действие — убираем блок-хаб.
 	r.deleteHubBlock(ctx, b, chatID)
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+	// Единая Reply-клавиатура [Назад] внизу на всём протяжении опросника.
+	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgExtendedAnalysisIntro,
 		ReplyMarkup: keyboards.BackMenu(),
 		ParseMode:   "Markdown",
 	})
+	if msg != nil {
+		r.setLastMsg(chatID, msg.ID)
+	}
 	return true
 }
 
@@ -353,27 +429,18 @@ func (r *router) handleBioscanStart(ctx context.Context, b *tgbot.Bot, chatID in
 	// Принудительно устанавливаем состояние
 	r.stateManager.SetState(chatID, states.StateWaitingBioscanName)
 	log.Printf(locales.LogRouterForceBioscan, chatID)
+	r.setCurrentSection(chatID, "analysis")
 
-	// Проверяем, что состояние установилось
-	if r.stateManager.GetState(chatID) != states.StateWaitingBioscanName {
-		log.Printf(locales.LogRouterSetStateFail, r.stateManager.GetState(chatID))
-	}
-
-	// Сбрасываем данные bioscan
-	bioscan.ResetBioscanData(r.stateManager, chatID)
-	r.stateManager.SetUserData(chatID, "analysis_type", "")
-
-	// Выбрано под-действие — убираем блок-хаб.
-	r.deleteHubBlock(ctx, b, chatID)
-
-	log.Printf(locales.LogRouterBioscanLaunch, chatID)
-
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+	// Единая Reply-клавиатура [Назад] внизу на всём протяжении Bioscan.
+	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgBioscanIntro,
 		ParseMode:   "Markdown",
 		ReplyMarkup: keyboards.BackMenu(),
 	})
+	if msg != nil {
+		r.setLastMsg(chatID, msg.ID)
+	}
 	return true
 }
 
@@ -384,6 +451,7 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 	// Выбрано под-действие — убираем блок-хаб, чтобы в чате не висело меню
 	// раздела поверх открытого дашборда.
 	r.deleteHubBlock(ctx, b, chatID)
+	r.setCurrentSection(chatID, "health")
 
 	isPremium := r.paymentService.IsUserPremium(chatID)
 	log.Printf(locales.LogDashboardPremiumCheck, chatID, isPremium)
@@ -452,6 +520,7 @@ func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int6
 
 	// Выбрано под-действие — убираем блок-хаб.
 	r.deleteHubBlock(ctx, b, chatID)
+	r.setCurrentSection(chatID, "health")
 
 	isPremium := r.paymentService.IsUserPremium(chatID)
 	if !isPremium {
@@ -585,12 +654,18 @@ func (r *router) handleConsultationStart(ctx context.Context, b *tgbot.Bot, chat
 	}
 
 	r.stateManager.SetState(chatID, states.StateWaitingConsultation)
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+	r.setCurrentSection(chatID, "health")
+
+	// Единая Reply-клавиатура [Назад] внизу на всём протяжении консультации.
+	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgConsultationStart,
-		ReplyMarkup: keyboards.FeedbackMenu(),
+		ReplyMarkup: keyboards.BackMenu(),
 		ParseMode:   "Markdown",
 	})
+	if msg != nil {
+		r.setLastMsg(chatID, msg.ID)
+	}
 	return true
 }
 
@@ -601,15 +676,10 @@ func (r *router) handleConsultationStart(ctx context.Context, b *tgbot.Bot, chat
 func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string, update *models.Update) bool {
 	log.Printf("[CONSULT] ввод сообщения от chatID=%d", chatID)
 
-	// Отмена / возврат из режима консультации.
+	// Отмена / возврат — на уровень выше (хаб Здоровье), а не в главное меню.
 	if text == locales.BtnCancel || text == locales.BtnBack {
 		log.Printf("[CONSULT] отмена chatID=%d", chatID)
-		r.stateManager.SetState(chatID, states.StateIdle)
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgConsultationCancelled,
-			ReplyMarkup: keyboards.MainMenu(),
-		})
+		r.backToParent(ctx, b, chatID)
 		return true
 	}
 
@@ -621,7 +691,7 @@ func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, ch
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgConsultationEmpty,
-			ReplyMarkup: keyboards.FeedbackMenu(),
+			ReplyMarkup: keyboards.BackMenu(),
 		})
 		return true
 	}

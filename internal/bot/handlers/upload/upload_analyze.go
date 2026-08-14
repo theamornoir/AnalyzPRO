@@ -16,6 +16,23 @@ import (
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
 
+// StartAnalysis - экспортируемая обёртка startAnalysis для вызова из
+// inline-кнопки «Обработать анализы» (router).
+func StartAnalysis(
+	ctx context.Context,
+	b *tgbot.Bot,
+	stateManager states.StateManager,
+	analysisService service.AnalysisService,
+	reportRenderer *report.Renderer,
+	uploadDir string,
+	stickerID string,
+	chatID int64,
+	appStorage *storage.Storage,
+	saver monitoring.HistorySaver,
+) {
+	startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, uploadDir, stickerID, chatID, appStorage, saver)
+}
+
 // startAnalysis - запускает анализ всех накопленных файлов.
 // saver сохраняет результат в историю (для Мониторинга).
 // appStorage персистит результат как Diagnosis.
