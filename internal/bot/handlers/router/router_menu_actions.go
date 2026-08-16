@@ -114,7 +114,7 @@ func (r *router) renderHub(ctx context.Context, b *tgbot.Bot, chatID int64, sect
 	// 2) Блок: под-действия раздела + подсказка «👇 Выберите действие:».
 	newMsgID, blockErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
 		ChatID:      chatID,
-		Text:        "👇 Выберите действие:",
+		Text:        "Выберите действие:",
 		ReplyMarkup: sec.actions,
 	})
 	if anchorErr == nil && newAnchorID > 0 {
@@ -146,7 +146,7 @@ func (r *router) editHubPair(ctx context.Context, b *tgbot.Bot, chatID int64, an
 	_, bErr := b.EditMessageText(ctx, &tgbot.EditMessageTextParams{
 		ChatID:      chatID,
 		MessageID:   msgID,
-		Text:        "👇 Выберите действие:",
+		Text:        "Выберите действие:",
 		ReplyMarkup: sec.actions,
 	})
 	if bErr != nil && !strings.Contains(bErr.Error(), "message is not modified") {
