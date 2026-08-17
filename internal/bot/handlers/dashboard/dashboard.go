@@ -90,7 +90,6 @@ type MetricItem struct {
 type Handler struct {
 	pay            *payment.MockPaymentService
 	botToken       string
-	botUsername    string
 	repo           monitoring.Repository
 	reportRenderer *report.Renderer
 	pdfConverter   pdfservice.Converter
@@ -98,19 +97,8 @@ type Handler struct {
 
 // NewHandler создаёт обработчик дашборда. reportRenderer/pdfConverter нужны,
 // чтобы по запросу отдавать сохранённые отчёты как PDF (/api/reports/file).
-// botUsername - имя бота в Telegram, чтобы Mini App мог вести пользователя
-// в раздел Premium через t.me-ссылку (openTelegramLink).
-func NewHandler(pay *payment.MockPaymentService, botToken string, repo monitoring.Repository, reportRenderer *report.Renderer, pdfConverter pdfservice.Converter, botUsername string) *Handler {
-	return &Handler{pay: pay, botToken: botToken, botUsername: botUsername, repo: repo, reportRenderer: reportRenderer, pdfConverter: pdfConverter}
-}
-
-// Config - лёгкий публичный эндпоинт: отдаёт имя бота, чтобы Mini App мог
-// закрыть себя и перевести пользователя в раздел оформления Premium через
-// t.me-ссылку (openTelegramLink). initData не требуется - имя бота публично.
-func (h *Handler) Config(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-	_ = json.NewEncoder(w).Encode(map[string]string{"botUsername": h.botUsername})
+func NewHandler(pay *payment.MockPaymentService, botToken string, repo monitoring.Repository, reportRenderer *report.Renderer, pdfConverter pdfservice.Converter) *Handler {
+	return &Handler{pay: pay, botToken: botToken, repo: repo, reportRenderer: reportRenderer, pdfConverter: pdfConverter}
 }
 
 // ServeWebApp отдаёт статический веб-дашборд из embed-файлов.
@@ -799,27 +787,46 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64) MetricsRes
 		return resp
 	}
 
-	// История отсортирована по убыванию даты (свежие сверху).
-	latest := entries[0]
-	resp.AnalysisDate = latest.Date.Format("2006-01-02")
+	// Дата «Последний анализ» и показатели крови/питания/активности берём
+	// ТОЛЬКО из реального анализа (тип "analysis"), а не из любой записи
+	// истории (профиль/биоскан). Иначе после заполнения профиля в шапке
+	// висит дата профиля, выдаваемая за «последний анализ», который
+	// пользователь не загружал. Если анализа нет - дата пустая (фронт
+	// покажет «Нет загруженных анализов»), а показатели - «-».
+	analysisEntries, _, _ := h.repo.ListHistory(ctx, telegramID, "analysis", 1, 1)
+	var report reportData
+	if len(analysisEntries) > 0 {
+		resp.AnalysisDate = analysisEntries[0].Date.Format("2006-01-02")
+		report = parseReport(analysisEntries[0].JsonData)
+		resp.UserName = report.Name
+		resp.UserAge = report.Age
 
-	// Извлекаем профиль/показатели из последнего анализа (если есть JSON).
-	report := parseReport(latest.JsonData)
-	resp.UserName = report.Name
-	resp.UserAge = report.Age
+		// Показатели крови - из последнего анализа.
+		resp.Blood.Hemoglobin = intOrZero(report.findIndicator("гемоглобин", "hemoglobin"))
+		resp.Blood.Leukocytes = report.findIndicator("лейкоцит", "leukocyte", "wbc")
+		resp.Blood.Platelets = intOrZero(report.findIndicator("тромбоцит", "platelet"))
 
-	// Показатели крови - из последнего анализа.
-	resp.Blood.Hemoglobin = intOrZero(report.findIndicator("гемоглобин", "hemoglobin"))
-	resp.Blood.Leukocytes = report.findIndicator("лейкоцит", "leukocyte", "wbc")
-	resp.Blood.Platelets = intOrZero(report.findIndicator("тромбоцит", "platelet"))
+		// Питание/активность - из последнего анализа при наличии.
+		resp.Nutrition.Protein = intOrZero(report.findIndicator("белок", "protein"))
+		resp.Nutrition.Carbs = intOrZero(report.findIndicator("углевод", "carb"))
+		resp.Nutrition.Fat = intOrZero(report.findIndicator("жир", "fat"))
+		resp.Activity.Steps = intOrZero(report.findIndicator("шаг", "step"))
+		resp.Activity.Calories = intOrZero(report.findIndicator("калор", "calorie"))
+		resp.Activity.Water = report.findIndicator("вода", "water")
+	}
 
-	// Питание/активность - из последнего анализа при наличии.
-	resp.Nutrition.Protein = intOrZero(report.findIndicator("белок", "protein"))
-	resp.Nutrition.Carbs = intOrZero(report.findIndicator("углевод", "carb"))
-	resp.Nutrition.Fat = intOrZero(report.findIndicator("жир", "fat"))
-	resp.Activity.Steps = intOrZero(report.findIndicator("шаг", "step"))
-	resp.Activity.Calories = intOrZero(report.findIndicator("калор", "calorie"))
-	resp.Activity.Water = report.findIndicator("вода", "water")
+	// Имя/возраст: из анализа, если он есть, иначе из последней записи
+	// истории (профиля) - чтобы шапка сводки показывала пользователя ещё
+	// до загрузки первого анализа. Сама «дата последнего анализа» при этом
+	// берётся выше ТОЛЬКО из анализа (см. analysisEntries), поэтому дата
+	// профиля не выдаётся за дату анализа.
+	profileReport := parseReport(entries[0].JsonData)
+	if resp.UserName == "" {
+		resp.UserName = profileReport.Name
+	}
+	if resp.UserAge == 0 {
+		resp.UserAge = profileReport.Age
+	}
 
 	// Рекомендации - из последнего анализа, иначе дефолтные.
 	if len(report.Recommendations) > 0 {

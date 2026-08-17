@@ -16,7 +16,7 @@ import (
 
 func StartHandler(
 	stateManager states.StateManager,
-	agreementStorage *storage.AgreementStorage, // <-- ДОБАВЛЕНО
+	agreementStorage *storage.AgreementStorage,
 	appStorage *storage.Storage,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update) {

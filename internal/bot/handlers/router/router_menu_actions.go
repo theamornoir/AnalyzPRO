@@ -23,7 +23,7 @@ import (
 // чтобы Telegram WebView перезапросил свежие файлы (иначе отдаёт
 // закэшированную старую версию - отсюда «пустой/старый» дашборд после правок).
 // Должна совпадать с ?v= в ссылках на активы в webapp_files/index.html.
-const WebAppAssetsVersion = "v16"
+const WebAppAssetsVersion = "v21"
 
 // WithWebAppVersion добавляет ?v=<version> к URL Mini App, сбрасывая кэш
 // Telegram WebView при обновлении активов. Пустой URL не трогает.
