@@ -310,5 +310,29 @@ func (r *FileRepository) GetHistoryEntry(ctx context.Context, id int64) (*Histor
 	return &cp, nil
 }
 
+// DeleteHistoryEntry - удаляет запись истории по ID и отвязывает её от
+// всех проектов мониторинга (если была привязана).
+func (r *FileRepository) DeleteHistoryEntry(ctx context.Context, id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.data.Histories[id]; !ok {
+		return fmt.Errorf("history entry not found")
+	}
+	delete(r.data.Histories, id)
+	// Отвязываем запись от всех проектов.
+	for _, p := range r.data.Projects {
+		filtered := p.EntryIDs[:0]
+		for _, e := range p.EntryIDs {
+			if e != id {
+				filtered = append(filtered, e)
+			}
+		}
+		p.EntryIDs = filtered
+	}
+	r.save()
+	return nil
+}
+
 // compile-time проверка, что FileRepository реализует Repository.
 var _ Repository = (*FileRepository)(nil)

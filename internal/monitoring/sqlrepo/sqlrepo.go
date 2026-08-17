@@ -304,5 +304,24 @@ func (r *repo) GetHistoryEntry(ctx context.Context, id int64) (*monitoring.Histo
 	return &cp, nil
 }
 
+// DeleteHistoryEntry - удаляет запись истории по ID. Сначала отвязываем
+// запись от проектов (monitoring_project_entries), затем удаляем саму
+// запись из monitoring_history. Возвращает ошибку, если записи нет.
+func (r *repo) DeleteHistoryEntry(ctx context.Context, id int64) error {
+	if _, err := r.db.ExecContext(ctx,
+		`DELETE FROM monitoring_project_entries WHERE entry_id = ?`, id); err != nil {
+		return fmt.Errorf("отвязка от проектов: %w", err)
+	}
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM monitoring_history WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("удаление записи: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("history entry not found")
+	}
+	return nil
+}
+
 // compile-time проверка, что repo реализует Repository.
 var _ monitoring.Repository = (*repo)(nil)

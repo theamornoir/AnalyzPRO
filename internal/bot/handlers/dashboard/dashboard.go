@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -102,6 +103,15 @@ func NewHandler(pay *payment.MockPaymentService, botToken string, repo monitorin
 	return &Handler{pay: pay, botToken: botToken, repo: repo, reportRenderer: reportRenderer, pdfConverter: pdfConverter}
 }
 
+// assetVersionedRe - версионированные имена статических активов:
+// app.<версия>.js / style.<версия>.css. Telegram WebView агрессивно
+// кэширует JS/CSS ПО ПУТИ файла и часто игнорирует query-параметр (?v=),
+// поэтому версия в пути - единственный надёжный способ сбросить кэш:
+// при смене версии меняется сам URL, и старый закэшированный файл
+// Telegram отдать не может. Любая версия резолвится в актуальный
+// встроенный файл (на случай закэшированного старого index.html).
+var assetVersionedRe = regexp.MustCompile(`^(app|style)\.[^.]+\.(js|css)$`)
+
 // ServeWebApp отдаёт статический веб-дашборд из embed-файлов.
 // Премиум-проверка здесь НЕ нужна: сама страница не содержит данных,
 // данные грузит /api/metrics (который и требует Premium).
@@ -124,6 +134,16 @@ func (h *Handler) ServeWebApp(w http.ResponseWriter, r *http.Request) {
 	// Отрезаем query (?v=...) - файл ищем по чистому имени.
 	if i := strings.IndexByte(filePath, '?'); i >= 0 {
 		filePath = filePath[:i]
+	}
+
+	// Версионирование ПУТИ к статике (надёжнее query-параметра ?v=, который
+	// Telegram WebView нередко игнорирует при кэшировании по пути файла).
+	// Любой app.<версия>.js / style.<версия>.css отдаёт актуальный
+	// встроенный файл, поэтому при смене версии меняется САМ URL - Telegram
+	// не может отдать закэшированную старую копию. Старые версии тоже
+	// резолвятся (на случай закэшированного старого index.html).
+	if m := assetVersionedRe.FindStringSubmatch(filePath); m != nil {
+		filePath = m[1] + "." + m[2] // app.js / style.css
 	}
 
 	switch filePath {
@@ -422,6 +442,67 @@ func (h *Handler) ReportFile(w http.ResponseWriter, r *http.Request) {
 	w.Write(pdfBytes)
 }
 
+// DeleteEntry - обработчик DELETE /api/reports/delete. Удаляет запись
+// истории (анализ/биоскан/профиль) по ID - чтобы пользователь мог
+// удалять свои данные прямо из «Сводки здоровья». Доступ по подписи
+// initData (проверка подлинности Telegram) + проверке владения записью.
+// ПРЕМИУМ-ГЕЙТ НЕ ПРИМЕНЯЕТСЯ: пользователь удаляет свои собственные
+// данные, это должно работать на любом тарифе.
+func (h *Handler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+
+	// Демо-режим: синтетические отчёты не привязаны к БД, удалять нечего.
+	if r.URL.Query().Get("demo") == "1" {
+		http.Error(w, "demo mode: nothing to delete", http.StatusBadRequest)
+		return
+	}
+
+	initData := r.URL.Query().Get("initData")
+	if initData == "" {
+		initData = r.Header.Get("X-Telegram-Init-Data")
+	}
+	telegramID, ok := monitoring.ValidateInitData(initData, h.botToken)
+	if !ok || telegramID == 0 {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	entryID, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	if err != nil || entryID <= 0 {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+
+	entry, err := h.repo.GetHistoryEntry(r.Context(), entryID)
+	if err != nil || entry == nil {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not found"})
+		return
+	}
+	// Защита: запись принадлежит этому пользователю.
+	if entry.TelegramID != telegramID {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
+		return
+	}
+
+	if err := h.repo.DeleteHistoryEntry(r.Context(), entryID); err != nil {
+		log.Printf("[DASHBOARD] не удалось удалить запись id=%d user=%d: %v", entryID, telegramID, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal"})
+		return
+	}
+	log.Printf("[DASHBOARD] удалена запись id=%d user=%d type=%s", entryID, telegramID, entry.Type)
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
 // reportHTML возвращает print-ready HTML сохранённого отчёта: если есть
 // готовый ReportHTML - берёт его, иначе перерендеривает из JsonData через
 // report.Renderer (в зависимости от типа записи).
@@ -568,9 +649,9 @@ func (h *Handler) buildDemoReports() ReportsResponse {
 		ScoreLabel: "Индекс здоровья",
 		Scores:     map[string]int{"Композиция": 74, "Мышцы": 80, "Баланс": 70, "Потенциал": 85},
 		Indicators: []IndicatorView{
-			{Name: "Гемоглобин", Value: "152 г/л", Status: "normal"},
-			{Name: "Глюкоза", Value: "5.2 ммоль/л", Status: "normal"},
-			{Name: "Холестерин", Value: "5.1 ммоль/л", Status: "warning"},
+			{Name: "Гемоглобин", Value: "152 г/л", Status: "normal", Normal: "120-160 г/л", Num: 152, RefMin: 120, RefMax: 160},
+			{Name: "Глюкоза", Value: "5.2 ммоль/л", Status: "normal", Normal: "3.9-6.1 ммоль/л", Num: 5.2, RefMin: 3.9, RefMax: 6.1},
+			{Name: "Холестерин", Value: "5.1 ммоль/л", Status: "warning", Normal: "0-5.0 ммоль/л", Num: 5.1, RefMin: 0, RefMax: 5.0},
 		},
 		Summary: "Показатели улучшились по сравнению с предыдущим анализом.",
 		Comparison: ComparisonView{
@@ -855,20 +936,31 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64) MetricsRes
 		}
 	}
 
+	// Реальные замеры здоровья (анализ/биоскан) - без анкеты-профиля,
+	// которая тоже хранится в истории, но замером не является. Индекс и
+	// тренд считаем ТОЛЬКО по ним, иначе профиль «раздувает» число точек
+	// и прячет подсказку «Пока один замер» при наличии одного анализа.
+	measurements := make([]monitoring.HistoryEntry, 0, len(entries))
+	for _, e := range entries {
+		if e.Type == "analysis" || e.Type == "bioscan" {
+			measurements = append(measurements, e)
+		}
+	}
+
 	// Индекс здоровья: отражает вовлечённость + базовый уровень.
-	resp.HealthIndex = healthIndex(len(entries), report)
-	resp.EnergyLevel = energyLevel(report, len(entries))
+	resp.HealthIndex = healthIndex(len(measurements), report)
+	resp.EnergyLevel = energyLevel(report, len(measurements))
 
 	// Адаптивные блоки РЕАЛЬНЫХ показателей (кровь/биохимия/тело и т.п.)
 	// - строятся только из того, что есть у пользователя в истории.
 	resp.Groups = h.buildAdaptiveGroups(ctx, telegramID)
 
-	// Тренд: по одной точке на запись, от старых к новым.
-	labels := make([]string, 0, len(entries))
-	values := make([]int, 0, len(entries))
-	// entries идут свежие→старые; строим тренд старые→свежие.
-	for i := len(entries) - 1; i >= 0; i-- {
-		e := entries[i]
+	// Тренд: по одной точке на РЕАЛЬНЫЙ замер, от старых к новым.
+	labels := make([]string, 0, len(measurements))
+	values := make([]int, 0, len(measurements))
+	// measurements идут свежие→старые; строим тренд старые→свежие.
+	for i := len(measurements) - 1; i >= 0; i-- {
+		e := measurements[i]
 		labels = append(labels, e.Date.Format("01.02"))
 		values = append(values, healthIndex(i+1, parseReport(e.JsonData)))
 	}

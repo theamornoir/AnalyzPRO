@@ -142,6 +142,9 @@ func (b *Bot) Start(ctx context.Context) {
 		mux.HandleFunc("/api/reports", dashHandler.Reports)
 		// Открыть сохранённый отчёт как PDF прямо из «Сводки здоровья».
 		mux.HandleFunc("/api/reports/file", dashHandler.ReportFile)
+		// Удалить запись истории (анализ/биоскан/профиль) из «Сводки
+		// здоровья» - чтобы пользователь мог удалять свои данные.
+		mux.HandleFunc("/api/reports/delete", dashHandler.DeleteEntry)
 
 		// Мониторинг: веб-апп (статика) + API с защитой initData.
 		mux.HandleFunc("/monitoring", func(w http.ResponseWriter, r *http.Request) {

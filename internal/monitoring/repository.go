@@ -35,6 +35,10 @@ type Repository interface {
 	// История
 	ListHistory(ctx context.Context, telegramID int64, entryType string, page, pageSize int) ([]HistoryEntry, int, error)
 	GetHistoryEntry(ctx context.Context, id int64) (*HistoryEntry, error)
+	// DeleteHistoryEntry - удаляет запись истории по ID (с очисткой
+	// привязок в проектах). Позволяет пользователю удалять свои
+	// анализы/отчёты/профиль прямо из «Сводки здоровья».
+	DeleteHistoryEntry(ctx context.Context, id int64) error
 }
 
 // MockRepository - потокобезопасная in-memory реализация Repository.
@@ -249,6 +253,28 @@ func (m *MockRepository) GetHistoryEntry(ctx context.Context, id int64) (*Histor
 	}
 	cp := *h
 	return &cp, nil
+}
+
+// DeleteHistoryEntry - удаляет запись истории по ID и отвязывает её от
+// всех проектов мониторинга (если была привязана).
+func (m *MockRepository) DeleteHistoryEntry(ctx context.Context, id int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.histories[id]; !ok {
+		return fmt.Errorf("history entry not found")
+	}
+	delete(m.histories, id)
+	// Отвязываем запись от всех проектов.
+	for _, p := range m.projects {
+		filtered := p.EntryIDs[:0]
+		for _, e := range p.EntryIDs {
+			if e != id {
+				filtered = append(filtered, e)
+			}
+		}
+		p.EntryIDs = filtered
+	}
+	return nil
 }
 
 // compile-time проверка, что MockRepository реализует Repository.
