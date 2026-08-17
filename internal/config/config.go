@@ -29,10 +29,14 @@ type Config struct {
 	WebAppURL          string
 	DashboardURL       string
 	HTTPAddr           string
-	StoragePath        string
-	MonitoringPath     string
-	AnalyticsPath      string
-	DBPath             string
+	// HTML2PDFAPIKey — API-ключ внешнего сервиса html2pdf.app (режим
+	// «отправить HTML на сервер, получить PDF»). Если пуст — PDF-конвертация
+	// недоступна, отчёты уходят как HTML.
+	HTML2PDFAPIKey string
+	StoragePath    string
+	MonitoringPath string
+	AnalyticsPath  string
+	DBPath         string
 }
 
 func Load() (*Config, error) {
@@ -82,6 +86,7 @@ func Load() (*Config, error) {
 		WebAppURL:          webAppURL,
 		DashboardURL:       dashboardURL,
 		HTTPAddr:           httpAddr,
+		HTML2PDFAPIKey:     getEnv("HTML2PDF_API_KEY", ""),
 		StoragePath:        getEnv("STORAGE_PATH", "./data/analyzpro.db.json"),
 		MonitoringPath:     getEnv("MONITORING_PATH", "./data/monitoring.db.json"),
 		AnalyticsPath:      getEnv("ANALYTICS_PATH", "./data/analytics.jsonl"),

@@ -18,6 +18,7 @@ import (
 	apmodels "github.com/theamornoir/analyzpro/internal/models"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/report"
+	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
 
@@ -29,12 +30,13 @@ func renderAndSendReport(
 	b *tgbot.Bot,
 	stateManager states.StateManager,
 	reportRenderer *report.Renderer,
+	pdfConverter pdfservice.Converter,
 	chatID int64,
 	loadingMsg *models.Message,
 	textMsg *models.Message,
 	jsonResult string,
 	appStorage *storage.Storage,
-	saver monitoring.HistorySaver,
+	saver monitoring.Repository,
 ) {
 	cleanedJSON := cleanJSONReport(jsonResult)
 
@@ -101,19 +103,37 @@ func renderAndSendReport(
 
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
-	// Отчёт по анализу отправляется как HTML-документ (внешний HTML->PDF
-	// сервис был отключён). Пользователь открывает файл в браузере.
+	// Расширенный анализ конвертируем в PDF и отправляем как PDF-документ.
+	// При сбое конвертации (нет ключа html2pdf.app / сервис недоступен) —
+	// откат к HTML, чтобы результат не потерялся.
+	pdfBytes, convErr := pdfConverter.ConvertHTML(ctx, htmlResult)
+	if convErr != nil {
+		log.Printf("⚠️ [UPLOAD] не удалось конвертировать анализ в PDF (chatID=%d): %v — отправляю HTML", chatID, convErr)
+		_, _ = b.SendDocument(ctx, &tgbot.SendDocumentParams{
+			ChatID: chatID,
+			Document: &models.InputFileUpload{
+				Filename: "Analysis_report.html",
+				Data:     bytes.NewReader([]byte(htmlResult)),
+			},
+			Caption:   locales.MsgUploadReportHTMLCaption,
+			ParseMode: "HTML",
+		})
+		sendAnalysisComplete(ctx, b, stateManager, chatID)
+		return
+	}
+
+	log.Printf("✅ [UPLOAD] PDF-отчёт (расширенный анализ) отправлен chatID=%d: %d байт", chatID, len(pdfBytes))
 	_, _ = b.SendDocument(ctx, &tgbot.SendDocumentParams{
 		ChatID: chatID,
 		Document: &models.InputFileUpload{
-			Filename: "Analysis_report.html",
-			Data:     bytes.NewReader([]byte(htmlResult)),
+			Filename: "Analysis_report.pdf",
+			Data:     bytes.NewReader(pdfBytes),
 		},
-		Caption:   locales.MsgUploadReportHTMLCaption,
+		Caption:   locales.MsgUploadReportCaption,
 		ParseMode: "HTML",
 	})
 
-	sendAnalysisComplete(ctx, b, stateManager, chatID)
+	sendAnalysisCompleteNote(ctx, b, stateManager, chatID, buildReportNote(jsonResult))
 }
 
 // cleanJSONReport - очищает текст JSON от markdown-обёртки.
@@ -125,20 +145,22 @@ func cleanJSONReport(jsonResult string) string {
 	return strings.TrimSpace(cleaned)
 }
 
-// renderAndSendDossier - рендерит JSON-досье в HTML и отправляет пользователю
-// как документ (print-ready, открывается/печатается как PDF). Сохраняет
-// результат в историю (для Мониторинга) и как Diagnosis (для профиля).
+// renderAndSendDossier - рендерит JSON-досье в HTML, конвертирует в PDF и
+// отправляет пользователю как PDF-документ. Сохраняет результат в историю
+// (для Мониторинга) и как Diagnosis (для профиля). При ошибке конвертации в
+// PDF откатывается к отправке HTML (отчёт не теряется).
 func renderAndSendDossier(
 	ctx context.Context,
 	b *tgbot.Bot,
 	stateManager states.StateManager,
 	reportRenderer *report.Renderer,
+	pdfConverter pdfservice.Converter,
 	chatID int64,
 	loadingMsg *models.Message,
 	textMsg *models.Message,
 	jsonResult string,
 	appStorage *storage.Storage,
-	saver monitoring.HistorySaver,
+	saver monitoring.Repository,
 ) {
 	cleanedJSON := cleanJSONReport(jsonResult)
 
@@ -205,16 +227,35 @@ func renderAndSendDossier(
 
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
-	// Отчёт-досье отправляется как HTML-документ (print-ready, печатается как PDF).
+	// Отчёт-досье конвертируем в PDF и отправляем как PDF-документ.
+	// При сбое конвертации (нет Chrome / сервис недоступен) — откат к HTML,
+	// чтобы результат не потерялся.
+	pdfBytes, convErr := pdfConverter.ConvertHTML(ctx, htmlResult)
+	if convErr != nil {
+		log.Printf("⚠️ [UPLOAD] не удалось конвертировать досье в PDF (chatID=%d): %v — отправляю HTML", chatID, convErr)
+		_, _ = b.SendDocument(ctx, &tgbot.SendDocumentParams{
+			ChatID: chatID,
+			Document: &models.InputFileUpload{
+				Filename: "Health_profile.html",
+				Data:     bytes.NewReader([]byte(htmlResult)),
+			},
+			Caption:   locales.MsgUploadDossierCaption,
+			ParseMode: "HTML",
+		})
+		sendAnalysisComplete(ctx, b, stateManager, chatID)
+		return
+	}
+
+	log.Printf("✅ [UPLOAD] PDF-отчёт (досье/Биоскан PRO) отправлен chatID=%d: %d байт", chatID, len(pdfBytes))
 	_, _ = b.SendDocument(ctx, &tgbot.SendDocumentParams{
 		ChatID: chatID,
 		Document: &models.InputFileUpload{
-			Filename: "Health_profile.html",
-			Data:     bytes.NewReader([]byte(htmlResult)),
+			Filename: "Health_profile.pdf",
+			Data:     bytes.NewReader(pdfBytes),
 		},
 		Caption:   locales.MsgUploadDossierCaption,
 		ParseMode: "HTML",
 	})
 
-	sendAnalysisComplete(ctx, b, stateManager, chatID)
+	sendAnalysisCompleteNote(ctx, b, stateManager, chatID, buildReportNote(jsonResult))
 }

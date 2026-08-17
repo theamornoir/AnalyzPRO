@@ -13,6 +13,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/report"
+	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 	"github.com/theamornoir/analyzpro/internal/service"
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
@@ -42,12 +43,13 @@ func handleUploadConfirm(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
 	reportRenderer *report.Renderer,
+	pdfConverter pdfservice.Converter,
 	uploadDir string,
 	stickerID string,
 	chatID int64,
 	message *models.Message,
 	appStorage *storage.Storage,
-	saver monitoring.HistorySaver,
+	saver monitoring.Repository,
 ) {
 	text := strings.TrimSpace(strings.ToLower(message.Text))
 
@@ -65,7 +67,7 @@ func handleUploadConfirm(
 
 	if text == locales.BtnProcessAnalysisLower || text == locales.BtnProcessAnalysisLowerShort {
 		log.Printf(locales.LogUploadStartAnalysis)
-		startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, uploadDir, stickerID, chatID, appStorage, saver)
+		startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, appStorage, saver)
 		return
 	}
 

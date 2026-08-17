@@ -253,3 +253,17 @@ func (m *MockRepository) GetHistoryEntry(ctx context.Context, id int64) (*Histor
 
 // compile-time проверка, что MockRepository реализует Repository.
 var _ Repository = (*MockRepository)(nil)
+
+// PreviousReportJSON возвращает JSON-данные (поле JsonData) самой свежей
+// записи указанного типа пользователя. Используется для сравнительного
+// повторного анализа/биоскана: перед генерацией нового отчёта мы берём
+// предыдущий и подсовываем ИИ, чтобы он построил СРАВНИТЕЛЬНЫЙ отчёт
+// (что улучшилось / что улучшить), а не «с нуля». Возвращает ok=false,
+// если предыдущих записей этого типа нет.
+func PreviousReportJSON(ctx context.Context, repo Repository, telegramID int64, entryType string) (string, bool) {
+	entries, _, err := repo.ListHistory(ctx, telegramID, entryType, 1, 1)
+	if err != nil || len(entries) == 0 {
+		return "", false
+	}
+	return entries[0].JsonData, true
+}

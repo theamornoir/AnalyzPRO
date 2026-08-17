@@ -12,6 +12,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/report"
+	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 	"github.com/theamornoir/analyzpro/internal/service"
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
@@ -24,13 +25,14 @@ func StartAnalysis(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
 	reportRenderer *report.Renderer,
+	pdfConverter pdfservice.Converter,
 	uploadDir string,
 	stickerID string,
 	chatID int64,
 	appStorage *storage.Storage,
-	saver monitoring.HistorySaver,
+	saver monitoring.Repository,
 ) {
-	startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, uploadDir, stickerID, chatID, appStorage, saver)
+	startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, appStorage, saver)
 }
 
 // startAnalysis - запускает анализ всех накопленных файлов.
@@ -42,11 +44,12 @@ func startAnalysis(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
 	reportRenderer *report.Renderer,
+	pdfConverter pdfservice.Converter,
 	uploadDir string,
 	stickerID string,
 	chatID int64,
 	appStorage *storage.Storage,
-	saver monitoring.HistorySaver,
+	saver monitoring.Repository,
 ) {
 	filesJSON := stateManager.GetUserData(chatID, "uploaded_files")
 	if filesJSON == "" {
@@ -89,9 +92,9 @@ func startAnalysis(
 
 	if len(uploadedFiles) == 1 {
 		file := uploadedFiles[0]
-		processSingleFile(ctx, b, stateManager, analysisService, reportRenderer, chatID, loadingMsg, textMsg, file, isExtended, contextInfo, appStorage, saver)
+		processSingleFile(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, file, isExtended, contextInfo, appStorage, saver)
 	} else {
-		processMultipleFiles(ctx, b, stateManager, analysisService, reportRenderer, chatID, loadingMsg, textMsg, uploadedFiles, isExtended, contextInfo, appStorage, saver)
+		processMultipleFiles(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, uploadedFiles, isExtended, contextInfo, appStorage, saver)
 	}
 }
 

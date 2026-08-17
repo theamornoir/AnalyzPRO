@@ -69,6 +69,26 @@ h2 { color: #34495e; margin-top: 30px; }
 {{range .Recommendations}}
 <div class="card">✓ {{.}}</div>
 {{end}}
+{{if .Comparison.Summary}}
+<h2>Сравнение с предыдущим отчётом</h2>
+<div class="card">{{.Comparison.Summary}}</div>
+{{if .Comparison.Metrics}}
+<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;">
+<tr style="text-align:left;color:#7f8c8d;"><th style="padding:4px;">Показатель</th><th style="padding:4px;">Было</th><th style="padding:4px;">Стало</th><th style="padding:4px;">Динамика</th></tr>
+{{range .Comparison.Metrics}}
+<tr style="border-top:1px solid #eee;">
+<td style="padding:4px;font-weight:bold;color:#2c3e50;">{{.Name}}</td>
+<td style="padding:4px;">{{.Before}}</td>
+<td style="padding:4px;">{{.After}}</td>
+<td style="padding:4px;font-weight:bold;color:{{if eq .Trend "up"}}#27ae60{{else if eq .Trend "down"}}#e74c3c{{else}}#7f8c8d{{end}};">{{.Change}}</td>
+</tr>
+{{end}}
+</table>
+{{end}}
+{{if .Comparison.Improved}}<div class="card" style="border-left:3px solid #27ae60;"><b>Улучшилось:</b> {{range .Comparison.Improved}}{{.}}; {{end}}</div>{{end}}
+{{if .Comparison.Worsened}}<div class="card" style="border-left:3px solid #e74c3c;"><b>Внимание:</b> {{range .Comparison.Worsened}}{{.}}; {{end}}</div>{{end}}
+{{if .Comparison.ToImprove}}<div class="card" style="border-left:3px solid #f39c12;"><b>Что улучшить:</b> {{range .Comparison.ToImprove}}{{.}}; {{end}}</div>{{end}}
+{{end}}
 {{if .Disclaimer}}
 <div class="disclaimer">{{.Disclaimer}}</div>
 {{end}}

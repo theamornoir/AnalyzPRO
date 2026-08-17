@@ -92,3 +92,8 @@ mini:
 ## освобождает :8080 и снимает lock.
 mini-stop:
 	@bash scripts/mini-stop.sh
+
+## pdf-service - (удалено) конвертация HTML→PDF теперь идёт через внешний
+## сервис html2pdf.com по ключу HTML2PDF_API_KEY; локальный Chrome-сервер не
+## нужен.
+

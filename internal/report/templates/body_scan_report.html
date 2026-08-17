@@ -399,6 +399,10 @@ h2 { font-size: 14pt; line-height: 1.15; color: var(--navy); font-weight: 700; m
     </div>
 </section>
 
+<!-- ============== PAGE (вставляется только для ПОВТОРНОГО отчёта) ============== -->
+{{/* Сравнение с предыдущим Bioscan PRO — рендерится только если отчёт повторный */}}
+{{template "cmpBlock" .Comparison}}
+
 <!-- ===================== PAGE 3: BODY COMPOSITION ===================== -->
 <section class="page">
     <div class="page-header">
@@ -623,6 +627,72 @@ h2 { font-size: 14pt; line-height: 1.15; color: var(--navy); font-weight: 700; m
         <span>08</span>
     </div>
 </section>
+
+{{/* ===================== COMPARISON BLOCK (переиспользуемый) ===================== */}}
+{{define "cmpBlock"}}
+{{if .}}
+<section class="page">
+    <div class="page-header">
+        <span class="brand">COMPARISON</span>
+        <span class="micro">Повторный отчёт</span>
+    </div>
+    <div class="eyebrow">Динамика прогресса</div>
+    <h2>Сравнение с предыдущим Bioscan PRO</h2>
+    <p class="lead" style="margin-top:4px;">Это повторный замер. Ниже — что изменилось по сравнению с вашим предыдущим отчётом: улучшения, стабильные зоны и то, на чём стоит сосредоточиться.</p>
+
+    {{if .Summary}}<div class="card card-soft" style="margin-top:8px;">{{.Summary}}</div>{{end}}
+
+    {{if .Metrics}}
+    <div class="section">
+        <div class="section-title">Показатели до → после</div>
+        <div class="card" style="padding:6px 10px;">
+            <table style="width:100%;border-collapse:collapse;font-size:9pt;">
+                <tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--line);">
+                    <th style="padding:3px 4px;">Показатель</th>
+                    <th style="padding:3px 4px;">Было</th>
+                    <th style="padding:3px 4px;">Стало</th>
+                    <th style="padding:3px 4px;">Динамика</th>
+                </tr>
+                {{range .Metrics}}
+                <tr style="border-top:1px solid #eef3f2;">
+                    <td style="padding:3px 4px;font-weight:600;color:var(--navy);">{{.Name}}</td>
+                    <td style="padding:3px 4px;">{{.Before}}</td>
+                    <td style="padding:3px 4px;">{{.After}}</td>
+                    <td style="padding:3px 4px;font-weight:700;color:{{if eq .Trend "up"}}var(--good){{else if eq .Trend "down"}}var(--crit){{else}}var(--muted){{end}};">{{.Change}}</td>
+                </tr>
+                {{end}}
+            </table>
+        </div>
+    </div>
+    {{end}}
+
+    {{if .Improved}}
+    <div class="section">
+        <div class="section-title">✓ Улучшилось</div>
+        {{range .Improved}}<div class="si good"><div class="si-dot"></div><div><div class="si-desc">{{.}}</div></div></div>{{end}}
+    </div>
+    {{end}}
+    {{if .Worsened}}
+    <div class="section">
+        <div class="section-title">▲ Требует внимания</div>
+        {{range .Worsened}}<div class="si warning"><div class="si-dot"></div><div><div class="si-desc">{{.}}</div></div></div>{{end}}
+    </div>
+    {{end}}
+    {{if .Unchanged}}
+    <div class="section">
+        <div class="section-title">— Без изменений</div>
+        {{range .Unchanged}}<div class="si"><div class="si-dot" style="background:var(--muted);"></div><div><div class="si-desc">{{.}}</div></div></div>{{end}}
+    </div>
+    {{end}}
+    {{if .ToImprove}}
+    <div class="section">
+        <div class="section-title">➜ Что улучшить</div>
+        {{range .ToImprove}}<div class="si warning"><div class="si-dot"></div><div><div class="si-desc">{{.}}</div></div></div>{{end}}
+    </div>
+    {{end}}
+</section>
+{{end}}
+{{end}}
 
 </body>
 </html>

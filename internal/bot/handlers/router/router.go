@@ -17,6 +17,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
+	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 	"github.com/theamornoir/analyzpro/internal/service"
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
@@ -26,13 +27,14 @@ type router struct {
 	stateManager     states.StateManager
 	analysisService  service.AnalysisService
 	reportRenderer   *report.Renderer
+	pdfConverter     pdfservice.Converter
 	uploadDir        string
 	stickerID        string
 	adminChatID      int64
 	agreementStorage *storage.AgreementStorage
 	paymentService   *payment.MockPaymentService
 	appStorage       *storage.Storage
-	monitorRepo      monitoring.HistorySaver
+	monitorRepo      monitoring.Repository
 	webAppURL        string
 	dashboardURL     string
 }
@@ -42,13 +44,14 @@ func MessageRouter(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
 	reportRenderer *report.Renderer,
+	pdfConverter pdfservice.Converter,
 	uploadDir string,
 	stickerID string,
 	adminChatID int64,
 	agreementStorage *storage.AgreementStorage,
 	paymentService *payment.MockPaymentService,
 	appStorage *storage.Storage,
-	monitorRepo monitoring.HistorySaver,
+	monitorRepo monitoring.Repository,
 	webAppURL string,
 	dashboardURL string,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
@@ -57,6 +60,7 @@ func MessageRouter(
 		stateManager:     stateManager,
 		analysisService:  analysisService,
 		reportRenderer:   reportRenderer,
+		pdfConverter:     pdfConverter,
 		uploadDir:        uploadDir,
 		stickerID:        stickerID,
 		adminChatID:      adminChatID,
@@ -271,6 +275,12 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	case "section_bioscan_extended_demo":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan_extended_demo")
 		r.handleBioscanExtendedDemo(ctx, b, chatID)
+	case "section_diag_extended_demo2":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_extended_demo2")
+		r.handleExtendedAnalysisRepeatDemo(ctx, b, chatID)
+	case "section_bioscan_extended_demo2":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan_extended_demo2")
+		r.handleBioscanExtendedRepeatDemo(ctx, b, chatID)
 	case "section_health_summary":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_summary")
 		r.handleDashboard(ctx, b, chatID, false)
@@ -299,7 +309,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// Подтверждение загрузки файлов (inline-кнопки «Обработать/Отмена»).
 	case "upload_process":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "upload_process")
-		upload.StartAnalysis(ctx, b, r.stateManager, r.analysisService, r.reportRenderer, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo)
+		upload.StartAnalysis(ctx, b, r.stateManager, r.analysisService, r.reportRenderer, r.pdfConverter, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo)
 	case "upload_cancel":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "upload_cancel")
 		upload.CancelUpload(ctx, b, r.stateManager, chatID)
@@ -307,7 +317,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// Подтверждение/перезапуск Bioscan (inline-кнопки на экране фото).
 	case "bioscan_confirm":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "bioscan_confirm")
-		bioscan.ProcessBioscanWithPhotos(ctx, b, r.stateManager, r.analysisService, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo)
+		bioscan.ProcessBioscanWithPhotos(ctx, b, r.stateManager, r.analysisService, r.pdfConverter, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo)
 	case "bioscan_restart":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "bioscan_restart")
 		bioscan.StartBioscanFlow(ctx, b, r.stateManager, chatID)

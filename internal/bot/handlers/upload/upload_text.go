@@ -12,6 +12,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/report"
+	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 	"github.com/theamornoir/analyzpro/internal/service"
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
@@ -23,12 +24,13 @@ func handleTextUpload(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
 	reportRenderer *report.Renderer,
+	pdfConverter pdfservice.Converter,
 	uploadDir string,
 	stickerID string,
 	chatID int64,
 	text string,
 	appStorage *storage.Storage,
-	saver monitoring.HistorySaver,
+	saver monitoring.Repository,
 ) {
 	payload := strings.TrimSpace(text)
 	if payload == "" {
@@ -49,9 +51,17 @@ func handleTextUpload(
 	if isExtended {
 		log.Printf(locales.LogUploadExtendedTextAnalysis)
 
-		jsonResult, err := analysisService.HandleAnalysisJSON(ctx, payload)
+		// Сравнительный контекст: если ранее уже делали расширенный анализ —
+		// подставляем предыдущий отчёт, чтобы ИИ построил СРАВНИТЕЛЬНЫЙ
+		// отчёт (динамика: что улучшилось / что улучшить), а не «с нуля».
+		analysisPayload := payload
+		if prevJSON, ok := monitoring.PreviousReportJSON(ctx, saver, chatID, "analysis"); ok {
+			analysisPayload = locales.ComparisonContext(prevJSON, "analysis") + "\n\n" + payload
+		}
+
+		jsonResult, err := analysisService.HandleAnalysisJSON(ctx, analysisPayload)
 		if err == nil && jsonResult != "" {
-			renderAndSendReport(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, jsonResult, appStorage, saver)
+			renderAndSendReport(ctx, b, stateManager, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, jsonResult, appStorage, saver)
 			return
 		}
 	}

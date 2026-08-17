@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	tgbot "github.com/go-telegram/bot"
@@ -16,6 +17,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
+	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 	"github.com/theamornoir/analyzpro/internal/service"
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
@@ -28,11 +30,12 @@ func ProcessBioscanWithPhotos(
 	b *tgbot.Bot,
 	sm states.StateManager,
 	analysisService service.AnalysisService,
+	pdfConverter pdfservice.Converter,
 	uploadDir string,
 	stickerID string,
 	chatID int64,
 	appStorage *storage.Storage,
-	saver monitoring.HistorySaver,
+	saver monitoring.Repository,
 ) {
 	// Собираем все данные
 	name := sm.GetUserData(chatID, "bioscan_name")
@@ -93,12 +96,23 @@ func ProcessBioscanWithPhotos(
 	}
 
 	// Расширенный (Premium) Bioscan PRO -> подробный HTML-отчёт Body Intelligence.
-	filename := "Body_scan_report.html"
-	htmlReport, err := analysisService.HandleBioscanPro(
+	// htmlReport — для отправки пользователю, jsonReport — «чистый» JSON
+	// отчёта (сохраняется в историю для графиков дашборда «Сводка здоровья»
+	// и используется при сравнительном повторном анализе).
+	//
+	// Сравнительный контекст: если ранее уже делали Bioscan PRO — подставляем
+	// предыдущий отчёт, чтобы ИИ построил СРАВНИТЕЛЬНЫЙ отчёт (динамика:
+	// что улучшилось / что улучшить), а не «с нуля».
+	bioscanContext := contextInfo
+	if prevJSON, ok := monitoring.PreviousReportJSON(ctx, saver, chatID, "bioscan"); ok {
+		bioscanContext = contextInfo + locales.ComparisonContext(prevJSON, "bioscan")
+	}
+
+	htmlReport, jsonReport, err := analysisService.HandleBioscanPro(
 		ctx,
 		photosData,
 		"image/jpeg",
-		contextInfo,
+		bioscanContext,
 	)
 	if err != nil {
 		helpers.DeleteMessage(ctx, b, chatID, loadingMsg.ID)
@@ -117,32 +131,52 @@ func ProcessBioscanWithPhotos(
 	helpers.DeleteMessage(ctx, b, chatID, textMsg.ID)
 
 	if len(htmlReport) > 0 {
-		_, err = b.SendDocument(
-			ctx,
-			&tgbot.SendDocumentParams{
-				ChatID: chatID,
-				Document: &models.InputFileUpload{
-					Filename: filename,
-					Data:     bytes.NewReader([]byte(htmlReport)),
+		// Конвертируем премиальный HTML-отчёт Body Intelligence в PDF и
+		// отправляем как PDF. При сбое конвертации — откат к HTML.
+		pdfBytes, convErr := pdfConverter.ConvertHTML(ctx, htmlReport)
+		if convErr != nil {
+			log.Printf("⚠️ [BIOSCAN] не удалось конвертировать PRO-отчёт в PDF (chatID=%d): %v — отправляю HTML", chatID, convErr)
+			_, err = b.SendDocument(
+				ctx,
+				&tgbot.SendDocumentParams{
+					ChatID: chatID,
+					Document: &models.InputFileUpload{
+						Filename: "Body_scan_report.html",
+						Data:     bytes.NewReader([]byte(htmlReport)),
+					},
+					Caption:   locales.MsgBioscanProCaption,
+					ParseMode: "Markdown",
 				},
-				Caption:   locales.MsgBioscanProCaption,
-				ParseMode: "Markdown",
-			},
-		)
+			)
+		} else {
+			_, err = b.SendDocument(
+				ctx,
+				&tgbot.SendDocumentParams{
+					ChatID: chatID,
+					Document: &models.InputFileUpload{
+						Filename: "Body_scan_report.pdf",
+						Data:     bytes.NewReader(pdfBytes),
+					},
+					Caption:   locales.MsgBioscanProCaption,
+					ParseMode: "Markdown",
+				},
+			)
+		}
 
 		if err != nil {
 			log.Printf(locales.LogBioscanSendDocError, err)
 		}
 	}
 
-	// Авто-сохранение результата биоскана в историю (для Мониторинга).
+	// Авто-сохранение результата биоскана в историю (для Мониторинга и
+	// графиков дашборда «Сводка здоровья»).
 	if saver != nil {
 		if saveErr := saver.SaveResult(ctx, &monitoring.HistoryEntry{
 			TelegramID: chatID,
 			Type:       "bioscan",
-			Title:      "Bioscan",
+			Title:      "Bioscan PRO",
 			Date:       time.Now(),
-			JsonData:   "",
+			JsonData:   jsonReport,
 			ReportHTML: htmlReport,
 		}); saveErr != nil {
 			log.Printf("[MONITORING] не удалось сохранить биоскан chatID=%d: %v", chatID, saveErr)
@@ -173,6 +207,28 @@ func ProcessBioscanWithPhotos(
 		ReplyMarkup: keyboards.MainMenu(),
 		ParseMode:   "Markdown",
 	})
+
+	// Прогресс + сравнение с предыдущим отчётом (если это повторный Bioscan PRO).
+	// Отдельным сообщением без parse-mode, чтобы summary из отчёта ИИ (где
+	// могут быть спецсимволы) не сломал Markdown предыдущего сообщения.
+	if note := bioscanReportNote(jsonReport); note != "" {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        note,
+			ReplyMarkup: keyboards.MainMenu(),
+		})
+	}
+}
+
+// bioscanReportNote собирает текст доп. блока для выдачи Bioscan PRO:
+// напоминание о сравнении повторных отчётов + краткое сравнение (summary),
+// если ИИ сформировал сравнительный отчёт. jsonReport — JSON отчёта.
+func bioscanReportNote(jsonReport string) string {
+	parts := []string{locales.MsgReportProgressNote}
+	if s := monitoring.ParseComparisonSummary(jsonReport); s != "" {
+		parts = append(parts, "📈 Сравнение с предыдущим Bioscan PRO: "+s)
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // animateBioscanStatus - анимация статуса обработки.

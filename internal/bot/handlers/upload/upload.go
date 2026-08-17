@@ -11,6 +11,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/report"
+	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 	"github.com/theamornoir/analyzpro/internal/service"
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
@@ -22,10 +23,11 @@ func UploadHandler(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
 	reportRenderer *report.Renderer,
+	pdfConverter pdfservice.Converter,
 	uploadDir string,
 	stickerID string,
 	appStorage *storage.Storage,
-	saver monitoring.HistorySaver,
+	saver monitoring.Repository,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
 
 	return func(
@@ -47,7 +49,7 @@ func UploadHandler(
 
 		if state == states.StateWaitingUploadConfirm {
 			log.Printf(locales.LogUploadWaitingConfirm)
-			handleUploadConfirm(ctx, b, stateManager, analysisService, reportRenderer, uploadDir, stickerID, chatID, update.Message, appStorage, saver)
+			handleUploadConfirm(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, update.Message, appStorage, saver)
 			return
 		}
 
@@ -74,7 +76,7 @@ func UploadHandler(
 
 		if update.Message.Text != "" {
 			log.Printf(locales.LogProcessingUploadText, update.Message.Text)
-			handleTextUpload(ctx, b, stateManager, analysisService, reportRenderer, uploadDir, stickerID, chatID, update.Message.Text, appStorage, saver)
+			handleTextUpload(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, update.Message.Text, appStorage, saver)
 			return
 		}
 

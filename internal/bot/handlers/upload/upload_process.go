@@ -14,6 +14,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/report"
+	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 	"github.com/theamornoir/analyzpro/internal/service"
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
@@ -25,6 +26,7 @@ func processSingleFile(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
 	reportRenderer *report.Renderer,
+	pdfConverter pdfservice.Converter,
 	chatID int64,
 	loadingMsg *models.Message,
 	textMsg *models.Message,
@@ -32,7 +34,7 @@ func processSingleFile(
 	isExtended bool,
 	contextInfo string,
 	appStorage *storage.Storage,
-	saver monitoring.HistorySaver,
+	saver monitoring.Repository,
 ) {
 	fileData, err := file.readData()
 	if err != nil {
@@ -53,12 +55,17 @@ func processSingleFile(
 			return
 		}
 		combined := fileText + "\n\nДанные пациента и опросника об образе жизни:\n" + contextInfo
+		// Сравнительный контекст: если ранее уже делали расширенный анализ —
+		// подставляем предыдущий отчёт для СРАВНИТЕЛЬНОГО досье.
+		if prevJSON, ok := monitoring.PreviousReportJSON(ctx, saver, chatID, "analysis"); ok {
+			combined += locales.ComparisonContext(prevJSON, "analysis")
+		}
 		dossierJSON, derr := analysisService.HandleExtendedDossierJSON(ctx, combined)
 		if derr != nil || dossierJSON == "" {
 			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
 			return
 		}
-		renderAndSendDossier(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, dossierJSON, appStorage, saver)
+		renderAndSendDossier(ctx, b, stateManager, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, dossierJSON, appStorage, saver)
 		return
 	}
 
@@ -91,6 +98,7 @@ func processMultipleFiles(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
 	reportRenderer *report.Renderer,
+	pdfConverter pdfservice.Converter,
 	chatID int64,
 	loadingMsg *models.Message,
 	textMsg *models.Message,
@@ -98,7 +106,7 @@ func processMultipleFiles(
 	isExtended bool,
 	contextInfo string,
 	appStorage *storage.Storage,
-	saver monitoring.HistorySaver,
+	saver monitoring.Repository,
 ) {
 	var collectedTexts []string
 
@@ -134,12 +142,17 @@ func processMultipleFiles(
 			return
 		}
 		combined += "\n\nДанные пациента и опросника об образе жизни:\n" + contextInfo
+		// Сравнительный контекст: если ранее уже делали расширенный анализ —
+		// подставляем предыдущий отчёт для СРАВНИТЕЛЬНОГО досье.
+		if prevJSON, ok := monitoring.PreviousReportJSON(ctx, saver, chatID, "analysis"); ok {
+			combined += locales.ComparisonContext(prevJSON, "analysis")
+		}
 		dossierJSON, derr := analysisService.HandleExtendedDossierJSON(ctx, combined)
 		if derr != nil || dossierJSON == "" {
 			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
 			return
 		}
-		renderAndSendDossier(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, dossierJSON, appStorage, saver)
+		renderAndSendDossier(ctx, b, stateManager, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, dossierJSON, appStorage, saver)
 		return
 	}
 
@@ -183,11 +196,34 @@ func sendAnalysisError(ctx context.Context, b *tgbot.Bot, stateManager states.St
 
 // sendAnalysisComplete - отправляет сообщение о завершении анализа и сбрасывает состояние.
 func sendAnalysisComplete(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64) {
+	sendAnalysisCompleteNote(ctx, b, stateManager, chatID, "")
+}
+
+// sendAnalysisCompleteNote - как sendAnalysisComplete, но дописывает блок
+// дополнительной информации (extra). Используется для расширенного анализа/
+// досье: в extra передаём запроса на сравнение с предыдущим отчётом и
+// напоминание, что динамику видно в «Сводке здоровья».
+func sendAnalysisCompleteNote(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64, extra string) {
 	stateManager.Reset(chatID)
+	text := locales.MsgAnalysisComplete
+	if strings.TrimSpace(extra) != "" {
+		text += "\n\n" + extra
+	}
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
-		Text:        locales.MsgAnalysisComplete,
+		Text:        text,
 		ReplyMarkup: keyboards.MainMenu(),
 		ParseMode:   "HTML",
 	})
+}
+
+// buildReportNote собирает текст доп. блока для выдачи расширенного отчёта:
+// напоминание о сравнении повторных отчётов + краткое сравнение (summary),
+// если ИИ сформировал сравнительный отчёт. jsonResult — JSON отчёта.
+func buildReportNote(jsonResult string) string {
+	parts := []string{locales.MsgReportProgressNote}
+	if s := monitoring.ParseComparisonSummary(jsonResult); s != "" {
+		parts = append(parts, "📈 Сравнение с предыдущим отчётом: "+s)
+	}
+	return strings.Join(parts, "\n\n")
 }

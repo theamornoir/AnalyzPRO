@@ -19,6 +19,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/monitoring"
 	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
+	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 	"github.com/theamornoir/analyzpro/internal/service"
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
@@ -28,6 +29,7 @@ type Bot struct {
 	stateManager     states.StateManager
 	analysisService  service.AnalysisService
 	reportRenderer   *report.Renderer
+	pdfConverter     pdfservice.Converter
 	uploadDir        string
 	stickerID        string
 	adminChatID      int64
@@ -47,6 +49,7 @@ func New(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
 	reportRenderer *report.Renderer,
+	pdfConverter pdfservice.Converter,
 	uploadDir string,
 	stickerID string,
 	adminChatID int64,
@@ -77,6 +80,7 @@ func New(
 		stateManager:     stateManager,
 		analysisService:  analysisService,
 		reportRenderer:   reportRenderer,
+		pdfConverter:     pdfConverter,
 		uploadDir:        uploadDir,
 		stickerID:        stickerID,
 		adminChatID:      adminChatID,
@@ -131,10 +135,13 @@ func (b *Bot) Start(ctx context.Context) {
 			// сессии → initData оказался бы пустым/чужим.
 			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 		})
-		dashHandler := dashboard.NewHandler(b.paymentService, b.botToken, b.monitorRepo)
+		dashHandler := dashboard.NewHandler(b.paymentService, b.botToken, b.monitorRepo, b.reportRenderer, b.pdfConverter)
 		mux.HandleFunc("/dashboard/", dashHandler.ServeWebApp)
 		mux.HandleFunc("/api/metrics", dashHandler.Metrics)
 		mux.HandleFunc("/api/profile", dashHandler.SaveProfile)
+		mux.HandleFunc("/api/reports", dashHandler.Reports)
+		// Открыть сохранённый отчёт как PDF прямо из «Сводки здоровья».
+		mux.HandleFunc("/api/reports/file", dashHandler.ReportFile)
 
 		// Мониторинг: веб-апп (статика) + API с защитой initData.
 		mux.HandleFunc("/monitoring", func(w http.ResponseWriter, r *http.Request) {
@@ -205,6 +212,7 @@ func (b *Bot) registerHandlers() {
 		b.stateManager,
 		b.analysisService,
 		b.reportRenderer,
+		b.pdfConverter,
 		b.uploadDir,
 		b.stickerID,
 		b.adminChatID,

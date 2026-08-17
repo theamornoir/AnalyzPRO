@@ -80,6 +80,10 @@ func AnalysisHubMenu() models.InlineKeyboardMarkup {
 				{Text: locales.BtnBioscanExtended, CallbackData: "section_bioscan_extended"},
 				{Text: locales.BtnBioscanExtendedDemo, CallbackData: "section_bioscan_extended_demo"},
 			},
+			{
+				{Text: locales.BtnExtendedAnalysisRepeatDemo, CallbackData: "section_diag_extended_demo2"},
+				{Text: locales.BtnBioscanExtendedRepeatDemo, CallbackData: "section_bioscan_extended_demo2"},
+			},
 		},
 	}
 }

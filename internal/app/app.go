@@ -20,6 +20,7 @@ import (
 	monitoring_sqlrepo "github.com/theamornoir/analyzpro/internal/monitoring/sqlrepo"
 	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
+	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 	"github.com/theamornoir/analyzpro/internal/service"
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
@@ -106,11 +107,19 @@ func New() (*App, error) {
 	analytics.Init(cfg.AnalyticsPath)
 	log.Printf("📈 Аналитика инициализирована: path=%s", cfg.AnalyticsPath)
 
+	// HTML→PDF конвертер (внешний сервис html2pdf.app по HTML2PDF_API_KEY).
+	// Используется для расширенного анализа и Bioscan PRO — отчёты
+	// отправляются как PDF (при сбое конвертации — как HTML).
+	pdfConverter := pdfservice.New(pdfservice.Config{
+		HTML2PDFAPIKey: cfg.HTML2PDFAPIKey,
+	})
+
 	telegramBot, err := bot.New(
 		cfg.BotToken,
 		stateManager,
 		analysisService,
 		renderer,
+		pdfConverter,
 		cfg.UploadDir,
 		cfg.LoadingStickerID,
 		cfg.AdminChatID,

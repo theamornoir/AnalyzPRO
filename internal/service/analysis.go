@@ -29,7 +29,10 @@ type AnalysisService interface {
 	// HandleBioscanPro — расширенный (Premium) Bioscan PRO: 4 фото -> подробный
 	// premium HTML-отчёт Body Intelligence (из фото + опросника). Один вызов
 	// ИИ: JSON -> models.BodyScanReport -> HTML (для документа и истории/профиля).
-	HandleBioscanPro(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (html string, err error)
+	// Возвращает также jsonReport — «чистый» JSON отчёта, который сохраняется
+	// в историю (для графиков дашборда «Сводка здоровья») и используется при
+	// сравнительном повторном анализе.
+	HandleBioscanPro(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (html string, jsonReport string, err error)
 	// Методы для работы с JSON
 	HandleAnalysisJSON(ctx context.Context, text string) (string, error)
 	HandleAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error)
@@ -177,24 +180,33 @@ func (s *analysisService) HandleBioscanPDF(
 // HandleBioscanPro — расширенный (Premium) Bioscan PRO: строит подробный
 // premium HTML-отчёт Body Intelligence из 4 фото + опросника. Один вызов ИИ:
 // JSON -> models.BodyScanReport -> HTML (через renderer.RenderBodyScan).
+// Возвращает также «чистый» JSON-отчёт (jsonReport) — он сохраняется в
+// историю для графиков дашборда и используется при сравнительном анализе.
 func (s *analysisService) HandleBioscanPro(
 	ctx context.Context,
 	photosData [][]byte,
 	mimeType string,
 	contextInfo string,
-) (string, error) {
+) (string, string, error) {
 	jsonText, err := s.aiClient.GenerateBodyScanJSON(ctx, photosData, mimeType, contextInfo)
 	if err != nil {
-		return "", fmt.Errorf(locales.ErrGenerateBioscanJSON, err)
+		return "", "", fmt.Errorf(locales.ErrGenerateBioscanJSON, err)
 	}
 
-	if strings.TrimSpace(jsonText) == "" {
-		return "", fmt.Errorf(locales.ErrEmptyJSONFromAI)
+	cleaned := strings.TrimSpace(jsonText)
+	// Снимаем возможную markdown-обёртку ```json ... ```.
+	cleaned = strings.TrimPrefix(cleaned, "```json")
+	cleaned = strings.TrimPrefix(cleaned, "```")
+	cleaned = strings.TrimSuffix(cleaned, "```")
+	cleaned = strings.TrimSpace(cleaned)
+
+	if cleaned == "" {
+		return "", "", fmt.Errorf(locales.ErrEmptyJSONFromAI)
 	}
 
 	var rep models.BodyScanReport
-	if err := json.Unmarshal([]byte(jsonText), &rep); err != nil {
-		return "", fmt.Errorf(locales.ErrParseAnalysisJSON, err)
+	if err := json.Unmarshal([]byte(cleaned), &rep); err != nil {
+		return "", "", fmt.Errorf(locales.ErrParseAnalysisJSON, err)
 	}
 
 	// Разрыв между текущим и потенциальным индексом.
@@ -205,10 +217,18 @@ func (s *analysisService) HandleBioscanPro(
 
 	htmlReport, rerr := s.renderer.RenderBodyScan(rep)
 	if rerr != nil {
-		return "", fmt.Errorf(locales.ErrRenderReportHTML, rerr)
+		return "", "", fmt.Errorf(locales.ErrRenderReportHTML, rerr)
 	}
 
-	return htmlReport, nil
+	// Сериализуем обратно в «чистый» JSON (без markdown-обёртки), чтобы
+	// сохранять в историю именно валидный JSON-отчёт.
+	jsonReport, merr := json.Marshal(rep)
+	if merr != nil {
+		// Не критично: отдаём хотя бы очищенный исходник от ИИ.
+		jsonReport = []byte(cleaned)
+	}
+
+	return htmlReport, string(jsonReport), nil
 }
 
 // formatTextWithContext объединяет базовый текст с дополнительным контекстом
