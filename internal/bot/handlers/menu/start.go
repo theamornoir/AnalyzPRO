@@ -7,6 +7,7 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/analytics"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/onboarding"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -29,7 +30,7 @@ func StartHandler(
 		// чтобы последующие анализы/биосканы привязывались к реальному User.
 		if appStorage != nil {
 			if _, err := appStorage.EnsureUser(ctx, chatID); err != nil {
-				// Не фатально — онбординг продолжается.
+				// Не фатально - онбординг продолжается.
 				_ = err
 			}
 		}
@@ -44,8 +45,23 @@ func StartHandler(
 		// старого потока bioscan/анкеты.
 		stateManager.Reset(chatID)
 
-		// Проверяем соглашение через постоянное хранилище
-		if agreementStorage.IsAgreed(chatID) {
+		// Онбординг: новые пользователи проходят 4 шага + соглашение.
+		// Уже прошедшие (OnboardingCompleted) попадают сразу в главное меню.
+		onboarded := false
+		if appStorage != nil {
+			onboarded = appStorage.IsOnboardingCompleted(ctx, chatID)
+		}
+		if !onboarded && agreementStorage.IsAgreed(chatID) {
+			// Миграция существующих пользователей: они уже приняли
+			// соглашение до появления онбординга - помечаем пройденным,
+			// чтобы не гонять их по слайдеру повторно.
+			if appStorage != nil {
+				_ = appStorage.SetOnboardingCompleted(ctx, chatID, true)
+			}
+			onboarded = true
+		}
+
+		if onboarded {
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 				ChatID:      chatID,
 				Text:        locales.MsgStartWelcomeBack,
@@ -55,11 +71,7 @@ func StartHandler(
 			return
 		}
 
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgStartWelcome,
-			ReplyMarkup: keyboards.StartMenu(),
-			ParseMode:   "Markdown",
-		})
+		// Новый пользователь - запускаем онбординг с первого шага.
+		onboarding.SendStep(ctx, b, chatID, 1)
 	}
 }

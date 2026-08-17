@@ -13,8 +13,8 @@ import (
 func RenderBioscanPlainText(rep models.Report) string {
 	var b strings.Builder
 
-	b.WriteString("BIOSCAN — результат анализа тела\n")
-	b.WriteString("————————————————————\n\n")
+	b.WriteString("BIOSCAN - результат анализа тела\n")
+	b.WriteString("--------------------\n\n")
 
 	if rep.Score > 0 || rep.Level != "" {
 		if rep.Score > 0 {
@@ -66,7 +66,7 @@ func RenderBioscanPlainText(rep models.Report) string {
 	if len(rep.Zones) > 0 {
 		b.WriteString("Оценка зон тела:\n")
 		for _, z := range rep.Zones {
-			b.WriteString("• " + z.Name + " — " + strconv.Itoa(z.Score) + "/100")
+			b.WriteString("• " + z.Name + " - " + strconv.Itoa(z.Score) + "/100")
 			if z.Status != "" {
 				b.WriteString(" (" + z.Status + ")")
 			}

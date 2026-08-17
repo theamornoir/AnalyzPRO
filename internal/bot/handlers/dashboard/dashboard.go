@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -20,7 +21,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 )
 
-// MetricsResponse — ответ API для дашборда «Сводка здоровья».
+// MetricsResponse - ответ API для дашборда «Сводка здоровья».
 // Данные берутся из реальной истории пользователя (monitoring.Repository),
 // а не из моков.
 type MetricsResponse struct {
@@ -61,7 +62,7 @@ type TrendData struct {
 	Values []int    `json:"values"`
 }
 
-// Handler — HTTP-обработчики дашборда «Сводка здоровья».
+// Handler - HTTP-обработчики дашборда «Сводка здоровья».
 // Премиум-гейт реализован на уровне API /api/metrics через проверку
 // подлинности Telegram initData + статуса Premium пользователя.
 type Handler struct {
@@ -97,7 +98,7 @@ func (h *Handler) ServeWebApp(w http.ResponseWriter, r *http.Request) {
 		filePath = strings.TrimPrefix(filePath, "/dashboard/")
 	}
 
-	// Отрезаем query (?v=...) — файл ищем по чистому имени.
+	// Отрезаем query (?v=...) - файл ищем по чистому имени.
 	if i := strings.IndexByte(filePath, '?'); i >= 0 {
 		filePath = filePath[:i]
 	}
@@ -122,7 +123,7 @@ func (h *Handler) ServeWebApp(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-// Metrics — обработчик GET /api/metrics. Возвращает реальные метрики
+// Metrics - обработчик GET /api/metrics. Возвращает реальные метрики
 // пользователя, извлечённые из его истории анализов/биосканов.
 //
 // Доступ только для Premium-пользователей: проверяем initData (подпись
@@ -160,16 +161,16 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 	metrics := h.buildMetrics(r.Context(), telegramID)
 
 	// Премиум-гейт: «богатые» метрики (кровь/питание/активность/тренды)
-	// доступны только Premium. Но ОНБОРДИНГ (регистрация профиля) — для
+	// доступны только Premium. Но ОНБОРДИНГ (регистрация профиля) - для
 	// ВСЕХ: при отсутствии данных не-Premium пользователь тоже видит форму
 	// заполнения, а не пустой экран с «нужна Premium». Поэтому не отдаём
 	// 403, а помечаем premiumRequired и скрываем rich-поля, оставляя
-	// noData/имя профиля — чтобы Mini App мог показать карточку регистрации.
+	// noData/имя профиля - чтобы Mini App мог показать карточку регистрации.
 	isPremium := h.pay.IsPremium(telegramID)
 	metrics.PremiumRequired = !isPremium
 	if !isPremium {
 		metrics.HealthIndex = 0
-		metrics.EnergyLevel = "—"
+		metrics.EnergyLevel = "-"
 		metrics.Blood = BloodData{}
 		metrics.Nutrition = NutData{}
 		metrics.Activity = ActData{}
@@ -184,13 +185,13 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[DASHBOARD] /api/metrics отданы для user=%d (noData=%v)", telegramID, metrics.NoData)
 }
 
-// Reports — обработчик GET /api/reports. Возвращает последний и предыдущий
+// Reports - обработчик GET /api/reports. Возвращает последний и предыдущий
 // сохранённые отчёты расширенного анализа и Bioscan PRO (из истории
-// пользователя) вместе с вычисленной дельтой индекса — чтобы дашборд
+// пользователя) вместе с вычисленной дельтой индекса - чтобы дашборд
 // «Сводка здоровья» мог показать графики последнего отчёта и сравнение
 // прогресса с предыдущим.
 //
-// Доступ — как и у /api/metrics: валидация initData (подпись Telegram) +
+// Доступ - как и у /api/metrics: валидация initData (подпись Telegram) +
 // Premium-гейт. Без Premium «богатые» данные скрываются (как в /api/metrics).
 func (h *Handler) Reports(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -222,7 +223,7 @@ func (h *Handler) Reports(w http.ResponseWriter, r *http.Request) {
 
 	data := h.buildReportsData(r.Context(), telegramID)
 
-	// Премиум-гейт: «богатые» данные (индексы/зоны/индикаторы) — только для
+	// Премиум-гейт: «богатые» данные (индексы/зоны/индикаторы) - только для
 	// Premium. Сам факт наличия отчётов и количество (Count) остаются видны.
 	isPremium := h.pay.IsPremium(telegramID)
 	data.PremiumRequired = !isPremium
@@ -244,14 +245,14 @@ func (h *Handler) Reports(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(data)
 }
 
-// ReportFile — обработчик GET /api/reports/file. Отдаёт сохранённый отчёт
+// ReportFile - обработчик GET /api/reports/file. Отдаёт сохранённый отчёт
 // (расширенный анализ или Bioscan PRO) как PDF-файл для просмотра/скачивания
 // прямо из «Сводки здоровья». По id записи из истории берёт сохранённый
 // ReportHTML либо перерендеривает HTML из JsonData и конвертирует в PDF через
-// pdfservice (html2pdf.app). При недоступности PDF-конвертера — отдаёт сам
+// pdfservice (html2pdf.app). При недоступности PDF-конвертера - отдаёт сам
 // HTML (отчёт не теряется).
 //
-// Доступ — по подписи initData (проверка подлинности Telegram) + проверке
+// Доступ - по подписи initData (проверка подлинности Telegram) + проверке
 // владения записью. ПРЕМИУМ-ГЕЙТ НЕ ПРИМЕНЯЕТСЯ: пользователь открывает
 // свой собственный сохранённый отчёт, это его данные, и клик по карточке
 // отчёта в «Сводке здоровья» должен открывать файл независимо от тарифа
@@ -272,16 +273,26 @@ func (h *Handler) ReportFile(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "bad type", http.StatusBadRequest)
 			return
 		}
-		html := h.buildDemoReportHTML(entryType)
+		entryID, _ := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+		html := h.buildDemoReportHTML(entryType, entryID)
 		if strings.TrimSpace(html) == "" {
 			http.Error(w, "render error", http.StatusInternalServerError)
 			return
 		}
 		filename := "Demo_" + entryType + "_report"
+		// Для встроенного просмотра (iframe внутри Mini App, ?view=inline)
+		// отдаём сам HTML - он надёжно рендерится в WebView и НЕ триггерит
+		// окно «посетить сайт» Telegram (URL того же домена, навигации нет).
+		if r.URL.Query().Get("view") == "inline" {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename+".html"))
+			w.Write([]byte(html))
+			return
+		}
 		// PDF если ключ html2pdf.app доступен, иначе сам HTML (inline).
 		pdfBytes, convErr := h.pdfConverter.ConvertHTML(r.Context(), html)
 		if convErr != nil {
-			log.Printf("[DASHBOARD] PDF недоступен для демо-отчёта (%v) — отдаю HTML", convErr)
+			log.Printf("[DASHBOARD] PDF недоступен для демо-отчёта (%v) - отдаю HTML", convErr)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename+".html"))
 			w.Write([]byte(html))
@@ -336,11 +347,21 @@ func (h *Handler) ReportFile(w http.ResponseWriter, r *http.Request) {
 
 	filename := "Report_" + entryType + "_" + entry.Date.Format("2006-01-02")
 
+	// Для встроенного просмотра (iframe внутри Mini App, ?view=inline)
+	// отдаём сам HTML - он надёжно рендерится в WebView и НЕ триггерит
+	// окно «посетить сайт» Telegram. PDF-конвертацию пропускаем.
+	if r.URL.Query().Get("view") == "inline" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename+".html"))
+		w.Write([]byte(html))
+		return
+	}
+
 	// Конвертация в PDF. При ошибке (нет ключа html2pdf.app / сервис
-	// недоступен) — откат к отдаче самого HTML, чтобы отчёт не потерялся.
+	// недоступен) - откат к отдаче самого HTML, чтобы отчёт не потерялся.
 	pdfBytes, convErr := h.pdfConverter.ConvertHTML(r.Context(), html)
 	if convErr != nil {
-		log.Printf("[DASHBOARD] PDF-конвертация недоступна для отчёта id=%d: %v — отдаю HTML", entryID, convErr)
+		log.Printf("[DASHBOARD] PDF-конвертация недоступна для отчёта id=%d: %v - отдаю HTML", entryID, convErr)
 		// ВАЖНО: Content-Disposition=inline (НЕ attachment). В Telegram
 		// WebView attachment триггерит скачивание, которое в браузере
 		// Mini App не открывается (пользователь видит «ничего не произошло»).
@@ -359,7 +380,7 @@ func (h *Handler) ReportFile(w http.ResponseWriter, r *http.Request) {
 }
 
 // reportHTML возвращает print-ready HTML сохранённого отчёта: если есть
-// готовый ReportHTML — берёт его, иначе перерендеривает из JsonData через
+// готовый ReportHTML - берёт его, иначе перерендеривает из JsonData через
 // report.Renderer (в зависимости от типа записи).
 func (h *Handler) reportHTML(entry *monitoring.HistoryEntry) (string, error) {
 	if strings.TrimSpace(entry.ReportHTML) != "" {
@@ -395,31 +416,77 @@ func (h *Handler) reportHTML(entry *monitoring.HistoryEntry) (string, error) {
 
 // buildDemoReportHTML возвращает синтетический HTML-отчёт для демо-режима
 // (кнопка «📄 PDF» / клик по архиву в демо-Сводке). Не зависит от шаблонов
-// report.Renderer и не требует записи в БД — просто аккуратный демо-документ,
+// report.Renderer и не требует записи в БД - просто аккуратный демо-документ,
 // который можно открыть как HTML (или PDF при наличии ключа html2pdf.app).
-func (h *Handler) buildDemoReportHTML(kind string) string {
+// demoReportBlock returns the synthetic demo ReportBlock for a specific id.
+func (h *Handler) demoReportBlock(kind string, id int64) ReportBlock {
+	demo := h.buildDemoReports()
+	group := demo.Analysis
+	if kind == "bioscan" {
+		group = demo.Bioscan
+	}
+	for _, b := range group.Reports {
+		if b.ID == id {
+			return b
+		}
+	}
+	return group.Latest
+}
+
+// buildDemoReportHTML returns a synthetic demo HTML report for a specific id.
+func (h *Handler) buildDemoReportHTML(kind string, id int64) string {
 	esc := func(s string) string {
 		return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", "\"", "&quot;").Replace(s)
 	}
-	title := "Расширенный анализ"
-	date := time.Now().Format("2006-01-02")
-	extraHead := "<th>Статус</th>"
-	rows := ""
+	block := h.demoReportBlock(kind, id)
+	title := block.Title
+	if title == "" {
+		title = "Расширенный анализ"
+		if kind == "bioscan" {
+			title = "Bioscan PRO"
+		}
+	}
+	date := block.Date
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
+	mainScore := block.MainScore
+	if mainScore <= 0 {
+		mainScore = 75
+	}
+	scoresRows := ""
+	keys := make([]string, 0, len(block.Scores))
+	for k := range block.Scores {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		scoresRows += fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>", esc(k), esc(fmt.Sprintf("%d", block.Scores[k])))
+	}
+	extra := ""
 	if kind == "bioscan" {
-		title = "Bioscan PRO"
-		extraHead = ""
-		zones := [][2]string{{"Плечи", "88"}, {"Пресс", "74"}, {"Ноги", "80"}, {"Осанка", "84"}, {"Таз", "78"}, {"Позвоночник", "86"}}
-		for _, z := range zones {
-			rows += fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>", esc(z[0]), esc(z[1]))
+		if len(block.Zones) > 0 {
+			zrows := ""
+			for _, z := range block.Zones {
+				zrows += fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>", esc(z.Name), esc(fmt.Sprintf("%d", z.Score)))
+			}
+			extra = `<h2 style="color:#1FA6A8;margin-top:24px">Оценка зон</h2>
+<table><thead><tr><th>Зона</th><th>Балл</th></tr></thead><tbody>` + zrows + `</tbody></table>`
 		}
 	} else {
-		inds := [][3]string{
-			{"Гемоглобин", "152 г/л", "норма"},
-			{"Глюкоза", "5.2 ммоль/л", "норма"},
-			{"Холестерин", "5.1 ммоль/л", "внимание"},
-		}
-		for _, i := range inds {
-			rows += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td></tr>", esc(i[0]), esc(i[1]), esc(i[2]))
+		if len(block.Indicators) > 0 {
+			irows := ""
+			for _, i := range block.Indicators {
+				status := i.Status
+				if status == "normal" {
+					status = "норма"
+				} else if status == "warning" {
+					status = "внимание"
+				}
+				irows += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td></tr>", esc(i.Name), esc(i.Value), esc(status))
+			}
+			extra = `<h2 style="color:#1FA6A8;margin-top:24px">Показатели</h2>
+<table><thead><tr><th>Показатель</th><th>Значение</th><th>Статус</th></tr></thead><tbody>` + irows + `</tbody></table>`
 		}
 	}
 	html := `<!doctype html>
@@ -427,21 +494,25 @@ func (h *Handler) buildDemoReportHTML(kind string) string {
 <title>` + title + ` (демо)</title>
 <style>
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:32px auto;padding:0 16px;color:#1a2330}
-h1{color:#1FA6A8} .sub{color:#6b7785;margin-bottom:24px}
+h1{color:#1FA6A8} .sub{color:#6b7785;margin-bottom:8px}
+.score{font-size:40px;font-weight:700;color:#1FA6A8;margin:16px 0}
 table{width:100%;border-collapse:collapse;margin-top:12px}
 td,th{text-align:left;padding:8px 10px;border-bottom:1px solid #e3e8ef}
 .demo{margin-top:24px;padding:12px 14px;background:#f4f8fa;border-radius:12px;color:#6b7785}
 </style></head><body>
 <h1>` + title + `</h1>
 <div class="sub">Демонстрационный отчёт · ` + date + `</div>
-<table><thead><tr><th>Показатель</th><th>Значение</th>` + extraHead + `</tr></thead>
-<tbody>` + rows + `</tbody></table>
-<div class="demo">Это демонстрационный отчёт Prisma. Чтобы открыть реальный PDF-отчёт, загрузите анализ или пройдите Bioscan PRO в боте.</div>
+<div class="score">` + fmt.Sprintf("%d", mainScore) + ` <span style="font-size:16px;color:#6b7785">` + esc(block.ScoreLabel) + `</span></div>
+<h2 style="color:#1FA6A8;margin-top:24px">Компоненты</h2>
+<table><thead><tr><th>Компонент</th><th>Балл</th></tr></thead>
+<tbody>` + scoresRows + `</tbody></table>
+` + extra + `
+<div class="demo">Это демонстрационный отчёт Prisma. Чтобы открыть реальный отчёт, загрузите анализ или пройдите Bioscan PRO в боте.</div>
 </body></html>`
 	return html
 }
 
-// buildDemoReports — синтетические «последний» и «предыдущий» отчёты для
+// buildDemoReports - синтетические «последний» и «предыдущий» отчёты для
 // демо-режима дашборда: показывает, как выглядят карточки Расширенного
 // анализа и Bioscan PRO с графиками и сравнением прогресса.
 func (h *Handler) buildDemoReports() ReportsResponse {
@@ -558,7 +629,7 @@ func (h *Handler) buildDemoReports() ReportsResponse {
 	}
 }
 
-// ProfileRequest — тело запроса регистрации профиля из Mini App «Сводка
+// ProfileRequest - тело запроса регистрации профиля из Mini App «Сводка
 // здоровья». Минимальный набор полей, чтобы дашборд перестал быть пустым.
 type ProfileRequest struct {
 	Name   string `json:"name"`
@@ -569,7 +640,7 @@ type ProfileRequest struct {
 	Goal   string `json:"goal"`
 }
 
-// SaveProfile — обработчик POST /api/profile. Принимает минимальный профиль
+// SaveProfile - обработчик POST /api/profile. Принимает минимальный профиль
 // пользователя (регистрация) из Mini App и сохраняет его как запись истории
 // типа "questionnaire", чтобы дашборд при следующем открытии был непустым.
 //
@@ -660,7 +731,7 @@ func (h *Handler) SaveProfile(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-// profileRecommendations — стартовые рекомендации на основе цели пользователя.
+// profileRecommendations - стартовые рекомендации на основе цели пользователя.
 func profileRecommendations(goal string) []string {
 	base := "Регулярно загружайте анализы и биосканы, чтобы отслеживать динамику здоровья."
 	if goal == "" {
@@ -683,7 +754,7 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64) MetricsRes
 	if err != nil || len(entries) == 0 {
 		resp.NoData = true
 		resp.HealthIndex = 0
-		resp.EnergyLevel = "—"
+		resp.EnergyLevel = "-"
 		resp.Recommendations = []string{
 			"Загрузите первый анализ или пройдите биоскан, чтобы увидеть сводку здоровья.",
 		}
@@ -699,12 +770,12 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64) MetricsRes
 	resp.UserName = report.Name
 	resp.UserAge = report.Age
 
-	// Показатели крови — из последнего анализа.
+	// Показатели крови - из последнего анализа.
 	resp.Blood.Hemoglobin = intOrZero(report.findIndicator("гемоглобин", "hemoglobin"))
 	resp.Blood.Leukocytes = report.findIndicator("лейкоцит", "leukocyte", "wbc")
 	resp.Blood.Platelets = intOrZero(report.findIndicator("тромбоцит", "platelet"))
 
-	// Питание/активность — из последнего анализа при наличии.
+	// Питание/активность - из последнего анализа при наличии.
 	resp.Nutrition.Protein = intOrZero(report.findIndicator("белок", "protein"))
 	resp.Nutrition.Carbs = intOrZero(report.findIndicator("углевод", "carb"))
 	resp.Nutrition.Fat = intOrZero(report.findIndicator("жир", "fat"))
@@ -712,7 +783,7 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64) MetricsRes
 	resp.Activity.Calories = intOrZero(report.findIndicator("калор", "calorie"))
 	resp.Activity.Water = report.findIndicator("вода", "water")
 
-	// Рекомендации — из последнего анализа, иначе дефолтные.
+	// Рекомендации - из последнего анализа, иначе дефолтные.
 	if len(report.Recommendations) > 0 {
 		resp.Recommendations = report.Recommendations
 	} else {
@@ -766,13 +837,13 @@ func (h *Handler) buildDemoMetrics() MetricsResponse {
 		},
 		Recommendations: []string{
 			"Поддерживайте водный баланс (≈2 л воды в день).",
-			"Активность выросла — отличный прогресс за месяц (индекс 60 → 82).",
+			"Активность выросла - отличный прогресс за месяц (индекс 60 → 82).",
 			"Контролируйте уровень гемоглобина раз в 3–4 недели.",
 		},
 	}
 }
 
-// healthIndex — детерминированный индекс здоровья (0-100), производный от
+// healthIndex - детерминированный индекс здоровья (0-100), производный от
 // числа накопленных анализов и профиля последнего отчёта. Это НЕ медицинская
 // оценка, а честный индикатор активности мониторинга + базовый уровень.
 func healthIndex(count int, r reportData) int {
@@ -805,7 +876,7 @@ func energyLevel(r reportData, count int) string {
 	if count >= 1 {
 		return "Средний"
 	}
-	return "—"
+	return "-"
 }
 
 func intOrZero(f float64) int {
@@ -836,7 +907,7 @@ func (r reportData) findIndicator(names ...string) float64 {
 
 // parseReport извлекает профиль, показатели и рекомендации из JSON отчёта
 // анализа (структура models.Report). При ошибке/пустоте возвращает пустую
-// структуру — дашборд корректно покажет «—».
+// структуру - дашборд корректно покажет «-».
 func parseReport(jsonStr string) reportData {
 	out := reportData{indicators: map[string]float64{}}
 	if strings.TrimSpace(jsonStr) == "" {
@@ -879,7 +950,7 @@ func parseReport(jsonStr string) reportData {
 			}
 			if v, ok := firstNumber(ind.Value); ok {
 				// Если один показатель встречается несколько раз, берём
-				// первое значение (исторически — самое общее).
+				// первое значение (исторически - самое общее).
 				if _, exists := out.indicators[key]; !exists {
 					out.indicators[key] = v
 				}

@@ -1,5 +1,5 @@
 // ============================================================
-// Prisma — Мониторинг (Telegram Mini App)
+// Prisma - Мониторинг (Telegram Mini App)
 // SPA: список проектов, создание, привязка записей истории, графики.
 // ============================================================
 
@@ -14,12 +14,15 @@ function getInitData() {
 }
 
 // Типы мониторинга (синхронизированы с backend ProjectTypes).
+// Эмодзи вынесено в TYPE_ICON - здесь оставляем ТОЛЬКО текст, иначе при
+// отрисовке «TYPE_ICON + TYPE_LABELS» эмодзи дублируется (было «💉 💉 Курс
+// препаратов»).
 const PROJECT_TYPES = [
-    { value: 'course',   label: '💉 Курс препаратов' },
-    { value: 'diabetes', label: '🩸 Диабет' },
-    { value: 'weight',   label: '⚖️ Похудение' },
-    { value: 'health',   label: '💚 Общее здоровье' },
-    { value: 'other',    label: '📌 Другое' },
+    { value: 'course',   label: 'Курс препаратов' },
+    { value: 'diabetes', label: 'Диабет' },
+    { value: 'weight',   label: 'Похудение' },
+    { value: 'health',   label: 'Общее здоровье' },
+    { value: 'other',    label: 'Другое' },
 ];
 
 // Референсные диапазоны для известных показателей (для линий нормы на графиках).
@@ -49,7 +52,7 @@ const state = {
 };
 
 // ------------------------------------------------------------
-// Демо-режим (?demo=1) — синтетические проекты/записи для предпросмотра
+// Демо-режим (?demo=1) - синтетические проекты/записи для предпросмотра
 // графиков без реальных анализов и без Premium. Всё работает на клиенте,
 // бэкенд не вызывается. Данные детерминированные (стабильные графики).
 // ------------------------------------------------------------
@@ -60,17 +63,17 @@ function isDemo() {
 // Список проектов для демо (форма совпадает с MonitoringProject из backend).
 const DEMO_PROJECTS = [
     {
-        id: 901, telegram_id: 0, name: '💉 Курс Омеги-3', type: 'course',
+        id: 901, telegram_id: 0, name: 'Курс Омеги-3', type: 'course',
         start_date: '2026-03-02', end_date: '', status: 'active',
         created_at: '2026-03-02', entry_ids: [9001, 9002, 9003, 9004, 9005],
     },
     {
-        id: 902, telegram_id: 0, name: '🩸 Диабет — сахар', type: 'diabetes',
+        id: 902, telegram_id: 0, name: 'Диабет - сахар', type: 'diabetes',
         start_date: '2026-03-03', end_date: '2026-04-01', status: 'completed',
         created_at: '2026-03-03', entry_ids: [9101, 9102, 9103, 9104],
     },
     {
-        id: 903, telegram_id: 0, name: '⚖️ Похудение весна 2026', type: 'weight',
+        id: 903, telegram_id: 0, name: 'Похудение весна 2026', type: 'weight',
         start_date: '2026-03-05', end_date: '', status: 'active',
         created_at: '2026-03-05', entry_ids: [9201, 9202, 9203, 9204, 9205],
     },
@@ -117,7 +120,7 @@ function loadDemoProjects() {
     state.projects = DEMO_PROJECTS;
     state.selectedMetrics = new Set();
     renderProjects();
-    setHeader('Мои проекты (демо)', '🧪 Демо-данные — предпросмотр графиков');
+    setHeader('Мои проекты (демо)', '🧪 Демо-данные - предпросмотр графиков');
     showView('view-projects');
 }
 
@@ -177,9 +180,9 @@ function escapeHTML(s) {
 }
 
 function formatDate(d) {
-    if (!d) return '—';
+    if (!d) return '-';
     const dt = new Date(d);
-    if (isNaN(dt)) return '—';
+    if (isNaN(dt)) return '-';
     return dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
@@ -236,7 +239,7 @@ function renderProjects() {
         const statusPill = p.status === 'completed'
             ? '<span class="status-pill status-completed">Завершён</span>'
             : '<span class="status-pill status-active">Активен</span>';
-        const end = p.end_date ? ' — ' + formatDate(p.end_date) : '';
+        const end = p.end_date ? ' - ' + formatDate(p.end_date) : '';
         card.innerHTML = `
             <div class="pc-top">
                 <div class="pc-name">${escapeHTML(p.name)}</div>
@@ -320,7 +323,7 @@ function renderProjectDetail() {
     const p = d.project;
 
     $('projName').textContent = p.name;
-    const end = p.end_date ? ' — ' + formatDate(p.end_date) : ' (открытый)';
+    const end = p.end_date ? ' - ' + formatDate(p.end_date) : ' (открытый)';
     $('projMeta').innerHTML = `<span class="tag">${TYPE_ICON[p.type] || '📌'} ${escapeHTML(TYPE_LABELS[p.type] || p.type)}</span>` +
         `<span class="tag">${p.status === 'completed' ? 'Завершён' : 'Активен'}</span>` +
         `<span>📅 ${formatDate(p.start_date)}${end}</span>`;
@@ -333,7 +336,7 @@ function renderProjectDetail() {
         <div class="info-row"><span class="k">Название</span><span class="v">${escapeHTML(p.name)}</span></div>
         <div class="info-row"><span class="k">Тип</span><span class="v">${escapeHTML(TYPE_LABELS[p.type] || p.type)}</span></div>
         <div class="info-row"><span class="k">Дата начала</span><span class="v">${formatDate(p.start_date)}</span></div>
-        <div class="info-row"><span class="k">Дата окончания</span><span class="v">${p.end_date ? formatDate(p.end_date) : '—'}</span></div>
+        <div class="info-row"><span class="k">Дата окончания</span><span class="v">${p.end_date ? formatDate(p.end_date) : '-'}</span></div>
         <div class="info-row"><span class="k">Статус</span><span class="v">${p.status === 'completed' ? 'Завершён' : 'Активен'}</span></div>
         <div class="info-row"><span class="k">Привязано записей</span><span class="v">${d.entries.length}</span></div>
         ${completeBtn}`;

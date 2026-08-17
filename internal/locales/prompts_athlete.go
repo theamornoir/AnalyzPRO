@@ -1,6 +1,6 @@
 package locales
 
-// PromptForAthlete — промпт для спортсмена/на курсе препаратов.
+// PromptForAthlete - промпт для спортсмена/на курсе препаратов.
 func PromptForAthlete(text string, courseInfo string) string {
 	return courseInfo + `
 

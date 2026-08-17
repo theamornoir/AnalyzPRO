@@ -18,16 +18,16 @@ import (
 
 const (
 	yandexGPTEndpoint = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
-	// yandexDefaultTextModel — дешевле и входит в бесплатную квоту; подходит
+	// yandexDefaultTextModel - дешевле и входит в бесплатную квоту; подходит
 	// для текстовых/JSON-задач. Переопределяется через YANDEX_GPT_MODEL.
 	yandexDefaultTextModel = "yandexgpt-lite"
-	// yandexDefaultVisionModel — мультимодальность (анализ фото) есть только
+	// yandexDefaultVisionModel - мультимодальность (анализ фото) есть только
 	// у полной модели yandexgpt, у lite её нет. Переопределяется через
 	// YANDEX_GPT_VISION_MODEL.
 	yandexDefaultVisionModel = "yandexgpt"
 )
 
-// YandexGPTProvider — провайдер YandexGPT (Yandex Cloud Foundation Models).
+// YandexGPTProvider - провайдер YandexGPT (Yandex Cloud Foundation Models).
 // Работает из РФ без гео-блоков (в отличие от Gemini), есть бесплатная квота,
 // поэтому используется как основной провайдер. Gemini/DeepSeek/Claude
 // остаются фоллбэками на случай его недоступности.
@@ -40,12 +40,12 @@ type YandexGPTProvider struct {
 
 // NewYandexGPTProvider создаёт провайдер с ключами из окружения:
 //
-//	YANDEX_GPT_API_KEY    — API-ключ каталога Yandex Cloud
-//	YANDEX_GPT_FOLDER_ID  — ID каталога (folder-id)
-//	YANDEX_GPT_MODEL      — (опц.) текстовая модель, по умолчанию yandexgpt-lite
-//	YANDEX_GPT_VISION_MODEL — (опц.) модель для фото, по умолчанию yandexgpt
+//	YANDEX_GPT_API_KEY    - API-ключ каталога Yandex Cloud
+//	YANDEX_GPT_FOLDER_ID  - ID каталога (folder-id)
+//	YANDEX_GPT_MODEL      - (опц.) текстовая модель, по умолчанию yandexgpt-lite
+//	YANDEX_GPT_VISION_MODEL - (опц.) модель для фото, по умолчанию yandexgpt
 //
-// Возвращает nil, если не задан API-ключ или folder-id — провайдер тогда не
+// Возвращает nil, если не задан API-ключ или folder-id - провайдер тогда не
 // добавляется в оркестратор.
 func NewYandexGPTProvider() *YandexGPTProvider {
 	apiKey := os.Getenv("YANDEX_GPT_API_KEY")
@@ -69,7 +69,7 @@ func NewYandexGPTProvider() *YandexGPTProvider {
 	}
 }
 
-// yandexMessage — одно сообщение в запросе к YandexGPT.
+// yandexMessage - одно сообщение в запросе к YandexGPT.
 // Images (необязательно) содержит data-URL изображений для мультимодального
 // (vision) режима.
 type yandexMessage struct {
@@ -78,21 +78,21 @@ type yandexMessage struct {
 	Images []string `json:"images,omitempty"`
 }
 
-// yandexCompletionOptions — параметры генерации.
+// yandexCompletionOptions - параметры генерации.
 type yandexCompletionOptions struct {
 	Stream      bool    `json:"stream"`
 	Temperature float64 `json:"temperature"`
 	MaxTokens   int     `json:"maxTokens"`
 }
 
-// yandexRequest — тело запроса к YandexGPT completion API.
+// yandexRequest - тело запроса к YandexGPT completion API.
 type yandexRequest struct {
 	ModelURI          string                  `json:"modelUri"`
 	CompletionOptions yandexCompletionOptions `json:"completionOptions"`
 	Messages          []yandexMessage         `json:"messages"`
 }
 
-// yandexResponse — ответ YandexGPT completion API.
+// yandexResponse - ответ YandexGPT completion API.
 type yandexResponse struct {
 	Result struct {
 		Alternatives []struct {
@@ -110,7 +110,7 @@ type yandexResponse struct {
 	} `json:"error"`
 }
 
-// complete — единая точка вызова YandexGPT completion API.
+// complete - единая точка вызова YandexGPT completion API.
 // Использует общий AIHTTPClient (таймаут/прокси как у остальных провайдеров).
 func (p *YandexGPTProvider) complete(ctx context.Context, model string, messages []yandexMessage, maxTokens int, temperature float64) (string, error) {
 	reqBody := yandexRequest{
@@ -170,18 +170,18 @@ func (p *YandexGPTProvider) complete(ctx context.Context, model string, messages
 	return text, nil
 }
 
-// GenerateAnalysisSummary — текстовый анализ (консультация/обычный анализ).
+// GenerateAnalysisSummary - текстовый анализ (консультация/обычный анализ).
 func (p *YandexGPTProvider) GenerateAnalysisSummary(ctx context.Context, userInput string) (string, error) {
 	return p.complete(ctx, p.textModel, []yandexMessage{
-		{Role: "system", Text: "Ты — опытный медицинский аналитик. Проанализируй данные и дай практичные рекомендации."},
+		{Role: "system", Text: "Ты - опытный медицинский аналитик. Проанализируй данные и дай практичные рекомендации."},
 		{Role: "user", Text: userInput},
 	}, 3000, 0.3)
 }
 
-// GenerateAnalysisJSON — структурированный JSON-анализ по тексту.
+// GenerateAnalysisJSON - структурированный JSON-анализ по тексту.
 func (p *YandexGPTProvider) GenerateAnalysisJSON(ctx context.Context, userInput string) (string, error) {
 	text, err := p.complete(ctx, p.textModel, []yandexMessage{
-		{Role: "system", Text: "Ты — медицинский аналитик. Верни ответ строго в формате JSON, без markdown-разметки и пояснений."},
+		{Role: "system", Text: "Ты - медицинский аналитик. Верни ответ строго в формате JSON, без markdown-разметки и пояснений."},
 		{Role: "user", Text: userInput},
 	}, 4000, 0.1)
 	if err != nil {
@@ -190,7 +190,7 @@ func (p *YandexGPTProvider) GenerateAnalysisJSON(ctx context.Context, userInput 
 	return yandexStripJSON(text), nil
 }
 
-// GenerateAnalysisFromFileWithContext — анализ изображения (анализ/документ)
+// GenerateAnalysisFromFileWithContext - анализ изображения (анализ/документ)
 // с контекстом; возвращает текстовый разбор. YandexGPT умеет работать только
 // с изображениями, поэтому не-изображения отвергаются (оркестратор уйдёт к
 // следующему провайдеру).
@@ -207,7 +207,7 @@ func (p *YandexGPTProvider) GenerateAnalysisFromFileWithContext(ctx context.Cont
 	}, 4000, 0.3)
 }
 
-// GenerateBioscanJSON — анализ фото для bioscan, возвращает JSON.
+// GenerateBioscanJSON - анализ фото для bioscan, возвращает JSON.
 func (p *YandexGPTProvider) GenerateBioscanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
 	var imgs []string
 	for _, d := range photosData {
@@ -231,7 +231,7 @@ func (p *YandexGPTProvider) GenerateBioscanJSON(ctx context.Context, photosData 
 	return yandexStripJSON(text), nil
 }
 
-// GenerateBodyScanJSON — генерирует JSON премиального отчёта Bioscan PRO.
+// GenerateBodyScanJSON - генерирует JSON премиального отчёта Bioscan PRO.
 func (p *YandexGPTProvider) GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
 	var imgs []string
 	for _, d := range photosData {
@@ -255,7 +255,7 @@ func (p *YandexGPTProvider) GenerateBodyScanJSON(ctx context.Context, photosData
 	return yandexStripJSON(text), nil
 }
 
-// GenerateAnalysisFromFileJSON — анализ изображения, возвращает JSON.
+// GenerateAnalysisFromFileJSON - анализ изображения, возвращает JSON.
 func (p *YandexGPTProvider) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	if !isImageMime(mimeType) {
 		return "", fmt.Errorf("yandexgpt supports only image files for analysis")
@@ -273,10 +273,10 @@ func (p *YandexGPTProvider) GenerateAnalysisFromFileJSON(ctx context.Context, da
 	return yandexStripJSON(text), nil
 }
 
-// GenerateDossierJSON — генерирует JSON универсального отчёта-досье здоровья.
+// GenerateDossierJSON - генерирует JSON универсального отчёта-досье здоровья.
 func (p *YandexGPTProvider) GenerateDossierJSON(ctx context.Context, userInput string) (string, error) {
 	text, err := p.complete(ctx, p.textModel, []yandexMessage{
-		{Role: "system", Text: "Ты — опытный врач-диагност и аналитик здоровья. Верни ответ строго в формате JSON, без markdown-разметки и пояснений."},
+		{Role: "system", Text: "Ты - опытный врач-диагност и аналитик здоровья. Верни ответ строго в формате JSON, без markdown-разметки и пояснений."},
 		{Role: "user", Text: userInput},
 	}, 8000, 0.1)
 	if err != nil {
@@ -285,7 +285,7 @@ func (p *YandexGPTProvider) GenerateDossierJSON(ctx context.Context, userInput s
 	return yandexStripJSON(text), nil
 }
 
-// yandexStripJSON — убирает markdown-обёртку ```json ... ```, которую модель
+// yandexStripJSON - убирает markdown-обёртку ```json ... ```, которую модель
 // иногда добавляет вокруг JSON. Нужно, т.к. bioscan-парсер ожидает чистый JSON.
 func yandexStripJSON(s string) string {
 	s = strings.TrimSpace(s)

@@ -96,7 +96,7 @@ func New(
 	}
 
 	// Диагностика: логируем id бота из токена, чтобы при ошибках валидации
-	// initData можно было сверить — тот ли BOT_TOKEN запущен на сервере, что
+	// initData можно было сверить - тот ли BOT_TOKEN запущен на сервере, что
 	// подписал initData (serverBotID должен совпадать с ботом, с которым общается пользователь).
 	bid := token
 	if strings.Contains(bid, ":") {
@@ -149,7 +149,7 @@ func (b *Bot) Start(ctx context.Context) {
 			if r.URL.RawQuery != "" {
 				target += "?" + r.URL.RawQuery
 			}
-			// 307 (а не 301): редирект НЕ кэшируется — см. обоснование у
+			// 307 (а не 301): редирект НЕ кэшируется - см. обоснование у
 			// /dashboard. Важно, чтобы tgWebAppData не терялся между
 			// открытиями Mini App.
 			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
@@ -169,16 +169,43 @@ func (b *Bot) Start(ctx context.Context) {
 		}
 	}()
 
-	// Menu Button (кнопка слева в чате бота) оставляем дефолтной — Сводка
+	// Menu Button (кнопка слева в чате бота) оставляем дефолтной - Сводка
 	// здоровья открывается ТОЛЬКО из клавиатуры бота («📊 Здоровье» → «Открыть»),
 	// а не через постоянную кнопку в чате. Сбрасываем в дефолт при каждом
-	// старте (актуально для динамического https-туннеля `make mini`) — на
+	// старте (актуально для динамического https-туннеля `make mini`) - на
 	// случай, если ранее кнопка была настроена на Mini App. Запускаем в
-	// горутине — сетевой вызов к API не должен блокировать старт бота;
+	// горутине - сетевой вызов к API не должен блокировать старт бота;
 	// ошибки логируются, но не фатальны.
 	go b.SetupMenuButton(ctx)
 
+	// Регистрируем список команд бота, чтобы они отображались в меню «/»
+	// Telegram (в т.ч. админ-команды сброса для тестирования онбординга).
+	// Запускаем в горутине - сетевой вызов не должен блокировать старт.
+	go b.setupCommands(ctx)
+
 	b.client.Start(ctx)
+}
+
+// setupCommands регистрирует список команд бота через setMyCommands, чтобы
+// они были видны в меню «/» Telegram. В частности, это делает админ-команду
+// сброса /resetme (и алиас /reset_premium) ОБНАРУЖИМОЙ - иначе она не
+// показывается как «кнопка»/подсказка, и при тестировании онбординга
+// кажется, что её нет. Сами команды видны всем пользователям, но /resetme и
+// /reset_premium реально срабатывают только для ADMIN_CHAT_ID (для прочих
+// вызов в ResetHandler молча игнорируется).
+func (b *Bot) setupCommands(ctx context.Context) {
+	commands := []models.BotCommand{
+		{Command: "start", Description: "Запустить бота / открыть главное меню"},
+		{Command: "resetme", Description: "Сбросить Premium и онбординг (тест, только для админа)"},
+		{Command: "reset_premium", Description: "Алиас /resetme - сброс статуса (тест)"},
+	}
+	if _, err := b.client.SetMyCommands(ctx, &tgbot.SetMyCommandsParams{
+		Commands: commands,
+	}); err != nil {
+		log.Printf("⚠️ Не удалось зарегистрировать команды бота: %v", err)
+		return
+	}
+	log.Printf("🔘 Команды бота зарегистрированы (включая /resetme для тестов).")
 }
 
 // SetupMenuButton сбрасывает кнопку меню (слева в чате бота) в дефолтное
@@ -187,7 +214,7 @@ func (b *Bot) Start(ctx context.Context) {
 // («📊 Здоровье» → хаб → «Открыть»). Дефолтная кнопка меню у неё показывает
 // список команд бота и не мешает интерфейсу.
 //
-// Глобальная установка (без ChatID) применяется ко всем пользователям бота —
+// Глобальная установка (без ChatID) применяется ко всем пользователям бота -
 // сброс нужен на случай, если ранее кнопка была настроена на Mini App (старые
 // запуски), иначе у пользователей осталась бы «висеть» web_app-кнопка после
 // обновления кода.
@@ -203,7 +230,7 @@ func (b *Bot) SetupMenuButton(ctx context.Context) {
 		log.Printf("⚠️ Не удалось сбросить Menu Button в default: %v", err)
 		return
 	}
-	log.Printf("🔘 Menu Button: дефолтная (Сводка здоровья — только из меню бота).")
+	log.Printf("🔘 Menu Button: дефолтная (Сводка здоровья - только из меню бота).")
 }
 
 func (b *Bot) registerHandlers() {
@@ -232,12 +259,34 @@ func (b *Bot) registerHandlers() {
 		menu.StartHandler(b.stateManager, b.agreementStorage, b.appStorage),
 	)
 
-	// Premium — кнопка меню
+	// Premium - кнопка меню
 	b.client.RegisterHandler(
 		tgbot.HandlerTypeMessageText,
 		locales.BtnPremium,
 		tgbot.MatchTypeExact,
 		menu.PremiumHandler(b.stateManager, b.paymentService),
+	)
+
+	// Админ-команда сброса Premium/онбординга (только для ADMIN_CHAT_ID).
+	// Доступна по двум алиасам: /resetme и /reset_premium.
+	resetHandler := menu.ResetHandler(
+		b.adminChatID,
+		b.stateManager,
+		b.agreementStorage,
+		b.paymentService,
+		b.appStorage,
+	)
+	b.client.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		"/resetme",
+		tgbot.MatchTypeExact,
+		resetHandler,
+	)
+	b.client.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		"/reset_premium",
+		tgbot.MatchTypeExact,
+		resetHandler,
 	)
 
 	// Обычный текст

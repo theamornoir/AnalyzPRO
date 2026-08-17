@@ -16,16 +16,16 @@ import (
 
 var AIHTTPClient *http.Client
 
-// explicitProxy — явно заданный egress-прокси ТОЛЬКО для AI-вызовов
+// explicitProxy - явно заданный egress-прокси ТОЛЬКО для AI-вызовов
 // (Gemini/DeepSeek/Claude). Задаётся через config.GeminiProxy (.env
 // GEMINI_PROXY) либо env-переменными GEMINI_PROXY / AI_HTTP_PROXY.
-// Если пуст — транспорт сам подхватывает системный прокси через
+// Если пуст - транспорт сам подхватывает системный прокси через
 // http.ProxyFromEnvironment (HTTP_PROXY / HTTPS_PROXY / NO_PROXY), а при его
 // отсутствии работает напрямую.
 //
 // Это решает гео-блок Gemini (например, "User location is not supported" во
 // Франции): включите VPN/прокси (Clash/Proxifier, локальный SOCKS5-порт) и
-// укажите его в GEMINI_PROXY — трафик Telegram и всё остальное прокси
+// укажите его в GEMINI_PROXY - трафик Telegram и всё остальное прокси
 // НЕ затрагиваются.
 var explicitProxy string
 
@@ -39,7 +39,7 @@ func init() {
 // Configure применяет явный прокси из конфигурации (config.GeminiProxy).
 // Вызывается из app.New() ПОСЛЕ config.Load(), чтобы GEMINI_PROXY из .env имел
 // приоритет над системным прокси и над env-фоллбэком init().
-// Если proxy пуст — оставляем выбранное в init() поведение (env-фоллбэк или
+// Если proxy пуст - оставляем выбранное в init() поведение (env-фоллбэк или
 // системный прокси).
 func Configure(proxy string) {
 	if proxy == "" {
@@ -65,9 +65,9 @@ func resolveExplicitProxy(cfgProxy string) string {
 }
 
 // newAIClient строит *http.Client с прокси-совместимым транспортом.
-//  1. Если explicitProxy задан — используем его (http/https через CONNECT,
+//  1. Если explicitProxy задан - используем его (http/https через CONNECT,
 //     socks5 через кастомный дайалер).
-//  2. Иначе — системный прокси (http.ProxyFromEnvironment); если его нет —
+//  2. Иначе - системный прокси (http.ProxyFromEnvironment); если его нет -
 //     прямое соединение.
 func newAIClient() *http.Client {
 	transport := &http.Transport{
@@ -83,7 +83,7 @@ func newAIClient() *http.Client {
 	}
 
 	// SOCKS5 не поддерживается stdlib-транспортом как схема ProxyURL, поэтому
-	// для него подменяем DialContext на туннель до цели (поверх — TLS), а
+	// для него подменяем DialContext на туннель до цели (поверх - TLS), а
 	// Proxy оставляем nil (запрос идёт напрямую к цели через туннель).
 	if explicitProxy != "" {
 		if pu, err := url.Parse(explicitProxy); err == nil && pu.Scheme == "socks5" {
@@ -105,12 +105,12 @@ func newAIClient() *http.Client {
 	}
 }
 
-// proxyResolver — функция транспорта: выбирает прокси на каждый запрос.
+// proxyResolver - функция транспорта: выбирает прокси на каждый запрос.
 //  1. explicitProxy задан (http/https) → отдаём его (CONNECT-прокси).
 //  2. explicitProxy = socks5 → проксируем сами через DialContext, поэтому
 //     Proxy не ставим (возвращаем nil).
 //  3. explicitProxy пуст → системный прокси через http.ProxyFromEnvironment
-//     (подхватывает HTTP_PROXY/HTTPS_PROXY/NO_PROXY), при отсутствии —
+//     (подхватывает HTTP_PROXY/HTTPS_PROXY/NO_PROXY), при отсутствии -
 //     прямое соединение.
 func proxyResolver(req *http.Request) (*url.URL, error) {
 	if explicitProxy != "" {
@@ -118,7 +118,7 @@ func proxyResolver(req *http.Request) (*url.URL, error) {
 		if err != nil {
 			log.Printf("⚠️ explicit proxy %q invalid (%v), falling back to system/direct", redactProxyStr(explicitProxy), err)
 		} else if pu.Scheme == "socks5" {
-			// socks5 проксируем через DialContext — Proxy не ставим
+			// socks5 проксируем через DialContext - Proxy не ставим
 			return nil, nil
 		} else {
 			return pu, nil
@@ -163,7 +163,7 @@ func redactProxy(u *url.URL) string {
 	return u.Scheme + "://" + host
 }
 
-// redactProxyStr — обёртка для сырой строки прокси.
+// redactProxyStr - обёртка для сырой строки прокси.
 func redactProxyStr(s string) string {
 	if u, err := url.Parse(s); err == nil {
 		return redactProxy(u)
@@ -205,7 +205,7 @@ func FetchWithRetry(ctx context.Context, url string, body io.Reader, maxRetries 
 			return nil, err
 		}
 
-		// 4xx (кроме 429) — клиентские ошибки (400/401/403/404), повторять
+		// 4xx (кроме 429) - клиентские ошибки (400/401/403/404), повторять
 		// бесполезно. 429 (rate limit) и 5xx повторяем с эксп. отступом.
 		if resp.StatusCode >= 400 && resp.StatusCode < 600 {
 			retryable := resp.StatusCode == http.StatusTooManyRequests ||
@@ -239,7 +239,7 @@ func (e *HTTPError) Error() string {
 // dialThroughSOCKS5 устанавливает TCP-туннель через SOCKS5-прокси (только
 // метод "no authentication") и возвращает net.Conn, уже подключённый к target.
 // Поверх этого соединения http.Transport сам сделает TLS, поэтому работает и
-// для https-целей (Gemini/DeepSeek/Claude). Зависимостей нет — только stdlib.
+// для https-целей (Gemini/DeepSeek/Claude). Зависимостей нет - только stdlib.
 func dialThroughSOCKS5(proxyAddr, network, addr string) (net.Conn, error) {
 	conn, err := net.DialTimeout("tcp", proxyAddr, 5*time.Second)
 	if err != nil {

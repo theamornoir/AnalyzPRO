@@ -55,7 +55,7 @@ func HandleBioscanPhoto(ctx context.Context, b *tgbot.Bot, sm states.StateManage
 		weight := sm.GetUserData(chatID, "bioscan_weight")
 		goal := sm.GetUserData(chatID, "bioscan_goal")
 
-		// Подтверждение — inline-кнопки, чтобы единая Reply-клавиатура
+		// Подтверждение - inline-кнопки, чтобы единая Reply-клавиатура
 		// [Назад] (установлена на предыдущем шаге) оставалась внизу.
 		msg, err := b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:    chatID,

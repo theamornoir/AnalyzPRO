@@ -8,7 +8,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// AIProvider — интерфейс для AI-провайдеров.
+// AIProvider - интерфейс для AI-провайдеров.
 type AIProvider interface {
 	// GenerateAnalysisSummary генерирует текстовый анализ по введённому тексту.
 	GenerateAnalysisSummary(ctx context.Context, userInput string) (string, error)
@@ -28,7 +28,7 @@ type AIProvider interface {
 	GenerateDossierJSON(ctx context.Context, userInput string) (string, error)
 }
 
-// Orchestrator — оркестратор AI-провайдеров с приоритетами.
+// Orchestrator - оркестратор AI-провайдеров с приоритетами.
 type Orchestrator struct {
 	providers []AIProvider
 }
@@ -38,14 +38,14 @@ type Orchestrator struct {
 func NewOrchestrator() *Orchestrator {
 	var providers []AIProvider
 
-	// OpenRouter — основной бесплатный провайдер: OpenAI-совместимый API без
+	// OpenRouter - основной бесплатный провайдер: OpenAI-совместимый API без
 	// гео-блоков, умеет text + vision (фото) + PDF (через извлечение текста).
 	// Ставим первым, чтобы запросы шли через бесплатные модели OpenRouter.
 	if p := NewOpenRouterProvider(); p != nil {
 		providers = append(providers, p)
 		log.Printf(locales.LogOrchestratorProviderAdd, "OpenRouter")
 	}
-	// YandexGPT — бесплатный провайдер с квотой (работает из РФ без гео-блоков).
+	// YandexGPT - бесплатный провайдер с квотой (работает из РФ без гео-блоков).
 	if p := NewYandexGPTProvider(); p != nil {
 		providers = append(providers, p)
 		log.Printf(locales.LogOrchestratorProviderAdd, "YandexGPT")
@@ -81,7 +81,7 @@ func NewOrchestratorWithProviders(providers []AIProvider) *Orchestrator {
 	}
 }
 
-// tryProvider — пытается выполнить метод на провайдере, при ошибке переходит к следующему.
+// tryProvider - пытается выполнить метод на провайдере, при ошибке переходит к следующему.
 func (o *Orchestrator) tryProvider(
 	ctx context.Context,
 	fn func(provider AIProvider) (string, error),
@@ -104,56 +104,56 @@ func (o *Orchestrator) tryProvider(
 	return "", fmt.Errorf(locales.ErrAllProvidersFailed, lastErr)
 }
 
-// GenerateAnalysisSummary — генерирует текстовый анализ.
+// GenerateAnalysisSummary - генерирует текстовый анализ.
 func (o *Orchestrator) GenerateAnalysisSummary(ctx context.Context, userInput string) (string, error) {
 	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
 		return p.GenerateAnalysisSummary(ctx, userInput)
 	})
 }
 
-// GenerateAnalysisJSON — генерирует JSON-анализ.
+// GenerateAnalysisJSON - генерирует JSON-анализ.
 func (o *Orchestrator) GenerateAnalysisJSON(ctx context.Context, userInput string) (string, error) {
 	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
 		return p.GenerateAnalysisJSON(ctx, userInput)
 	})
 }
 
-// GenerateAnalysisFromFileWithContext — анализирует файл с контекстом.
+// GenerateAnalysisFromFileWithContext - анализирует файл с контекстом.
 func (o *Orchestrator) GenerateAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
 		return p.GenerateAnalysisFromFileWithContext(ctx, data, mimeType, contextText)
 	})
 }
 
-// GenerateBioscanJSON — генерирует JSON bioscan.
+// GenerateBioscanJSON - генерирует JSON bioscan.
 func (o *Orchestrator) GenerateBioscanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
 	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
 		return p.GenerateBioscanJSON(ctx, photosData, mimeType, contextInfo)
 	})
 }
 
-// GenerateBodyScanJSON — генерирует JSON премиального отчёта Bioscan PRO.
+// GenerateBodyScanJSON - генерирует JSON премиального отчёта Bioscan PRO.
 func (o *Orchestrator) GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
 	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
 		return p.GenerateBodyScanJSON(ctx, photosData, mimeType, contextInfo)
 	})
 }
 
-// GenerateAnalysisFromFileJSON — генерирует JSON-анализ из файла.
+// GenerateAnalysisFromFileJSON - генерирует JSON-анализ из файла.
 func (o *Orchestrator) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
 		return p.GenerateAnalysisFromFileJSON(ctx, data, mimeType, contextText)
 	})
 }
 
-// GenerateDossierJSON — генерирует JSON универсального отчёта-досье здоровья.
+// GenerateDossierJSON - генерирует JSON универсального отчёта-досье здоровья.
 func (o *Orchestrator) GenerateDossierJSON(ctx context.Context, userInput string) (string, error) {
 	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
 		return p.GenerateDossierJSON(ctx, userInput)
 	})
 }
 
-// providerName — возвращает имя провайдера для логов.
+// providerName - возвращает имя провайдера для логов.
 func providerName(p AIProvider) string {
 	switch p.(type) {
 	case *YandexGPTProvider:

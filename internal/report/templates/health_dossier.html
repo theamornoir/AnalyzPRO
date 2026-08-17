@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prisma — Персональный профиль здоровья</title>
+    <title>Prisma - Персональный профиль здоровья</title>
     <style>
         @page {
             size: A4;
@@ -410,7 +410,7 @@
         </div>
 
         <div class="callout" style="margin-top:2px;">
-            <strong>Ключевой вывод:</strong> интегральная оценка построена на реальных лабораторных данных и ответах опросника. Потенциал улучшения — {{.Scores.Potential}}/100.
+            <strong>Ключевой вывод:</strong> интегральная оценка построена на реальных лабораторных данных и ответах опросника. Потенциал улучшения - {{.Scores.Potential}}/100.
         </div>
 
         <div style="font-size:6pt;color:var(--text-secondary);margin-top:2px;border-top:1px solid var(--border);padding-top:3px;">
@@ -430,13 +430,13 @@
     <div class="page-header"><span class="brand">Общая картина здоровья</span><span class="page-num">{{printf "%02d" $p}}</span></div>
     <div class="eyebrow">Сводный портрет</div>
     <h2>Какая у вас общая картина</h2>
-    <p class="lead">Единый связный рассказ о здоровье — как образ жизни и присланные анализы складываются в одну картину, где корневые причины и что даст наибольший эффект.</p>
+    <p class="lead">Единый связный рассказ о здоровье - как образ жизни и присланные анализы складываются в одну картину, где корневые причины и что даст наибольший эффект.</p>
     {{if .Synthesis}}
     <div class="card card-insight" style="margin-top:4px;">
         <div class="text-block" style="white-space: pre-line; font-size:7.4pt; line-height:1.8;">{{.Synthesis}}</div>
     </div>
     {{else}}
-    <div class="callout" style="margin-top:4px;">Интегральная оценка построена на ответах опросника и присланных анализах. Потенциал улучшения — {{.Scores.Potential}}/100.</div>
+    <div class="callout" style="margin-top:4px;">Интегральная оценка построена на ответах опросника и присланных анализах. Потенциал улучшения - {{.Scores.Potential}}/100.</div>
     {{end}}
 
     {{/* Блок сравнения с предыдущим отчётом (для ПОВТОРНОГО анализа) */}}
@@ -446,7 +446,7 @@
         <div class="page-header"><span class="brand">Сравнение с предыдущим отчётом</span><span class="page-num">{{printf "%02d" $p}}</span></div>
         <div class="eyebrow">Динамика прогресса</div>
         <h2>Что изменилось с прошлого раза</h2>
-        <p class="lead">Это повторный отчёт. Ниже — сравнение с вашим предыдущим замером: что улучшилось, что осталось без изменений и на чём стоит сосредоточиться.</p>
+        <p class="lead">Это повторный отчёт. Ниже - сравнение с вашим предыдущим замером: что улучшилось, что осталось без изменений и на чём стоит сосредоточиться.</p>
 
         {{if .Summary}}<div class="callout">{{.Summary}}</div>{{end}}
 
@@ -486,7 +486,7 @@
         {{end}}
         {{if .Unchanged}}
         <div class="card" style="margin-top:3px;">
-            <div class="metric-name">— Без изменений</div>
+            <div class="metric-name">- Без изменений</div>
             {{range .Unchanged}}<div style="font-size:6.6pt;color:#3d5d59;line-height:1.5;">• {{.}}</div>{{end}}
         </div>
         {{end}}
@@ -621,7 +621,7 @@
 
     <div style="margin-top:4px;">
         {{range .References}}
-        <div class="source-item"><strong>{{.Source}}</strong> — {{.Detail}} <span class="ref"></span></div>
+        <div class="source-item"><strong>{{.Source}}</strong> - {{.Detail}} <span class="ref"></span></div>
         {{end}}
     </div>
 

@@ -86,7 +86,7 @@ func startAnalysis(
 		ParseMode: "HTML",
 	})
 
-	loadingMsg, textMsg := helpers.SendLoadingMessages(ctx, b, chatID, stickerID)
+	loadingMsg, textMsg := helpers.SendLoadingMessages(ctx, b, chatID, stickerID, nil)
 
 	defer cleanupUploadedFiles(uploadedFiles)
 

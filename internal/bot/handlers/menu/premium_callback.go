@@ -16,7 +16,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/payment"
 )
 
-// HandlePremiumCallback — обработка нажатия на тариф.
+// HandlePremiumCallback - обработка нажатия на тариф.
 func HandlePremiumCallback(
 	stateManager states.StateManager,
 	paymentService *payment.MockPaymentService,
@@ -26,7 +26,7 @@ func HandlePremiumCallback(
 			return false
 		}
 
-		// update.Message у callback-запросов nil — берём chatID из отправителя.
+		// update.Message у callback-запросов nil - берём chatID из отправителя.
 		chatID := update.CallbackQuery.From.ID
 		tariffID := strings.TrimPrefix(callbackData, "premium_")
 
@@ -70,10 +70,10 @@ func HandlePremiumCallback(
 
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,
-			Text: "💳 **Оплата Premium**\n\n" +
-				"📌 **Тариф:** " + tariff.Name + "\n" +
-				"💰 **Сумма:** " + priceText + "\n\n" +
-				"🎁 **Что входит:**\n• " + featuresText + "\n\n" +
+			Text: "💳 Оплата Premium\n\n" +
+				"📌 Тариф: " + tariff.Name + "\n" +
+				"💰 Сумма: " + priceText + "\n\n" +
+				"🎁 Что входит:\n• " + featuresText + "\n\n" +
 				"👇 Нажмите кнопку для оплаты:",
 			ReplyMarkup: models.InlineKeyboardMarkup{
 				InlineKeyboard: [][]models.InlineKeyboardButton{
@@ -98,7 +98,7 @@ func HandlePremiumCallback(
 	}
 }
 
-// HandlePremiumConfirm — обработка симуляции оплаты (кнопка
+// HandlePremiumConfirm - обработка симуляции оплаты (кнопка
 // «✅ Оплатил (симуляция)» после выбора тарифа). Активирует Premium.
 // webAppURL/dashboardURL нужны, чтобы сразу показать кнопки открытия дашборда.
 func HandlePremiumConfirm(
@@ -108,7 +108,7 @@ func HandlePremiumConfirm(
 	dashboardURL string,
 ) func(ctx context.Context, b *tgbot.Bot, update *models.Update, callbackData string) bool {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update, callbackData string) bool {
-		// update.Message у callback-запросов nil — берём chatID из отправителя.
+		// update.Message у callback-запросов nil - берём chatID из отправителя.
 		chatID := update.CallbackQuery.From.ID
 
 		log.Printf(locales.LogPaymentConfirmEnter, chatID, callbackData)
@@ -171,7 +171,7 @@ func HandlePremiumConfirm(
 			webAppTarget = dashboardURL
 		}
 
-		// Только Mini App — без ссылок и «открыть в браузере».
+		// Только Mini App - без ссылок и «открыть в браузере».
 		rows := [][]models.InlineKeyboardButton{}
 		if webAppTarget != "" {
 			rows = append(rows, []models.InlineKeyboardButton{
@@ -179,17 +179,17 @@ func HandlePremiumConfirm(
 			})
 		}
 
-		confirmText := "💎 **"
+		confirmText := "💎 "
 		if wasPremium {
 			confirmText += "Тариф изменён!"
 		} else {
 			confirmText += "Premium активирован!"
 		}
-		confirmText += "**\n\nТариф: " + tariffName
+		confirmText += "\n\nТариф: " + tariffName
 		if expiry != "" {
 			confirmText += "\nДействует до: " + expiry
 		}
-		confirmText += "\n\nТеперь вам доступна 💡 **Сводка здоровья** — откройте её кнопкой ниже " +
+		confirmText += "\n\nТеперь вам доступна 💡 Сводка здоровья - откройте её кнопкой ниже " +
 			"или из главного меню."
 
 		msgID, sendErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{

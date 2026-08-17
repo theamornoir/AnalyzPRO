@@ -10,7 +10,7 @@ type visionImage struct {
 
 // isImageMime сообщает, поддерживает ли vision-анализ DeepSeek данный MIME-тип.
 // DeepSeek (OpenAI-совместимый API) умеет работать только с изображениями;
-// PDF/текст здесь не обрабатываются — для них методы возвращают ошибку, и
+// PDF/текст здесь не обрабатываются - для них методы возвращают ошибку, и
 // оркестратор переходит к следующему провайдеру (Claude).
 func isImageMime(mimeType string) bool {
 	return strings.HasPrefix(mimeType, "image/")

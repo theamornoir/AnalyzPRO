@@ -2,7 +2,7 @@ package payment
 
 import "time"
 
-// Tariff — тарифная модель.
+// Tariff - тарифная модель.
 type Tariff struct {
 	ID          string        `json:"id"`
 	Name        string        `json:"name"`
@@ -12,7 +12,7 @@ type Tariff struct {
 	Features    []string      `json:"features"`
 }
 
-// AvailableTariffs — доступные тарифы.
+// AvailableTariffs - доступные тарифы.
 var AvailableTariffs = []Tariff{
 	{
 		ID:          "premium_monthly",
@@ -57,7 +57,7 @@ var AvailableTariffs = []Tariff{
 	},
 }
 
-// GetTariffByID — найти тариф по ID.
+// GetTariffByID - найти тариф по ID.
 func GetTariffByID(id string) *Tariff {
 	for i := range AvailableTariffs {
 		if AvailableTariffs[i].ID == id {

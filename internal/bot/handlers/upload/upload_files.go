@@ -17,7 +17,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// uploadConfirmKeyboard — inline-кнопки подтверждения загрузки. Reply-
+// uploadConfirmKeyboard - inline-кнопки подтверждения загрузки. Reply-
 // клавиатура при этом остаётся единой [Назад] (наследуется от предыдущего
 // шага анализа), поэтому действия «Обработать/Отмена» вынесены в inline.
 func uploadConfirmKeyboard() models.InlineKeyboardMarkup {

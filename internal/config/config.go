@@ -29,8 +29,8 @@ type Config struct {
 	WebAppURL          string
 	DashboardURL       string
 	HTTPAddr           string
-	// HTML2PDFAPIKey — API-ключ внешнего сервиса html2pdf.app (режим
-	// «отправить HTML на сервер, получить PDF»). Если пуст — PDF-конвертация
+	// HTML2PDFAPIKey - API-ключ внешнего сервиса html2pdf.app (режим
+	// «отправить HTML на сервер, получить PDF»). Если пуст - PDF-конвертация
 	// недоступна, отчёты уходят как HTML.
 	HTML2PDFAPIKey string
 	StoragePath    string
@@ -48,7 +48,7 @@ func Load() (*Config, error) {
 	webAppURL := getEnv("WEBAPP_URL", "")
 	if webAppURL == "" {
 		// Сначала пробуем подхватить уже запущенный HTTPS-туннель
-		// (ngrok/cloudflared) — тогда Web App откроется и на телефоне.
+		// (ngrok/cloudflared) - тогда Web App откроется и на телефоне.
 		if u := detectTunnelURL(httpAddr); u != "" {
 			webAppURL = u
 		} else {
@@ -59,7 +59,7 @@ func Load() (*Config, error) {
 	}
 	dashboardURL := getEnv("DASHBOARD_URL", "")
 	if dashboardURL == "" {
-		// Если сконфигурированный WebApp-URL — localhost, а у машины есть
+		// Если сконфигурированный WebApp-URL - localhost, а у машины есть
 		// LAN-IP, делаем «открываемый» URL на LAN-IP. Так дашборд можно
 		// открыть с телефона в той же Wi-Fi сети (по ссылке/в браузере),
 		// хотя встроенная WebApp-кнопка всё равно требует HTTPS.
@@ -97,7 +97,7 @@ func Load() (*Config, error) {
 // defaultWebAppURL строит URL дашборда из адреса HTTP-сервера.
 // Если у машины есть LAN-IP (не loopback), подставляем его, иначе localhost.
 // Для доступа с телефона через интернет всё равно нужен HTTPS-туннель
-// (ngrok/cloudflared) — тогда задайте WEBAPP_URL явно.
+// (ngrok/cloudflared) - тогда задайте WEBAPP_URL явно.
 func defaultWebAppURL(httpAddr string) string {
 	port := "8080"
 	if strings.HasPrefix(httpAddr, ":") {
@@ -141,13 +141,13 @@ func detectLANIP() string {
 		if ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31 {
 			continue
 		}
-		// TEST-NET-2/3 (198.18.0.0/15) — часто VPN/прокси
+		// TEST-NET-2/3 (198.18.0.0/15) - часто VPN/прокси
 		if ip4[0] == 198 && ip4[1] == 18 {
 			continue
 		}
 
 		s := ip4.String()
-		// Самый вероятный домашний диапазон — сразу возвращаем.
+		// Самый вероятный домашний диапазон - сразу возвращаем.
 		if ip4[0] == 192 && ip4[1] == 168 {
 			return s
 		}
@@ -170,7 +170,7 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-// lanURLFor — если rawURL указывает на localhost/127.0.0.1, возвращает тот же
+// lanURLFor - если rawURL указывает на localhost/127.0.0.1, возвращает тот же
 // URL, но с хостом, заменённым на LAN-IP машины (если он есть). Это позволяет
 // открывать дашборд с телефона в той же Wi-Fi сети по обычной ссылке. Для
 // не-localhost URL (например, https-туннель) возвращает "".
@@ -199,7 +199,7 @@ func lanURLFor(rawURL string) string {
 	return u.String()
 }
 
-// extractPort — извлекает номер порта из HTTP_ADDR (например ":8080" → "8080").
+// extractPort - извлекает номер порта из HTTP_ADDR (например ":8080" → "8080").
 func extractPort(httpAddr string) string {
 	port := "8080"
 	if strings.HasPrefix(httpAddr, ":") {
@@ -210,8 +210,8 @@ func extractPort(httpAddr string) string {
 	return port
 }
 
-// detectTunnelURL — пытается найти уже запущенный HTTPS-туннель к нашему
-// HTTP-серверу (например, `ngrok http 8080`). Если найден — возвращает его
+// detectTunnelURL - пытается найти уже запущенный HTTPS-туннель к нашему
+// HTTP-серверу (например, `ngrok http 8080`). Если найден - возвращает его
 // публичный https-URL с суффиксом /dashboard. Telegram Web App требует HTTPS,
 // поэтому это позволяет открывать дашборд-миниапп прямо с телефона.
 //
@@ -250,7 +250,7 @@ func detectTunnelURL(httpAddr string) string {
 
 	// Fallback: если туннель был поднят отдельно (например, скриптом
 	// scripts/run-miniapp.sh или make mini), он мог сохранить свой
-	// https-URL в .tunnel_url — подхватим его, чтобы Web App работал как
+	// https-URL в .tunnel_url - подхватим его, чтобы Web App работал как
 	// настоящий Mini App в Telegram, даже если бот перезапущен.
 	if data, err := os.ReadFile(".tunnel_url"); err == nil {
 		s := strings.TrimSpace(string(data))

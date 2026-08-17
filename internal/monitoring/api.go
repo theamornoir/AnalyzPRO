@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// APIHandler — HTTP-обработчики API мониторинга. Все эндпоинты
+// APIHandler - HTTP-обработчики API мониторинга. Все эндпоинты
 // защищены валидацией Telegram initData; telegramID извлекается из него.
 type APIHandler struct {
 	svc      *Service
@@ -29,7 +29,7 @@ func (h *APIHandler) Handler() http.HandlerFunc {
 		path = strings.Trim(path, "/")
 
 		// Проверка подлинности (кроме случаев, когда маршрут не требует
-		// пользователя — таких здесь нет, все защищены).
+		// пользователя - таких здесь нет, все защищены).
 		telegramID, ok := h.auth(r)
 		if !ok {
 			h.writeError(w, http.StatusUnauthorized, "unauthorized: invalid initData")

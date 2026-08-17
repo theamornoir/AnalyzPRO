@@ -104,11 +104,11 @@ func renderAndSendReport(
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
 	// Расширенный анализ конвертируем в PDF и отправляем как PDF-документ.
-	// При сбое конвертации (нет ключа html2pdf.app / сервис недоступен) —
+	// При сбое конвертации (нет ключа html2pdf.app / сервис недоступен) -
 	// откат к HTML, чтобы результат не потерялся.
 	pdfBytes, convErr := pdfConverter.ConvertHTML(ctx, htmlResult)
 	if convErr != nil {
-		log.Printf("⚠️ [UPLOAD] не удалось конвертировать анализ в PDF (chatID=%d): %v — отправляю HTML", chatID, convErr)
+		log.Printf("⚠️ [UPLOAD] не удалось конвертировать анализ в PDF (chatID=%d): %v - отправляю HTML", chatID, convErr)
 		_, _ = b.SendDocument(ctx, &tgbot.SendDocumentParams{
 			ChatID: chatID,
 			Document: &models.InputFileUpload{
@@ -228,11 +228,11 @@ func renderAndSendDossier(
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
 	// Отчёт-досье конвертируем в PDF и отправляем как PDF-документ.
-	// При сбое конвертации (нет Chrome / сервис недоступен) — откат к HTML,
+	// При сбое конвертации (нет Chrome / сервис недоступен) - откат к HTML,
 	// чтобы результат не потерялся.
 	pdfBytes, convErr := pdfConverter.ConvertHTML(ctx, htmlResult)
 	if convErr != nil {
-		log.Printf("⚠️ [UPLOAD] не удалось конвертировать досье в PDF (chatID=%d): %v — отправляю HTML", chatID, convErr)
+		log.Printf("⚠️ [UPLOAD] не удалось конвертировать досье в PDF (chatID=%d): %v - отправляю HTML", chatID, convErr)
 		_, _ = b.SendDocument(ctx, &tgbot.SendDocumentParams{
 			ChatID: chatID,
 			Document: &models.InputFileUpload{

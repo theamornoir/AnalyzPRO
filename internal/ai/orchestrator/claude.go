@@ -18,10 +18,10 @@ import (
 	"github.com/tmc/langchaingo/llms/anthropic"
 )
 
-// claudeModel — модель Claude для vision/документного анализа.
+// claudeModel - модель Claude для vision/документного анализа.
 const claudeModel = "claude-3-5-sonnet-20241022"
 
-// claudeHTTPClient — HTTP-клиент для прямых вызовов Anthropic Messages API.
+// claudeHTTPClient - HTTP-клиент для прямых вызовов Anthropic Messages API.
 // Использует ProxyFromEnvironment (как и остальные AI-клиенты) и увеличенный
 // таймаут, т.к. анализ PDF/изображений может быть долгим.
 var claudeHTTPClient = &http.Client{
@@ -39,13 +39,13 @@ var claudeHTTPClient = &http.Client{
 	},
 }
 
-// claudeAttachment — одно вложение (изображение или PDF) для мультимодального запроса.
+// claudeAttachment - одно вложение (изображение или PDF) для мультимодального запроса.
 type claudeAttachment struct {
 	data     []byte
 	mimeType string
 }
 
-// ClaudeProvider — провайдер Claude через langchaingo (текст) и прямой
+// ClaudeProvider - провайдер Claude через langchaingo (текст) и прямой
 // HTTP к Anthropic Messages API (изображения и PDF-документы).
 // Является рабочим фоллбэком, когда Gemini недоступен (например, гео-блок),
 // и единственным провайдером, умеющим анализировать PDF в обход Gemini.
@@ -76,14 +76,14 @@ func NewClaudeProvider() *ClaudeProvider {
 	}
 }
 
-// GenerateAnalysisSummary — генерирует текстовый анализ.
+// GenerateAnalysisSummary - генерирует текстовый анализ.
 func (p *ClaudeProvider) GenerateAnalysisSummary(ctx context.Context, userInput string) (string, error) {
 	if p.llm == nil {
 		return "", fmt.Errorf("claude client not initialized")
 	}
 
 	result, err := p.llm.Call(ctx,
-		"Ты — медицинский аналитик. Проанализируй данные и дай рекомендации.\n\n"+userInput,
+		"Ты - медицинский аналитик. Проанализируй данные и дай рекомендации.\n\n"+userInput,
 		llms.WithMaxTokens(3000),
 		llms.WithTemperature(0.2),
 	)
@@ -94,14 +94,14 @@ func (p *ClaudeProvider) GenerateAnalysisSummary(ctx context.Context, userInput 
 	return result, nil
 }
 
-// GenerateAnalysisJSON — генерирует JSON-анализ.
+// GenerateAnalysisJSON - генерирует JSON-анализ.
 func (p *ClaudeProvider) GenerateAnalysisJSON(ctx context.Context, userInput string) (string, error) {
 	if p.llm == nil {
 		return "", fmt.Errorf("claude client not initialized")
 	}
 
 	result, err := p.llm.Call(ctx,
-		"Ты — медицинский аналитик. Верни ответ в формате JSON.\n\n"+userInput,
+		"Ты - медицинский аналитик. Верни ответ в формате JSON.\n\n"+userInput,
 		llms.WithMaxTokens(4000),
 		llms.WithTemperature(0.1),
 	)
@@ -112,19 +112,19 @@ func (p *ClaudeProvider) GenerateAnalysisJSON(ctx context.Context, userInput str
 	return result, nil
 }
 
-// GenerateAnalysisFromFileWithContext — анализирует файл (изображение или PDF) с контекстом.
+// GenerateAnalysisFromFileWithContext - анализирует файл (изображение или PDF) с контекстом.
 func (p *ClaudeProvider) GenerateAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	if !isSupportedMime(mimeType) {
 		return "", fmt.Errorf("claude supports only image/pdf files for analysis")
 	}
 	return p.callClaudeMessages(ctx,
-		"Ты — опытный врач-диагност. Проанализируй приложенные медицинские изображения/документы и дай развёрнутый анализ с рекомендациями.",
+		"Ты - опытный врач-диагност. Проанализируй приложенные медицинские изображения/документы и дай развёрнутый анализ с рекомендациями.",
 		contextText,
 		[]claudeAttachment{{data: data, mimeType: mimeType}},
 		4000)
 }
 
-// GenerateBioscanJSON — анализирует фото/PDF для bioscan и возвращает JSON.
+// GenerateBioscanJSON - анализирует фото/PDF для bioscan и возвращает JSON.
 func (p *ClaudeProvider) GenerateBioscanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
 	if p.apiKey == "" {
 		return "", fmt.Errorf("claude api key not set")
@@ -139,13 +139,13 @@ func (p *ClaudeProvider) GenerateBioscanJSON(ctx context.Context, photosData [][
 		return "", fmt.Errorf("no photo data provided")
 	}
 	return p.callClaudeMessages(ctx,
-		"Ты — опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев.",
+		"Ты - опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев.",
 		locales.PromptForBioscan(contextInfo),
 		atts,
 		8000)
 }
 
-// GenerateBodyScanJSON — генерирует JSON премиального отчёта Bioscan PRO.
+// GenerateBodyScanJSON - генерирует JSON премиального отчёта Bioscan PRO.
 func (p *ClaudeProvider) GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
 	if p.apiKey == "" {
 		return "", fmt.Errorf("claude api key not set")
@@ -160,31 +160,31 @@ func (p *ClaudeProvider) GenerateBodyScanJSON(ctx context.Context, photosData []
 		return "", fmt.Errorf("no photo data provided")
 	}
 	return p.callClaudeMessages(ctx,
-		"Ты — эксперт премиального сервиса биометрической аналитики тела. Верни ответ строго в формате JSON, без markdown и комментариев.",
+		"Ты - эксперт премиального сервиса биометрической аналитики тела. Верни ответ строго в формате JSON, без markdown и комментариев.",
 		locales.PromptForBodyScanJSON(contextInfo),
 		atts,
 		8000)
 }
 
-// GenerateAnalysisFromFileJSON — анализирует файл (изображение или PDF) и возвращает JSON.
+// GenerateAnalysisFromFileJSON - анализирует файл (изображение или PDF) и возвращает JSON.
 func (p *ClaudeProvider) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	if !isSupportedMime(mimeType) {
 		return "", fmt.Errorf("claude supports only image/pdf files for analysis")
 	}
 	return p.callClaudeMessages(ctx,
-		"Ты — опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев.",
+		"Ты - опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев.",
 		locales.PromptForAnalysisJSON(contextText),
 		[]claudeAttachment{{data: data, mimeType: mimeType}},
 		8000)
 }
 
-// GenerateDossierJSON — генерирует JSON универсального отчёта-досье здоровья.
+// GenerateDossierJSON - генерирует JSON универсального отчёта-досье здоровья.
 func (p *ClaudeProvider) GenerateDossierJSON(ctx context.Context, userInput string) (string, error) {
 	if p.llm == nil {
 		return "", fmt.Errorf("claude client not initialized")
 	}
 	result, err := p.llm.Call(ctx,
-		"Ты — опытный врач-диагност и аналитик здоровья. Верни ответ строго в формате JSON, без markdown и комментариев.\n\n"+userInput,
+		"Ты - опытный врач-диагност и аналитик здоровья. Верни ответ строго в формате JSON, без markdown и комментариев.\n\n"+userInput,
 		llms.WithMaxTokens(8000),
 		llms.WithTemperature(0.1),
 	)
@@ -194,7 +194,7 @@ func (p *ClaudeProvider) GenerateDossierJSON(ctx context.Context, userInput stri
 	return result, nil
 }
 
-// callClaudeMessages — выполняет мультимодальный запрос к Anthropic Messages API
+// callClaudeMessages - выполняет мультимодальный запрос к Anthropic Messages API
 // напрямую (обходит langchaingo, который не умеет отдавать PDF-документы).
 // Поддерживает одновременно изображения (image-блок) и PDF (document-блок).
 func (p *ClaudeProvider) callClaudeMessages(ctx context.Context, systemPrompt, textPrompt string, attachments []claudeAttachment, maxTokens int) (string, error) {

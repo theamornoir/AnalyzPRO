@@ -18,7 +18,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
 
-// CancelUpload — отмена загрузки из inline-кнопки «Отмена»: очищает
+// CancelUpload - отмена загрузки из inline-кнопки «Отмена»: очищает
 // накопленные файлы и возвращает в шаг ожидания файла.
 func CancelUpload(
 	ctx context.Context,

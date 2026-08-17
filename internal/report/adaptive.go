@@ -9,7 +9,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/report/models"
 )
 
-// adaptiveHTMLTemplate — шаблон адаптивного отчёта с чистым CSS/SVG и мятным цветом.
+// adaptiveHTMLTemplate - шаблон адаптивного отчёта с чистым CSS/SVG и мятным цветом.
 const adaptiveHTMLTemplate = `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -323,7 +323,7 @@ body {
 </body>
 </html>`
 
-// RenderAdaptiveReport — рендерит адаптивный HTML-отчёт из данных.
+// RenderAdaptiveReport - рендерит адаптивный HTML-отчёт из данных.
 func RenderAdaptiveReport(data models.AdaptiveReportData) string {
 	funcMap := template.FuncMap{
 		"statusText": func(status string) string {
@@ -357,7 +357,7 @@ func RenderAdaptiveReport(data models.AdaptiveReportData) string {
 	return sanitizeHTML(buf.String())
 }
 
-// sanitizeHTML — базовая очистка от потенциально опасных тегов.
+// sanitizeHTML - базовая очистка от потенциально опасных тегов.
 func sanitizeHTML(html string) string {
 	// Заменяем <script> теги
 	html = strings.ReplaceAll(html, "<script>", "")

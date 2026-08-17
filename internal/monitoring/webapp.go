@@ -37,7 +37,7 @@ func ServeWebApp(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	// Не кэшируем — упрощает разработку/обновление веб-аппа.
+	// Не кэшируем - упрощает разработку/обновление веб-аппа.
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(data)
 }

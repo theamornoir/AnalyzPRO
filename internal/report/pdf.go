@@ -37,7 +37,7 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 	pdf.SetXY(pdfMargin, 6)
 	pdf.SetFont("Arial", "", 16)
 	pdf.SetTextColor(255, 255, 255)
-	pdf.Cell(0, 8, "BIOSCAN — отчёт о телосложении")
+	pdf.Cell(0, 8, "BIOSCAN - отчёт о телосложении")
 
 	pdf.SetXY(pdfMargin, 15)
 	pdf.SetFont("Arial", "", 9)
@@ -132,7 +132,7 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 		for _, m := range rep.Muscles {
 			s := "• " + m.Name
 			if m.Level != "" {
-				s += " — " + m.Level
+				s += " - " + m.Level
 			}
 			w.paragraph(s)
 			if m.Assessment != "" {
@@ -205,7 +205,7 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 				} else if ex.Sets != "" {
 					reps = ex.Sets + " × " + ex.Reps
 				}
-				w.paragraph("    — " + ex.Name + ": " + reps)
+				w.paragraph("    - " + ex.Name + ": " + reps)
 			}
 		}
 	}
@@ -253,7 +253,7 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// pdfWriter — обёртка над gofpdf с удобными помощниками вёрстки.
+// pdfWriter - обёртка над gofpdf с удобными помощниками вёрстки.
 type pdfWriter struct {
 	pdf *gofpdf.Fpdf
 }

@@ -34,7 +34,7 @@ func (c *GeminiClient) doRequest(ctx context.Context, body []byte) (*rawResponse
 
 	for i, m := range models {
 		if i > 0 {
-			log.Printf("🔄 Gemini: модель %q недоступна — переключаюсь на фоллбэк %q", models[i-1], m)
+			log.Printf("🔄 Gemini: модель %q недоступна - переключаюсь на фоллбэк %q", models[i-1], m)
 		}
 
 		url := fmt.Sprintf(locales.GeminiAPIURL, m, c.apiKey)
@@ -47,10 +47,10 @@ func (c *GeminiClient) doRequest(ctx context.Context, body []byte) (*rawResponse
 			var he *httpclient.HTTPError
 			if errors.As(err, &he) {
 				lastResp = &rawResponse{status: he.StatusCode, body: []byte(he.Message)}
-				// Ошибка вида «модель не найдена/недоступна» — пробуем
+				// Ошибка вида «модель не найдена/недоступна» - пробуем
 				// следующую модель из цепочки фоллбэков.
 				if isModelNotFoundError(err) && i < len(models)-1 {
-					log.Printf("⚠️ Gemini: %q — модель не найдена или недоступна, пробую следующую", m)
+					log.Printf("⚠️ Gemini: %q - модель не найдена или недоступна, пробую следующую", m)
 					continue
 				}
 				log.Printf(locales.LogGeminiHTTPFailed, err)

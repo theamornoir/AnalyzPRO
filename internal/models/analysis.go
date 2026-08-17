@@ -26,15 +26,15 @@ type Report struct {
 	Recovery       []string        `json:"recovery"`
 	Progress       Progress        `json:"progress"`
 
-	// Comparison — блок сравнения с ПРЕДЫДУЩИМ отчётом (для ПОВТОРНЫХ
+	// Comparison - блок сравнения с ПРЕДЫДУЩИМ отчётом (для ПОВТОРНЫХ
 	// анализов/биосканов). Заполняется ИИ, если пользователь уже делал
 	// такой отчёт ранее. Рендерится в отчёте как «что стало лучше /
 	// что улучшить» + таблица показателей до→после.
 	Comparison ReportComparison `json:"comparison"`
 }
 
-// ReportComparison — структура сравнительного блока для повторного отчёта.
-// Все поля опциональны: если отчёт первый — блок пустой и не рендерится.
+// ReportComparison - структура сравнительного блока для повторного отчёта.
+// Все поля опциональны: если отчёт первый - блок пустой и не рендерится.
 type ReportComparison struct {
 	Summary   string             `json:"summary"`    // общая динамика между отчётами
 	Improved  []string           `json:"improved"`   // что улучшилось
@@ -44,7 +44,7 @@ type ReportComparison struct {
 	Metrics   []ComparisonMetric `json:"metrics"`    // per-метрика: до → после
 }
 
-// ComparisonMetric — одна строка таблицы сравнения (показатель до→после).
+// ComparisonMetric - одна строка таблицы сравнения (показатель до→после).
 type ComparisonMetric struct {
 	Name   string `json:"name"`   // название показателя
 	Before string `json:"before"` // значение в предыдущем отчёте
@@ -151,9 +151,9 @@ type Progress struct {
 }
 
 // ============================================================================
-// BodyScanReport — структура премиального отчёта Bioscan PRO (Body Intelligence).
+// BodyScanReport - структура премиального отчёта Bioscan PRO (Body Intelligence).
 // Строится ИИ из 4 фото + опросника и рендерится в подробный print-ready HTML
-// (templates/body_scan_report.html). Значения композиции — ЭКСПЕРТНЫЕ ОЦЕНКИ
+// (templates/body_scan_report.html). Значения композиции - ЭКСПЕРТНЫЕ ОЦЕНКИ
 // по фото + данным пользователя, не заменяют инструментальные замеры.
 // ============================================================================
 
@@ -168,12 +168,12 @@ type BodyScanReport struct {
 	Level     string `json:"level"`
 	Summary   string `json:"summary"`
 	Potential int    `json:"potential"`
-	// Gap — разрыв между текущим и потенциальным (вычисляется в Go).
+	// Gap - разрыв между текущим и потенциальным (вычисляется в Go).
 	Gap int `json:"gap"`
 
-	// CoverMetrics — 5 ключевых метрик обложки.
+	// CoverMetrics - 5 ключевых метрик обложки.
 	CoverMetrics []BodyScanMetric `json:"cover_metrics"`
-	// Composition — детальная композиция тела (до 9 показателей).
+	// Composition - детальная композиция тела (до 9 показателей).
 	Composition []BodyScanMetric `json:"composition"`
 
 	Strengths []BodyScanCard `json:"strengths"`
@@ -185,13 +185,13 @@ type BodyScanReport struct {
 
 	PotentialAreas []BodyScanPotential `json:"potential_areas"`
 
-	// TrainingProgram — детальная программа тренировок (фазы/недели,
+	// TrainingProgram - детальная программа тренировок (фазы/недели,
 	// сессии, упражнения). Рендерится отдельной страницей отчёта.
 	TrainingProgram []BodyScanTrainingPhase `json:"training_program"`
 
 	Recommendations []BodyScanRecommendation `json:"recommendations"`
 
-	// Comparison — блок сравнения с ПРЕДЫДУЩИМ Bioscan PRO (для повторного).
+	// Comparison - блок сравнения с ПРЕДЫДУЩИМ Bioscan PRO (для повторного).
 	// Заполняется ИИ при повторном биоскане; рендерится как «что стало
 	// лучше / что улучшить» + таблица показателей до→после.
 	Comparison ReportComparison `json:"comparison"`
@@ -199,7 +199,7 @@ type BodyScanReport struct {
 	Disclaimer string `json:"disclaimer"`
 }
 
-// BodyScanTrainingPhase — одна фаза/блок программы тренировок (например,
+// BodyScanTrainingPhase - одна фаза/блок программы тренировок (например,
 // «Недели 1-2 · База и техника») с набором сессий.
 type BodyScanTrainingPhase struct {
 	Phase    string                    `json:"phase"`
@@ -208,14 +208,14 @@ type BodyScanTrainingPhase struct {
 	Sessions []BodyScanTrainingSession `json:"sessions"`
 }
 
-// BodyScanTrainingSession — одна тренировочная сессия внутри фазы.
+// BodyScanTrainingSession - одна тренировочная сессия внутри фазы.
 type BodyScanTrainingSession struct {
 	Name      string   `json:"name"`
 	Focus     string   `json:"focus"`
 	Exercises []string `json:"exercises"`
 }
 
-// BodyScanMetric — один показатель композиции (значение + статус + референс).
+// BodyScanMetric - один показатель композиции (значение + статус + референс).
 type BodyScanMetric struct {
 	Name           string `json:"name"`
 	Value          string `json:"value"`
@@ -225,13 +225,13 @@ type BodyScanMetric struct {
 	Interpretation string `json:"interpretation"`
 }
 
-// BodyScanCard — карточка «сильная сторона» или «зона роста».
+// BodyScanCard - карточка «сильная сторона» или «зона роста».
 type BodyScanCard struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 }
 
-// BodyScanZone — зона тела (плечи, пресс, ноги и т.п.).
+// BodyScanZone - зона тела (плечи, пресс, ноги и т.п.).
 type BodyScanZone struct {
 	Name    string `json:"name"`
 	Score   int    `json:"score"`
@@ -239,7 +239,7 @@ type BodyScanZone struct {
 	Comment string `json:"comment"`
 }
 
-// BodyScanPosture — осанка и баланс (7 осей для radar).
+// BodyScanPosture - осанка и баланс (7 осей для radar).
 type BodyScanPosture struct {
 	PostureScore    int    `json:"posture_score"`
 	Symmetry        int    `json:"symmetry"`
@@ -251,14 +251,14 @@ type BodyScanPosture struct {
 	Narrative       string `json:"narrative"`
 }
 
-// BodyScanPotential — направление раскрытия потенциала.
+// BodyScanPotential - направление раскрытия потенциала.
 type BodyScanPotential struct {
 	Priority string `json:"priority"`
 	Action   string `json:"action"`
 	Effect   string `json:"effect"`
 }
 
-// BodyScanRecommendation — персональная рекомендация (4 категории).
+// BodyScanRecommendation - персональная рекомендация (4 категории).
 type BodyScanRecommendation struct {
 	Category string `json:"category"` // TRAINING, NUTRITION, RECOVERY, LIFESTYLE
 	Icon     string `json:"icon"`

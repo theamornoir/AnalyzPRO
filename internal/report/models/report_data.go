@@ -1,6 +1,6 @@
 package models
 
-// AdaptiveReportData — данные для адаптивного HTML-отчёта.
+// AdaptiveReportData - данные для адаптивного HTML-отчёта.
 // Генерируется AI и содержит только те секции, по которым есть данные.
 type AdaptiveReportData struct {
 	Title     string    `json:"title"`
@@ -10,7 +10,7 @@ type AdaptiveReportData struct {
 	Disclaimer string   `json:"disclaimer,omitempty"`
 }
 
-// Section — одна секция отчёта.
+// Section - одна секция отчёта.
 type Section struct {
 	Type    string   `json:"type"`    // blood, lifestyle, nutrition, recommendation, warning, profile
 	Title   string   `json:"title"`
@@ -20,7 +20,7 @@ type Section struct {
 	Score     int      `json:"score,omitempty"` // для круговых диаграмм (0-100)
 }
 
-// Indicator — один показатель внутри секции.
+// Indicator - один показатель внутри секции.
 type Indicator struct {
 	Name     string `json:"name"`
 	Value    string `json:"value"`

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Service — бизнес-логика модуля мониторинга. Оперирует Repository
+// Service - бизнес-логика модуля мониторинга. Оперирует Repository
 // (проекты + история) и извлекает показатели для графиков.
 type Service struct {
 	repo Repository
@@ -19,12 +19,12 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
-// ListProjects — список проектов пользователя.
+// ListProjects - список проектов пользователя.
 func (s *Service) ListProjects(ctx context.Context, telegramID int64) ([]MonitoringProject, error) {
 	return s.repo.ListProjects(ctx, telegramID)
 }
 
-// CreateProject — создаёт новый проект мониторинга.
+// CreateProject - создаёт новый проект мониторинга.
 func (s *Service) CreateProject(ctx context.Context, telegramID int64, req CreateProjectRequest) (*MonitoringProject, error) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -65,7 +65,7 @@ func (s *Service) CreateProject(ctx context.Context, telegramID int64, req Creat
 	return p, nil
 }
 
-// GetProjectDetail — детальная информация о проекте: проект, привязанные
+// GetProjectDetail - детальная информация о проекте: проект, привязанные
 // записи (с извлечёнными показателями) и объединённый список доступных
 // метрик. Проверяет, что проект принадлежит пользователю.
 func (s *Service) GetProjectDetail(ctx context.Context, telegramID, projectID int64) (*ProjectDetail, error) {
@@ -84,7 +84,7 @@ func (s *Service) GetProjectDetail(ctx context.Context, telegramID, projectID in
 	for _, id := range entryIDs {
 		h, err := s.repo.GetHistoryEntry(ctx, id)
 		if err != nil {
-			continue // запись могла быть удалена — пропускаем
+			continue // запись могла быть удалена - пропускаем
 		}
 		metrics := extractMetrics(h.JsonData)
 		entries = append(entries, EntryView{
@@ -117,7 +117,7 @@ func (s *Service) GetProjectDetail(ctx context.Context, telegramID, projectID in
 	}, nil
 }
 
-// BindEntry — привязывает запись истории к проекту (с проверкой владения).
+// BindEntry - привязывает запись истории к проекту (с проверкой владения).
 func (s *Service) BindEntry(ctx context.Context, telegramID, projectID, entryID int64) error {
 	p, err := s.repo.GetProject(ctx, projectID)
 	if err != nil {
@@ -136,7 +136,7 @@ func (s *Service) BindEntry(ctx context.Context, telegramID, projectID, entryID 
 	return s.repo.BindEntry(ctx, projectID, entryID)
 }
 
-// UnbindEntry — отвязывает запись от проекта (с проверкой владения).
+// UnbindEntry - отвязывает запись от проекта (с проверкой владения).
 func (s *Service) UnbindEntry(ctx context.Context, telegramID, projectID, entryID int64) error {
 	p, err := s.repo.GetProject(ctx, projectID)
 	if err != nil {
@@ -148,7 +148,7 @@ func (s *Service) UnbindEntry(ctx context.Context, telegramID, projectID, entryI
 	return s.repo.UnbindEntry(ctx, projectID, entryID)
 }
 
-// CompleteProject — завершает проект мониторинга.
+// CompleteProject - завершает проект мониторинга.
 func (s *Service) CompleteProject(ctx context.Context, telegramID, projectID int64) error {
 	p, err := s.repo.GetProject(ctx, projectID)
 	if err != nil {
@@ -160,7 +160,7 @@ func (s *Service) CompleteProject(ctx context.Context, telegramID, projectID int
 	return s.repo.CompleteProject(ctx, projectID, time.Time{})
 }
 
-// ListHistory — история пользователя с фильтром по типу и пагинацией.
+// ListHistory - история пользователя с фильтром по типу и пагинацией.
 func (s *Service) ListHistory(ctx context.Context, telegramID int64, entryType string, page, pageSize int) (*HistoryListResponse, error) {
 	entries, total, err := s.repo.ListHistory(ctx, telegramID, entryType, page, pageSize)
 	if err != nil {

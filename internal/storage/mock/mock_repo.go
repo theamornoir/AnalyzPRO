@@ -61,6 +61,18 @@ func (m *MockUserRepository) UpdateUserPremiumStatus(ctx context.Context, userID
 	return fmt.Errorf("user with ID %d not found", userID)
 }
 
+func (m *MockUserRepository) UpdateUserOnboardingStatus(ctx context.Context, userID uint, completed bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, user := range m.users {
+		if user.ID == userID {
+			user.OnboardingCompleted = completed
+			return nil
+		}
+	}
+	return fmt.Errorf("user with ID %d not found", userID)
+}
+
 // MockDiagnosisRepository - мок-реализация DiagnosisRepository.
 type MockDiagnosisRepository struct {
 	mu        sync.RWMutex

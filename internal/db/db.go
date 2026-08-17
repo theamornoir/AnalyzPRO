@@ -1,5 +1,5 @@
 // Package db предоставляет единый доступ к реальной СУБД (SQLite через
-// modernc.org/sqlite — чистый Go, без CGO, работает в статическом бинаре и
+// modernc.org/sqlite - чистый Go, без CGO, работает в статическом бинаре и
 // в Docker). Бот принудительно запускается в единственном экземпляре
 // (flock в app.go), поэтому SQLite-файл безопасен для прод-деплоя.
 //
@@ -16,7 +16,7 @@ import (
 	_ "modernc.org/sqlite" // регистрирует драйвер "sqlite"
 )
 
-// Open открывает (или создаёт) базу данных по DSN. Для SQLite dsn — это путь
+// Open открывает (или создаёт) базу данных по DSN. Для SQLite dsn - это путь
 // к файлу (по умолчанию "./data/analyzpro.db"). Допустимы также спец-пути
 // "file::memory:?cache=shared" для тестов.
 func Open(dsn string) (*sql.DB, error) {
@@ -49,7 +49,7 @@ func Open(dsn string) (*sql.DB, error) {
 	return conn, nil
 }
 
-// isFileDSN — true, если dsn похож на путь к файлу, а не на ":memory:" или URL.
+// isFileDSN - true, если dsn похож на путь к файлу, а не на ":memory:" или URL.
 func isFileDSN(dsn string) bool {
 	if dsn == "" {
 		return true
@@ -63,7 +63,7 @@ func isFileDSN(dsn string) bool {
 	return true
 }
 
-// Migrate создаёт все таблицы, если их ещё нет. Идемпотентно — безопасно
+// Migrate создаёт все таблицы, если их ещё нет. Идемпотентно - безопасно
 // вызывать при каждом старте.
 func Migrate(conn *sql.DB) error {
 	schema := []string{
@@ -73,6 +73,7 @@ func Migrate(conn *sql.DB) error {
 			name TEXT NOT NULL DEFAULT '',
 			is_premium INTEGER NOT NULL DEFAULT 0,
 			premium_expires_at DATETIME,
+			onboarding_completed INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS diagnoses (
@@ -131,5 +132,20 @@ func Migrate(conn *sql.DB) error {
 			return fmt.Errorf("ошибка миграции: %w", err)
 		}
 	}
+
+	// Для уже существующих баз (до добавления онбординга) добавляем
+	// столбец onboarding_completed идемпотентно. Если столбец уже есть -
+	// SELECT завершится успешно и ALTER не выполнится. ВАЖНО: возвращаемый
+	// *sql.Rows обязательно закрываем, иначе соединение (SetMaxOpenConns(1))
+	// «утечёт» и следующая операция с БД зависнет (deadlock пула).
+	rows, qerr := conn.Query("SELECT onboarding_completed FROM users LIMIT 0")
+	if qerr != nil {
+		if _, aerr := conn.Exec("ALTER TABLE users ADD COLUMN onboarding_completed INTEGER NOT NULL DEFAULT 0"); aerr != nil {
+			return fmt.Errorf("ошибка миграции (onboarding_completed): %w", aerr)
+		}
+	} else {
+		rows.Close()
+	}
+
 	return nil
 }

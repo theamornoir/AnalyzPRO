@@ -24,14 +24,14 @@ const (
 	premiumMsgKey    = "premium_msg_id"
 )
 
-// sendPremiumAnchor — ставит внизу единую Reply-клавиатуру [Назад] перед
+// sendPremiumAnchor - ставит внизу единую Reply-клавиатуру [Назад] перед
 // списком тарифов. Inline-кнопки тарифов несовместимы с Reply-клавиатурой в
-// одном сообщении, поэтому «якорем» служит отдельное короткое сообщение — оно
+// одном сообщении, поэтому «якорем» служит отдельное короткое сообщение - оно
 // и держит [Назад] на всём протяжении раздела Premium.
 func sendPremiumAnchor(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64) {
 	msg, err := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
-		Text:        "💎 **Premium**",
+		Text:        "💎 Premium",
 		ReplyMarkup: keyboards.BackMenu(),
 		ParseMode:   "Markdown",
 	})
@@ -40,11 +40,11 @@ func sendPremiumAnchor(ctx context.Context, b *tgbot.Bot, stateManager states.St
 	}
 }
 
-// PremiumHandler — обработчик кнопки Premium.
+// PremiumHandler - обработчик кнопки Premium.
 //
 // Показывает меню выбора тарифа. Premium активируется только после выбора
 // тарифа и нажатия «Оплатил (симуляция)» (callback premium_confirm_<tariffID>).
-// Мгновенная выдача Premium убрана — это был тестовый режим.
+// Мгновенная выдача Premium убрана - это был тестовый режим.
 func PremiumHandler(
 	stateManager states.StateManager,
 	paymentService *payment.MockPaymentService,
@@ -63,7 +63,7 @@ func PremiumHandler(
 			return
 		}
 
-		// Если Premium уже активен — показываем текущий тариф и опцию смены.
+		// Если Premium уже активен - показываем текущий тариф и опцию смены.
 		if paymentService.IsUserPremium(chatID) {
 			log.Printf(locales.LogPremiumChangeTariff, chatID)
 			sendPremiumAnchor(ctx, b, stateManager, chatID)
@@ -71,17 +71,17 @@ func PremiumHandler(
 			return
 		}
 
-		// Иначе — меню выбора тарифа (выбор → экран оплаты → подтверждение).
+		// Иначе - меню выбора тарифа (выбор → экран оплаты → подтверждение).
 		sendPremiumAnchor(ctx, b, stateManager, chatID)
 		showPremiumMenu(ctx, b, stateManager, chatID)
 	}
 }
 
-// showPremiumCurrent — экран активного Premium: показывает текущий тариф,
+// showPremiumCurrent - экран активного Premium: показывает текущий тариф,
 // дату окончания и кнопку смены тарифа (premium_change).
 func showPremiumCurrent(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64, paymentService *payment.MockPaymentService) {
-	tariffName := "—"
-	expiry := "—"
+	tariffName := "-"
+	expiry := "-"
 	if info := paymentService.GetPremiumInfo(chatID); info != nil {
 		if t := payment.GetTariffByID(info.TariffID); t != nil {
 			tariffName = t.Name
@@ -108,7 +108,7 @@ func showPremiumCurrent(ctx context.Context, b *tgbot.Bot, stateManager states.S
 	}
 }
 
-// HandleChangeTariff — обработка кнопки «🔄 Сменить тариф» у активного
+// HandleChangeTariff - обработка кнопки «🔄 Сменить тариф» у активного
 // Premium. Показывает меню выбора тарифа (тот же флоу оплаты); после
 // подтверждения оплаты тариф пользователя перезаписывается.
 func HandleChangeTariff(
@@ -134,14 +134,14 @@ func HandleChangeTariff(
 	}
 }
 
-// showPremiumMenu — показывает меню выбора тарифа.
+// showPremiumMenu - показывает меню выбора тарифа.
 func showPremiumMenu(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64) {
 	var lines []string
-	lines = append(lines, "💎 **Выберите тариф Premium:**")
+	lines = append(lines, "💎 Выберите тариф Premium:")
 	lines = append(lines, "")
 
 	for _, tariff := range payment.AvailableTariffs {
-		lines = append(lines, "📌 **"+tariff.Name+"**")
+		lines = append(lines, "📌 "+tariff.Name+"")
 		lines = append(lines, tariff.Description)
 		lines = append(lines, "💰 "+formatPrice(tariff.Price))
 		lines = append(lines, "")
@@ -160,14 +160,14 @@ func showPremiumMenu(ctx context.Context, b *tgbot.Bot, stateManager states.Stat
 	}
 }
 
-// buildTariffKeyboard — создаёт inline-клавиатуру с тарифами.
+// buildTariffKeyboard - создаёт inline-клавиатуру с тарифами.
 func buildTariffKeyboard() models.InlineKeyboardMarkup {
 	buttons := make([][]models.InlineKeyboardButton, 0, len(payment.AvailableTariffs)+1)
 
 	for _, tariff := range payment.AvailableTariffs {
 		buttons = append(buttons, []models.InlineKeyboardButton{
 			{
-				Text:         "💎 " + tariff.Name + " — " + formatPrice(tariff.Price),
+				Text:         "💎 " + tariff.Name + " - " + formatPrice(tariff.Price),
 				CallbackData: "premium_" + tariff.ID,
 			},
 		})
@@ -178,7 +178,7 @@ func buildTariffKeyboard() models.InlineKeyboardMarkup {
 	}
 }
 
-// formatPrice — форматирует цену из копеек в рубли.
+// formatPrice - форматирует цену из копеек в рубли.
 func formatPrice(priceCents int) string {
 	rubles := priceCents / 100
 	cents := priceCents % 100

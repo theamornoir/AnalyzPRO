@@ -12,7 +12,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// DeepSeekProvider — провайдер DeepSeek через OpenAI-совместимый API.
+// DeepSeekProvider - провайдер DeepSeek через OpenAI-совместимый API.
 // Поддерживает мультимодальный (vision) анализ изображений через deepseek-chat,
 // поэтому используется как рабочий фоллбэк, когда Gemini недоступен (например, гео-блок).
 type DeepSeekProvider struct {
@@ -33,12 +33,12 @@ func NewDeepSeekProvider() *DeepSeekProvider {
 	return &DeepSeekProvider{client: client}
 }
 
-// GenerateAnalysisSummary — генерирует текстовый анализ.
+// GenerateAnalysisSummary - генерирует текстовый анализ.
 func (p *DeepSeekProvider) GenerateAnalysisSummary(ctx context.Context, userInput string) (string, error) {
 	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
 		Model: "deepseek-chat",
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("Ты — медицинский аналитик. Проанализируй данные и дай рекомендации."),
+			openai.SystemMessage("Ты - медицинский аналитик. Проанализируй данные и дай рекомендации."),
 			openai.UserMessage(userInput),
 		},
 		Temperature: openai.Float(0.2),
@@ -60,12 +60,12 @@ func (p *DeepSeekProvider) GenerateAnalysisSummary(ctx context.Context, userInpu
 	return fullText, nil
 }
 
-// GenerateAnalysisJSON — генерирует JSON-анализ.
+// GenerateAnalysisJSON - генерирует JSON-анализ.
 func (p *DeepSeekProvider) GenerateAnalysisJSON(ctx context.Context, userInput string) (string, error) {
 	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
 		Model: "deepseek-chat",
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("Ты — медицинский аналитик. Верни ответ в формате JSON."),
+			openai.SystemMessage("Ты - медицинский аналитик. Верни ответ в формате JSON."),
 			openai.UserMessage(userInput),
 		},
 		Temperature: openai.Float(0.1),
@@ -87,7 +87,7 @@ func (p *DeepSeekProvider) GenerateAnalysisJSON(ctx context.Context, userInput s
 	return fullText, nil
 }
 
-// GenerateAnalysisFromFileWithContext — анализирует изображение анализа с контекстом.
+// GenerateAnalysisFromFileWithContext - анализирует изображение анализа с контекстом.
 // DeepSeek vision поддерживает только изображения; для остальных типов вернёт ошибку,
 // и оркестратор перейдёт к следующему провайдеру.
 func (p *DeepSeekProvider) GenerateAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
@@ -97,7 +97,7 @@ func (p *DeepSeekProvider) GenerateAnalysisFromFileWithContext(ctx context.Conte
 	return p.analyzeImagesVision(ctx, []visionImage{{data: data, mimeType: mimeType}}, contextText, false, 4000)
 }
 
-// GenerateBioscanJSON — анализирует фото для bioscan и возвращает JSON.
+// GenerateBioscanJSON - анализирует фото для bioscan и возвращает JSON.
 func (p *DeepSeekProvider) GenerateBioscanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
 	imgs := make([]visionImage, 0, len(photosData))
 	for _, d := range photosData {
@@ -111,7 +111,7 @@ func (p *DeepSeekProvider) GenerateBioscanJSON(ctx context.Context, photosData [
 	return p.analyzeImagesVision(ctx, imgs, locales.PromptForBioscan(contextInfo), true, 8000)
 }
 
-// GenerateBodyScanJSON — генерирует JSON премиального отчёта Bioscan PRO.
+// GenerateBodyScanJSON - генерирует JSON премиального отчёта Bioscan PRO.
 func (p *DeepSeekProvider) GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
 	imgs := make([]visionImage, 0, len(photosData))
 	for _, d := range photosData {
@@ -125,7 +125,7 @@ func (p *DeepSeekProvider) GenerateBodyScanJSON(ctx context.Context, photosData 
 	return p.analyzeImagesVision(ctx, imgs, locales.PromptForBodyScanJSON(contextInfo), true, 8000)
 }
 
-// GenerateAnalysisFromFileJSON — анализирует изображение и возвращает JSON.
+// GenerateAnalysisFromFileJSON - анализирует изображение и возвращает JSON.
 func (p *DeepSeekProvider) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	if !isImageMime(mimeType) {
 		return "", fmt.Errorf("deepseek supports only image files for analysis")
@@ -133,12 +133,12 @@ func (p *DeepSeekProvider) GenerateAnalysisFromFileJSON(ctx context.Context, dat
 	return p.analyzeImagesVision(ctx, []visionImage{{data: data, mimeType: mimeType}}, locales.PromptForAnalysisJSON(contextText), true, 8000)
 }
 
-// GenerateDossierJSON — генерирует JSON универсального отчёта-досье здоровья.
+// GenerateDossierJSON - генерирует JSON универсального отчёта-досье здоровья.
 func (p *DeepSeekProvider) GenerateDossierJSON(ctx context.Context, userInput string) (string, error) {
 	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
 		Model: "deepseek-chat",
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("Ты — опытный врач-диагност и аналитик здоровья. Верни ответ строго в формате JSON, без markdown и комментариев."),
+			openai.SystemMessage("Ты - опытный врач-диагност и аналитик здоровья. Верни ответ строго в формате JSON, без markdown и комментариев."),
 			openai.UserMessage(userInput),
 		},
 		Temperature: openai.Float(0.1),
@@ -162,8 +162,8 @@ func (p *DeepSeekProvider) GenerateDossierJSON(ctx context.Context, userInput st
 	return fullText, nil
 }
 
-// analyzeImagesVision — мультимодальный анализ изображений через deepseek-chat.
-// prompt — текстовая инструкция; jsonMode включает системную роль «верни только JSON».
+// analyzeImagesVision - мультимодальный анализ изображений через deepseek-chat.
+// prompt - текстовая инструкция; jsonMode включает системную роль «верни только JSON».
 func (p *DeepSeekProvider) analyzeImagesVision(ctx context.Context, images []visionImage, prompt string, jsonMode bool, maxTokens int) (string, error) {
 	if len(images) == 0 {
 		return "", fmt.Errorf("no image data provided")
@@ -182,9 +182,9 @@ func (p *DeepSeekProvider) analyzeImagesVision(ctx context.Context, images []vis
 		}))
 	}
 
-	system := "Ты — опытный врач-диагност. Проанализируй приложенные медицинские изображения и дай развёрнутый анализ с рекомендациями."
+	system := "Ты - опытный врач-диагност. Проанализируй приложенные медицинские изображения и дай развёрнутый анализ с рекомендациями."
 	if jsonMode {
-		system = "Ты — опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев."
+		system = "Ты - опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев."
 	}
 
 	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{

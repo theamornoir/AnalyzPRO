@@ -11,11 +11,11 @@ import (
 	"time"
 )
 
-// FileRepository — файловый (JSON) репозиторий модуля Мониторинг,
+// FileRepository - файловый (JSON) репозиторий модуля Мониторинг,
 // переживающий перезапуск бота. Реализует тот же интерфейс Repository,
 // что и MockRepository, поэтому подменяется в app.go без изменения вызывающих.
 //
-// Все мутации сериализуются одним mutex; запись на диск — атомарная
+// Все мутации сериализуются одним mutex; запись на диск - атомарная
 // (temp-файл + rename), поэтому сбой не оставляет битый JSON.
 type FileRepository struct {
 	mu   sync.Mutex // guards data and serializes file writes
@@ -51,7 +51,7 @@ func NewFileRepository(path string) *FileRepository {
 func (r *FileRepository) load() {
 	f, err := os.Open(r.path)
 	if err != nil {
-		return // пустой старт — файл появится после первой записи
+		return // пустой старт - файл появится после первой записи
 	}
 	defer f.Close()
 	_ = json.NewDecoder(f).Decode(r.data)
@@ -74,7 +74,7 @@ func (r *FileRepository) load() {
 	}
 }
 
-// save — вызывать ТОЛЬКО под r.mu. Атомарная запись через temp + rename.
+// save - вызывать ТОЛЬКО под r.mu. Атомарная запись через temp + rename.
 func (r *FileRepository) save() {
 	if dir := filepath.Dir(r.path); dir != "" && dir != "." {
 		_ = os.MkdirAll(dir, 0o755)
@@ -100,7 +100,7 @@ func (r *FileRepository) save() {
 // HistorySaver
 // ---------------------------------------------------------------
 
-// SaveResult — сохраняет запись в историю (авто-инкремент ID).
+// SaveResult - сохраняет запись в историю (авто-инкремент ID).
 func (r *FileRepository) SaveResult(ctx context.Context, entry *HistoryEntry) error {
 	if entry == nil {
 		return fmt.Errorf("history entry is nil")
@@ -260,8 +260,8 @@ func (r *FileRepository) ListProjectEntries(ctx context.Context, projectID int64
 // История
 // ---------------------------------------------------------------
 
-// ListHistory — история пользователя с фильтром по типу и пагинацией.
-// page — 1-based; pageSize <= 0 означает «вернуть все».
+// ListHistory - история пользователя с фильтром по типу и пагинацией.
+// page - 1-based; pageSize <= 0 означает «вернуть все».
 func (r *FileRepository) ListHistory(ctx context.Context, telegramID int64, entryType string, page, pageSize int) ([]HistoryEntry, int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

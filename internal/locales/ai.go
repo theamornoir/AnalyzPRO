@@ -33,7 +33,7 @@ Google Gemini API может быть недоступен в некоторых
 🛠️ Что делать:
 • Обратитесь к администратору бота
 • Убедитесь, что в настройках указаны YANDEX_GPT_API_KEY и YANDEX_GPT_FOLDER_ID
-  (основной провайдер — YandexGPT; Gemini/DeepSeek/Claude — резервные)
+  (основной провайдер - YandexGPT; Gemini/DeepSeek/Claude - резервные)
 
 ⏳ Как только ключ будет добавлен, бот снова сможет обрабатывать анализы.`
 	MsgFallbackServiceUnavailable = `🔧 Сервис временно недоступен

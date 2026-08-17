@@ -12,7 +12,7 @@ package pdfservice
 // (@page{size:A4}, print-color-adjust), поэтому html2pdf.app рендерит их
 // вертикально идентично предпросмотру без запуска headless-браузера.
 //
-// Требуется ключ HTML2PDF_API_KEY (задаётся в .env). Если ключ не задан —
+// Требуется ключ HTML2PDF_API_KEY (задаётся в .env). Если ключ не задан -
 // ConvertHTML возвращает ошибку, и вызывающая сторона корректно откатывается
 // к отправке отчёта как HTML.
 
@@ -31,30 +31,30 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// Converter — единый интерфейс конвертации HTML→PDF.
+// Converter - единый интерфейс конвертации HTML→PDF.
 type Converter interface {
 	// ConvertHTML принимает готовый HTML (print-ready) и возвращает сырые
 	// байты PDF-документа.
 	ConvertHTML(ctx context.Context, html string) ([]byte, error)
 }
 
-// Config — параметры выбора конвертера.
+// Config - параметры выбора конвертера.
 type Config struct {
-	// HTML2PDFAPIKey — API-ключ html2pdf.app (env HTML2PDF_API_KEY).
-	// Если пуст — PDF-конвертация недоступна (ConvertHTML вернёт ошибку,
+	// HTML2PDFAPIKey - API-ключ html2pdf.app (env HTML2PDF_API_KEY).
+	// Если пуст - PDF-конвертация недоступна (ConvertHTML вернёт ошибку,
 	// вызывающая сторона откатится к HTML).
 	HTML2PDFAPIKey string
 }
 
-// html2PDFEndpoint — REST-эндпоинт html2pdf.app для конвертации HTML→PDF.
-// ВАЖНО: поддомен api.html2pdf.com НЕ существует (не резолвится, NXDOMAIN) —
+// html2PDFEndpoint - REST-эндпоинт html2pdf.app для конвертации HTML→PDF.
+// ВАЖНО: поддомен api.html2pdf.com НЕ существует (не резолвится, NXDOMAIN) -
 // поэтому ранее конвертация падала с «no such host». Рабочий сервис это
-// html2pdf.app (https://html2pdf.app, путь /v1/generate). Другой путь —
+// html2pdf.app (https://html2pdf.app, путь /v1/generate). Другой путь -
 // задайте HTML2PDF_API_URL в окружении.
 const html2PDFEndpoint = "https://api.html2pdf.app/v1/generate"
 
 // New выбирает конвертер по конфигу. При наличии ключа возвращает
-// HTML2PDFConverter (html2pdf.app), иначе — errorConverter (откат к HTML).
+// HTML2PDFConverter (html2pdf.app), иначе - errorConverter (откат к HTML).
 // Никогда не паникует.
 func New(cfg Config) Converter {
 	apiKey := strings.TrimSpace(cfg.HTML2PDFAPIKey)
@@ -67,7 +67,7 @@ func New(cfg Config) Converter {
 }
 
 // ----------------------------------------------------------------------------
-// HTML2PDFConverter — «отправить на сервер», POST HTML → PDF (html2pdf.app).
+// HTML2PDFConverter - «отправить на сервер», POST HTML → PDF (html2pdf.app).
 // ----------------------------------------------------------------------------
 
 // HTML2PDFConverter отправляет HTML на внешний сервис html2pdf.app и читает PDF.
@@ -101,7 +101,7 @@ type html2pdfRequest struct {
 // чтобы вызывающая сторона откатилась к отправке HTML.
 func (c *HTML2PDFConverter) ConvertHTML(ctx context.Context, html string) ([]byte, error) {
 	if strings.TrimSpace(html) == "" {
-		return nil, fmt.Errorf("пустой HTML — конвертация в PDF невозможна")
+		return nil, fmt.Errorf("пустой HTML - конвертация в PDF невозможна")
 	}
 
 	log.Printf("📤 [PDF] конвертация HTML→PDF: endpoint=%s, размер HTML=%d байт, ключ задан=%v",
@@ -117,9 +117,9 @@ func (c *HTML2PDFConverter) ConvertHTML(ctx context.Context, html string) ([]byt
 		return nil, fmt.Errorf("ошибка формирования запроса: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	// Авторизация html2pdf.app — через заголовок X-API-Key (именно так сервис
+	// Авторизация html2pdf.app - через заголовок X-API-Key (именно так сервис
 	// принимает ключ; Bearer-схема им не поддерживается). Если HTML2PDF_API_URL
-	// указывает на другой сервис с иной схемой авторизации — поменяйте здесь.
+	// указывает на другой сервис с иной схемой авторизации - поменяйте здесь.
 	req.Header.Set("X-API-Key", c.apiKey)
 
 	log.Printf("🌐 [PDF] POST %s (тело запроса %d байт)", c.endpoint, len(body))
@@ -171,10 +171,10 @@ func firstN(s string, n int) string {
 }
 
 // ----------------------------------------------------------------------------
-// errorConverter — заглушка, когда ключ html2pdf.app не задан (PDF невозможен).
+// errorConverter - заглушка, когда ключ html2pdf.app не задан (PDF невозможен).
 // ----------------------------------------------------------------------------
 
-// errorConverter возвращает ошибку — вызывающая сторона откатывается к HTML.
+// errorConverter возвращает ошибку - вызывающая сторона откатывается к HTML.
 type errorConverter struct {
 	err error
 }

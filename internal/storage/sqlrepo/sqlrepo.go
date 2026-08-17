@@ -1,6 +1,6 @@
 package sqlrepo
 
-// Package sqlrepo — реализация хранилища пользователей/диагнозов/курсов/
+// Package sqlrepo - реализация хранилища пользователей/диагнозов/курсов/
 // предпочтений поверх *sql.DB (SQLite через modernc). Один тип repo
 // реализует все четыре интерфейса из storage/interfaces, как и file.Store,
 // поэтому Storage может использовать его без изменения вызывающих.
@@ -52,10 +52,10 @@ func (r *Repo) CreateUser(ctx context.Context, user *sm.User) error {
 		user.CreatedAt = time.Now()
 	}
 
-	const q = `INSERT INTO users (telegram_id, name, is_premium, premium_expires_at, created_at)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(telegram_id) DO UPDATE SET name=excluded.name`
-	if _, err := r.db.ExecContext(ctx, q, user.TelegramID, user.Name, boolToInt(user.IsPremium), nullTime(user.PremiumExpiresAt), user.CreatedAt); err != nil {
+	const q = `INSERT INTO users (telegram_id, name, is_premium, premium_expires_at, onboarding_completed, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(telegram_id) DO UPDATE SET name=excluded.name, onboarding_completed=excluded.onboarding_completed`
+	if _, err := r.db.ExecContext(ctx, q, user.TelegramID, user.Name, boolToInt(user.IsPremium), nullTime(user.PremiumExpiresAt), boolToInt(user.OnboardingCompleted), user.CreatedAt); err != nil {
 		return fmt.Errorf("создание пользователя: %w", err)
 	}
 	var id int64
@@ -67,12 +67,13 @@ func (r *Repo) CreateUser(ctx context.Context, user *sm.User) error {
 }
 
 func (r *Repo) GetUserByTelegramID(ctx context.Context, telegramID int64) (*sm.User, error) {
-	const q = `SELECT id, telegram_id, name, is_premium, premium_expires_at, created_at
+	const q = `SELECT id, telegram_id, name, is_premium, premium_expires_at, onboarding_completed, created_at
 		FROM users WHERE telegram_id = ?`
 	var u sm.User
 	var isPremium int
 	var expires sql.NullTime
-	if err := r.db.QueryRowContext(ctx, q, telegramID).Scan(&u.ID, &u.TelegramID, &u.Name, &isPremium, &expires, &u.CreatedAt); err != nil {
+	var onboardingCompleted int
+	if err := r.db.QueryRowContext(ctx, q, telegramID).Scan(&u.ID, &u.TelegramID, &u.Name, &isPremium, &expires, &onboardingCompleted, &u.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("user not found")
 		}
@@ -82,6 +83,7 @@ func (r *Repo) GetUserByTelegramID(ctx context.Context, telegramID int64) (*sm.U
 	if expires.Valid {
 		u.PremiumExpiresAt = expires.Time
 	}
+	u.OnboardingCompleted = onboardingCompleted != 0
 	return &u, nil
 }
 
@@ -91,6 +93,20 @@ func (r *Repo) UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremi
 		boolToInt(isPremium), nullTime(expiresAt), userID)
 	if err != nil {
 		return fmt.Errorf("обновление статуса premium: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("user with ID %d not found", userID)
+	}
+	return nil
+}
+
+// UpdateUserOnboardingStatus обновляет флаг прохождения онбординга.
+func (r *Repo) UpdateUserOnboardingStatus(ctx context.Context, userID uint, completed bool) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE users SET onboarding_completed = ? WHERE id = ?`,
+		boolToInt(completed), userID)
+	if err != nil {
+		return fmt.Errorf("обновление статуса онбординга: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("user with ID %d not found", userID)
@@ -208,7 +224,7 @@ func (r *Repo) CompleteCycle(ctx context.Context, cycleID uint, endDate time.Tim
 	return nil
 }
 
-// nullTimeScanner — адаптер sql.Scanner для *time.Time (допускает NULL).
+// nullTimeScanner - адаптер sql.Scanner для *time.Time (допускает NULL).
 type nullTimeScanner struct {
 	tp *time.Time
 }

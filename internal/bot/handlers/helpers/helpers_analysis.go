@@ -16,10 +16,10 @@ func BuildAnalysisText(userData map[string]string) string {
 	if name == "" {
 		name = locales.MsgUserDefaultName
 	}
-	parts = append(parts, fmt.Sprintf("👤 **Пациент:** %s", name))
+	parts = append(parts, fmt.Sprintf("👤 Пациент: %s", name))
 	parts = append(parts, "")
 
-	parts = append(parts, "❗ **ВАЖНАЯ ИНФОРМАЦИЯ ДЛЯ АНАЛИЗА:**")
+	parts = append(parts, "❗ ВАЖНАЯ ИНФОРМАЦИЯ ДЛЯ АНАЛИЗА:")
 
 	if gender := userData["gender"]; gender != "" {
 		parts = append(parts, fmt.Sprintf("• Пол: %s", gender))

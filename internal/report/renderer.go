@@ -16,14 +16,14 @@ import (
 //go:embed templates/bioscan.html
 var bioscanTemplateFiles embed.FS
 
-// healthDossierTemplateFiles — шаблон универсального отчёта-досье здоровья
+// healthDossierTemplateFiles - шаблон универсального отчёта-досье здоровья
 // (расширенный анализ). Построен на основе присланных анализов и
 // 20-вопросного опросника об образе жизни.
 //
 //go:embed templates/health_dossier.html
 var healthDossierTemplateFiles embed.FS
 
-// bodyScanTemplateFiles — шаблон премиального отчёта Bioscan PRO
+// bodyScanTemplateFiles - шаблон премиального отчёта Bioscan PRO
 // (Body Intelligence). Premium print-ready HTML по фото + опроснику.
 //
 //go:embed templates/body_scan_report.html
@@ -106,7 +106,7 @@ type Renderer struct {
 // Helpers для премиального отчёта Bioscan PRO (Body Intelligence).
 // ============================================================================
 
-// donutCirc — длина окружности для донатов (r=80).
+// donutCirc - длина окружности для донатов (r=80).
 const donutCirc = 502.65
 
 // donutDash возвращает stroke-dasharray для доната по оценке 0-100:
@@ -136,7 +136,7 @@ func bodyStatusClass(status string) string {
 	}
 }
 
-// bodyStatusText — человекочитаемая метка статуса.
+// bodyStatusText - человекочитаемая метка статуса.
 func bodyStatusText(status string) string {
 	switch status {
 	case "good", "normal":
@@ -150,7 +150,7 @@ func bodyStatusText(status string) string {
 	}
 }
 
-// bodyStatusColor — приглушённый цвет статуса (mint/amber/coral).
+// bodyStatusColor - приглушённый цвет статуса (mint/amber/coral).
 func bodyStatusColor(status string) string {
 	switch status {
 	case "good", "normal":
@@ -184,7 +184,7 @@ func nl2p(s string) template.HTML {
 	return template.HTML(sb.String())
 }
 
-// zoneDonuts строит сетку мини-донатов (круговых диаграмм) для зон тела —
+// zoneDonuts строит сетку мини-донатов (круговых диаграмм) для зон тела -
 // визуальная альтернатива «силуэту человечка». Каждый донат показывает
 // оценку зоны 0-100 цветом по статусу. Возвращает template.HTML.
 func zoneDonuts(zones []models.BodyScanZone) template.HTML {
@@ -369,7 +369,7 @@ func NewRenderer() (*Renderer, error) {
 			}
 			return "#f44336"
 		},
-		// donutColor — цвет дуги доната по статусу (lifestyle/лаб).
+		// donutColor - цвет дуги доната по статусу (lifestyle/лаб).
 		"donutColor": func(status string) string {
 			switch status {
 			case "good", "normal":
@@ -382,7 +382,7 @@ func NewRenderer() (*Renderer, error) {
 				return "#45D0B0"
 			}
 		},
-		// pillClass — CSS-класс пилюли статуса (normal/warning/critical).
+		// pillClass - CSS-класс пилюли статуса (normal/warning/critical).
 		"pillClass": func(status string) string {
 			switch status {
 			case "normal", "good":
@@ -395,7 +395,7 @@ func NewRenderer() (*Renderer, error) {
 				return "normal"
 			}
 		},
-		// statusLabel — человекочитаемая метка статуса.
+		// statusLabel - человекочитаемая метка статуса.
 		"statusLabel": func(status string) string {
 			switch status {
 			case "normal", "good":
@@ -425,19 +425,19 @@ func NewRenderer() (*Renderer, error) {
 			}
 			return string(runes[start:end])
 		},
-		// donutDash — stroke-dasharray для доната по оценке 0-100.
+		// donutDash - stroke-dasharray для доната по оценке 0-100.
 		"donutDash": donutDash,
-		// bodyStatusClass — CSS-класс статуса (good/warning/critical).
+		// bodyStatusClass - CSS-класс статуса (good/warning/critical).
 		"bodyStatusClass": bodyStatusClass,
-		// bodyStatusText — метка статуса (в норме/внимание/риск).
+		// bodyStatusText - метка статуса (в норме/внимание/риск).
 		"bodyStatusText": bodyStatusText,
-		// bodyStatusColor — приглушённый цвет статуса.
+		// bodyStatusColor - приглушённый цвет статуса.
 		"bodyStatusColor": bodyStatusColor,
-		// radar — SVG radar-диаграмма осанки/баланса.
+		// radar - SVG radar-диаграмма осанки/баланса.
 		"radar": postureRadar,
-		// nl2p — текст с \n\n в набор <p> (абзацы).
+		// nl2p - текст с \n\n в набор <p> (абзацы).
 		"nl2p": nl2p,
-		// zoneDonuts — сетка мини-донатов для зон тела (круговые диаграммы).
+		// zoneDonuts - сетка мини-донатов для зон тела (круговые диаграммы).
 		"zoneDonuts": zoneDonuts,
 	}
 

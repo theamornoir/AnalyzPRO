@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// HistorySaver — минимальный интерфейс для сохранения результата в историю.
+// HistorySaver - минимальный интерфейс для сохранения результата в историю.
 // Используется слоями загрузки анализов/биосканов, чтобы любой результат
 // автоматически попадал в историю пользователя. Позже реализуется
 // реальным репозиторием БД.
@@ -16,8 +16,8 @@ type HistorySaver interface {
 	SaveResult(ctx context.Context, entry *HistoryEntry) error
 }
 
-// Repository — хранилище проектов мониторинга и истории пользователя.
-// На текущем этапе — in-memory мок; интерфейс стабилен для будущей БД.
+// Repository - хранилище проектов мониторинга и истории пользователя.
+// На текущем этапе - in-memory мок; интерфейс стабилен для будущей БД.
 type Repository interface {
 	HistorySaver
 
@@ -37,7 +37,7 @@ type Repository interface {
 	GetHistoryEntry(ctx context.Context, id int64) (*HistoryEntry, error)
 }
 
-// MockRepository — потокобезопасная in-memory реализация Repository.
+// MockRepository - потокобезопасная in-memory реализация Repository.
 // Общий экземпляр используется и API (чтение), и слоями загрузки
 // (запись истории), поэтому хранится в одном месте и инжектируется.
 type MockRepository struct {
@@ -58,7 +58,7 @@ func NewMockRepository() *MockRepository {
 	}
 }
 
-// SaveResult — сохраняет запись в историю (авто-инкремент ID, дата по
+// SaveResult - сохраняет запись в историю (авто-инкремент ID, дата по
 // умолчанию = сейчас). Реализует HistorySaver.
 func (m *MockRepository) SaveResult(ctx context.Context, entry *HistoryEntry) error {
 	if entry == nil {
@@ -76,7 +76,7 @@ func (m *MockRepository) SaveResult(ctx context.Context, entry *HistoryEntry) er
 	return nil
 }
 
-// CreateProject — сохраняет проект мониторинга.
+// CreateProject - сохраняет проект мониторинга.
 func (m *MockRepository) CreateProject(ctx context.Context, p *MonitoringProject) error {
 	if p == nil {
 		return fmt.Errorf("project is nil")
@@ -102,7 +102,7 @@ func (m *MockRepository) CreateProject(ctx context.Context, p *MonitoringProject
 	return nil
 }
 
-// GetProject — возвращает проект по ID (с копией среза привязок).
+// GetProject - возвращает проект по ID (с копией среза привязок).
 func (m *MockRepository) GetProject(ctx context.Context, id int64) (*MonitoringProject, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -115,7 +115,7 @@ func (m *MockRepository) GetProject(ctx context.Context, id int64) (*MonitoringP
 	return &cp, nil
 }
 
-// ListProjects — список проектов пользователя (новые сверху).
+// ListProjects - список проектов пользователя (новые сверху).
 func (m *MockRepository) ListProjects(ctx context.Context, telegramID int64) ([]MonitoringProject, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -134,7 +134,7 @@ func (m *MockRepository) ListProjects(ctx context.Context, telegramID int64) ([]
 	return out, nil
 }
 
-// CompleteProject — завершает проект (проставляет дату окончания и статус).
+// CompleteProject - завершает проект (проставляет дату окончания и статус).
 func (m *MockRepository) CompleteProject(ctx context.Context, id int64, endDate time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -151,7 +151,7 @@ func (m *MockRepository) CompleteProject(ctx context.Context, id int64, endDate 
 	return nil
 }
 
-// BindEntry — привязывает запись истории к проекту (без дублей).
+// BindEntry - привязывает запись истории к проекту (без дублей).
 func (m *MockRepository) BindEntry(ctx context.Context, projectID, entryID int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -171,7 +171,7 @@ func (m *MockRepository) BindEntry(ctx context.Context, projectID, entryID int64
 	return nil
 }
 
-// UnbindEntry — отвязывает запись от проекта.
+// UnbindEntry - отвязывает запись от проекта.
 func (m *MockRepository) UnbindEntry(ctx context.Context, projectID, entryID int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -189,7 +189,7 @@ func (m *MockRepository) UnbindEntry(ctx context.Context, projectID, entryID int
 	return nil
 }
 
-// ListProjectEntries — возвращает список привязанных ID записей.
+// ListProjectEntries - возвращает список привязанных ID записей.
 func (m *MockRepository) ListProjectEntries(ctx context.Context, projectID int64) ([]int64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -201,8 +201,8 @@ func (m *MockRepository) ListProjectEntries(ctx context.Context, projectID int64
 	return out, nil
 }
 
-// ListHistory — история пользователя с фильтром по типу и пагинацией.
-// page — 1-based; pageSize <= 0 означает «вернуть все».
+// ListHistory - история пользователя с фильтром по типу и пагинацией.
+// page - 1-based; pageSize <= 0 означает «вернуть все».
 func (m *MockRepository) ListHistory(ctx context.Context, telegramID int64, entryType string, page, pageSize int) ([]HistoryEntry, int, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -239,7 +239,7 @@ func (m *MockRepository) ListHistory(ctx context.Context, telegramID int64, entr
 	return filtered[start:end], total, nil
 }
 
-// GetHistoryEntry — возвращает запись истории по ID.
+// GetHistoryEntry - возвращает запись истории по ID.
 func (m *MockRepository) GetHistoryEntry(ctx context.Context, id int64) (*HistoryEntry, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

@@ -63,9 +63,15 @@ func ProcessBioscanWithPhotos(
 		name, age, height, weight, goal,
 	)
 
-	loadingMsg, textMsg := helpers.SendLoadingMessages(ctx, b, chatID, stickerID)
-
-	go animateBioscanStatus(ctx, b, chatID, textMsg.ID)
+	bioscanSteps := []string{
+		locales.BioscanStatusAnalyzingProportions,
+		locales.BioscanStatusCheckingMuscleBalance,
+		locales.BioscanStatusAnalyzingPosture,
+		locales.BioscanStatusEvaluatingComposition,
+		locales.BioscanStatusFormingProfile,
+		locales.BioscanStatusCreatingRecommendations,
+	}
+	loadingMsg, textMsg := helpers.SendLoadingMessages(ctx, b, chatID, stickerID, bioscanSteps)
 
 	// Скачиваем все 4 фотографии и передаём их в AI для полного анализа
 	photoIDs := []string{photo1ID, photo2ID, photo3ID, photo4ID}
@@ -96,11 +102,11 @@ func ProcessBioscanWithPhotos(
 	}
 
 	// Расширенный (Premium) Bioscan PRO -> подробный HTML-отчёт Body Intelligence.
-	// htmlReport — для отправки пользователю, jsonReport — «чистый» JSON
+	// htmlReport - для отправки пользователю, jsonReport - «чистый» JSON
 	// отчёта (сохраняется в историю для графиков дашборда «Сводка здоровья»
 	// и используется при сравнительном повторном анализе).
 	//
-	// Сравнительный контекст: если ранее уже делали Bioscan PRO — подставляем
+	// Сравнительный контекст: если ранее уже делали Bioscan PRO - подставляем
 	// предыдущий отчёт, чтобы ИИ построил СРАВНИТЕЛЬНЫЙ отчёт (динамика:
 	// что улучшилось / что улучшить), а не «с нуля».
 	bioscanContext := contextInfo
@@ -132,10 +138,10 @@ func ProcessBioscanWithPhotos(
 
 	if len(htmlReport) > 0 {
 		// Конвертируем премиальный HTML-отчёт Body Intelligence в PDF и
-		// отправляем как PDF. При сбое конвертации — откат к HTML.
+		// отправляем как PDF. При сбое конвертации - откат к HTML.
 		pdfBytes, convErr := pdfConverter.ConvertHTML(ctx, htmlReport)
 		if convErr != nil {
-			log.Printf("⚠️ [BIOSCAN] не удалось конвертировать PRO-отчёт в PDF (chatID=%d): %v — отправляю HTML", chatID, convErr)
+			log.Printf("⚠️ [BIOSCAN] не удалось конвертировать PRO-отчёт в PDF (chatID=%d): %v - отправляю HTML", chatID, convErr)
 			_, err = b.SendDocument(
 				ctx,
 				&tgbot.SendDocumentParams{
@@ -222,39 +228,11 @@ func ProcessBioscanWithPhotos(
 
 // bioscanReportNote собирает текст доп. блока для выдачи Bioscan PRO:
 // напоминание о сравнении повторных отчётов + краткое сравнение (summary),
-// если ИИ сформировал сравнительный отчёт. jsonReport — JSON отчёта.
+// если ИИ сформировал сравнительный отчёт. jsonReport - JSON отчёта.
 func bioscanReportNote(jsonReport string) string {
 	parts := []string{locales.MsgReportProgressNote}
 	if s := monitoring.ParseComparisonSummary(jsonReport); s != "" {
 		parts = append(parts, "📈 Сравнение с предыдущим Bioscan PRO: "+s)
 	}
 	return strings.Join(parts, "\n\n")
-}
-
-// animateBioscanStatus - анимация статуса обработки.
-func animateBioscanStatus(ctx context.Context, b *tgbot.Bot, chatID int64, messageID int) {
-	statuses := []string{
-		locales.BioscanStatusAnalyzingProportions,
-		locales.BioscanStatusCheckingMuscleBalance,
-		locales.BioscanStatusAnalyzingPosture,
-		locales.BioscanStatusEvaluatingComposition,
-		locales.BioscanStatusFormingProfile,
-		locales.BioscanStatusCreatingRecommendations,
-	}
-
-	for _, status := range statuses {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		time.Sleep(2 * time.Second)
-
-		_, _ = b.EditMessageText(ctx, &tgbot.EditMessageTextParams{
-			ChatID:    chatID,
-			MessageID: messageID,
-			Text:      fmt.Sprintf(locales.MsgBioscanLoadingStatusText, status),
-		})
-	}
 }

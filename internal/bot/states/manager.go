@@ -45,17 +45,17 @@ const (
 	StateWaitingBioscanPhoto4  State = "waiting_bioscan_photo4"
 	StateWaitingBioscanConfirm State = "waiting_bioscan_confirm"
 
-	// StateWaitingBioscanBasicPhoto — базовый (бесплатный) Bioscan: ожидание
+	// StateWaitingBioscanBasicPhoto - базовый (бесплатный) Bioscan: ожидание
 	// одного фото пользователя (без вопросника и без PDF).
 	StateWaitingBioscanBasicPhoto State = "waiting_bioscan_basic_photo"
 
 	StateWaitingUploadConfirm State = "waiting_upload_confirm"
 
-	// StateWaitingFeedback — режим ввода отзыва/предложения: следующее
+	// StateWaitingFeedback - режим ввода отзыва/предложения: следующее
 	// сообщение пользователя (текст/фото/документ) пересылается админу.
 	StateWaitingFeedback State = "waiting_feedback"
 
-	// StateWaitingConsultation — режим «Быстрая консультация (с ИИ)»:
+	// StateWaitingConsultation - режим «Быстрая консультация (с ИИ)»:
 	// следующее сообщение пользователя (текстовый вопрос или фото травмы)
 	// отправляется ИИ для генерации консультации с рекомендациями.
 	StateWaitingConsultation State = "waiting_consultation"

@@ -46,12 +46,12 @@ func handleTextUpload(
 
 	isExtended := isExtendedAnalysis(stateManager, chatID)
 
-	loadingMsg, textMsg := helpers.SendLoadingMessages(ctx, b, chatID, stickerID)
+	loadingMsg, textMsg := helpers.SendLoadingMessages(ctx, b, chatID, stickerID, nil)
 
 	if isExtended {
 		log.Printf(locales.LogUploadExtendedTextAnalysis)
 
-		// Сравнительный контекст: если ранее уже делали расширенный анализ —
+		// Сравнительный контекст: если ранее уже делали расширенный анализ -
 		// подставляем предыдущий отчёт, чтобы ИИ построил СРАВНИТЕЛЬНЫЙ
 		// отчёт (динамика: что улучшилось / что улучшить), а не «с нуля».
 		analysisPayload := payload

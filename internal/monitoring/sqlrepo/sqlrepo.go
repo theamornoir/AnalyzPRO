@@ -1,6 +1,6 @@
 package sqlrepo
 
-// Package sqlrepo — реализация Repository (мониторинг: проекты + история)
+// Package sqlrepo - реализация Repository (мониторинг: проекты + история)
 // поверх *sql.DB (SQLite через modernc). Полностью заменяет in-memory и
 // файловый репозитории: данные переживают перезапуск бота.
 
@@ -37,7 +37,7 @@ func nullTime(t time.Time) interface{} {
 	return t
 }
 
-// nullTimeScanner — адаптер sql.Scanner для *time.Time (допускает NULL).
+// nullTimeScanner - адаптер sql.Scanner для *time.Time (допускает NULL).
 type nullTimeScanner struct{ tp *time.Time }
 
 func (n *nullTimeScanner) Scan(src interface{}) error {
@@ -167,7 +167,7 @@ func (r *repo) ListProjects(ctx context.Context, telegramID int64) ([]monitoring
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	// Загружаем привязки отдельно (несколько проектов — один запрос на каждый).
+	// Загружаем привязки отдельно (несколько проектов - один запрос на каждый).
 	for i := range out {
 		entries, err := r.ListProjectEntries(ctx, out[i].ID)
 		if err == nil {

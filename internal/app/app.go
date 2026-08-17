@@ -82,8 +82,8 @@ func New() (*App, error) {
 	agreementStorage := storage.NewAgreementStorage("./data/agreements.json")
 
 	// Хранилище профилей пользователей / диагнозов / курсов / предпочтений.
-	// По умолчанию — реальная БД (SQLite/Postgres через *sql.DB). В режиме
-	// USE_MOCK=true — мок (для локальной разработки без БД).
+	// По умолчанию - реальная БД (SQLite/Postgres через *sql.DB). В режиме
+	// USE_MOCK=true - мок (для локальной разработки без БД).
 	var appStorage *storage.Storage
 	if useMock {
 		appStorage = storage.NewMockStorage()
@@ -108,8 +108,8 @@ func New() (*App, error) {
 	log.Printf("📈 Аналитика инициализирована: path=%s", cfg.AnalyticsPath)
 
 	// HTML→PDF конвертер (внешний сервис html2pdf.app по HTML2PDF_API_KEY).
-	// Используется для расширенного анализа и Bioscan PRO — отчёты
-	// отправляются как PDF (при сбое конвертации — как HTML).
+	// Используется для расширенного анализа и Bioscan PRO - отчёты
+	// отправляются как PDF (при сбое конвертации - как HTML).
 	pdfConverter := pdfservice.New(pdfservice.Config{
 		HTML2PDFAPIKey: cfg.HTML2PDFAPIKey,
 	})
@@ -149,7 +149,7 @@ func New() (*App, error) {
 	if strings.HasPrefix(cfg.WebAppURL, "https") {
 		log.Printf("✅ Дашборд будет открываться как Mini App прямо в Telegram (HTTPS).")
 	} else if strings.Contains(cfg.WebAppURL, "localhost") || strings.Contains(cfg.WebAppURL, "127.0.0.1") {
-		log.Printf("💡 Дашборд откроется как Mini App в Telegram Desktop на этой же машине (localhost). На телефоне запустите `make tunnel` (cloudflared/ngrok) для HTTPS — бот сам подхватит https-URL.")
+		log.Printf("💡 Дашборд откроется как Mini App в Telegram Desktop на этой же машине (localhost). На телефоне запустите `make tunnel` (cloudflared/ngrok) для HTTPS - бот сам подхватит https-URL.")
 	} else {
 		log.Printf("💡 Дашборд доступен по локальной сети (http). На телефоне в той же Wi-Fi откройте ссылку в браузере. Для Mini App запустите `make tunnel` (cloudflared/ngrok) и задайте WEBAPP_URL/HTTPS-туннель.")
 	}
@@ -167,7 +167,7 @@ func (a *App) Run(parent context.Context) {
 	defer stop()
 
 	// Запрещаем запуск второго экземпляра с тем же токеном. Два long-polling
-	// инстанса конкурируют за обновления Telegram — из-за этого часть ответов
+	// инстанса конкурируют за обновления Telegram - из-за этого часть ответов
 	// (например, подтверждение Premium или сообщение дашборда) «молча» не
 	// доходит до пользователя. Блокировка снимается при выходе процесса
 	// (flock), поэтому зависших lock-файлов не остаётся.
@@ -180,7 +180,7 @@ func (a *App) Run(parent context.Context) {
 }
 
 // acquireInstanceLock блокирует файл /tmp/analyzpro.lock через flock. Если
-// блокировка уже занята другим живым процессом — возвращает ошибку.
+// блокировка уже занята другим живым процессом - возвращает ошибку.
 func acquireInstanceLock() error {
 	f, err := os.OpenFile("/tmp/analyzpro.lock", os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
@@ -190,6 +190,6 @@ func acquireInstanceLock() error {
 		_ = f.Close()
 		return fmt.Errorf("не удалось заблокировать /tmp/analyzpro.lock (уже запущен?): %w", err)
 	}
-	// оставляем fd открытым на время жизни процесса — lock держится до выхода
+	// оставляем fd открытым на время жизни процесса - lock держится до выхода
 	return nil
 }

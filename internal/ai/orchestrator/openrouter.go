@@ -21,21 +21,21 @@ import (
 )
 
 const (
-	// openRouterBaseURL — OpenAI-совместимый endpoint OpenRouter.
+	// openRouterBaseURL - OpenAI-совместимый endpoint OpenRouter.
 	openRouterBaseURL = "https://openrouter.ai/api/v1"
 
-	// defaultOpenRouterModel — бесплатная vision-модель по умолчанию.
+	// defaultOpenRouterModel - бесплатная vision-модель по умолчанию.
 	// Обрабатывает и текст, и фото (vision). PDF обрабатывается через
 	// извлечение текста (ledongthuc/pdf) и передаётся как обычный текст.
 	defaultOpenRouterModel = "google/gemma-4-26b-a4b-it:free"
 
-	// openRouterModelTimeout — макс. время ожидания ответа ОДНОЙ модели.
+	// openRouterModelTimeout - макс. время ожидания ответа ОДНОЙ модели.
 	// При превышении (free-pool «висит») уходим на следующую модель цепочки,
 	// не расходуя общий бюджет и не валя весь провайдер OpenRouter.
 	openRouterModelTimeout = 40 * time.Second
 )
 
-// openRouterFallbackModels — цепочка бесплатных моделей OpenRouter, к которым
+// openRouterFallbackModels - цепочка бесплатных моделей OpenRouter, к которым
 // уходит провайдер, если сконфигурированная (или первая из списка) модель
 // недоступна / исчерпала бесплатный лимит (частый кейс для :free-моделей).
 var openRouterFallbackModels = []string{
@@ -45,7 +45,7 @@ var openRouterFallbackModels = []string{
 	"openrouter/free",
 }
 
-// OpenRouterProvider — провайдер через OpenRouter (OpenAI-совместимый API).
+// OpenRouterProvider - провайдер через OpenRouter (OpenAI-совместимый API).
 // Бесплатные модели OpenRouter не имеют гео-блоков (в отличие от Gemini во
 // Франции), поэтому это рабочий основной путь для text/photo/PDF-анализа.
 type OpenRouterProvider struct {
@@ -79,7 +79,7 @@ func NewOpenRouterProvider() *OpenRouterProvider {
 	return &OpenRouterProvider{client: client, configuredModel: model}
 }
 
-// candidateModels — сконфигурированная модель + цепочка бесплатных фоллбэков
+// candidateModels - сконфигурированная модель + цепочка бесплатных фоллбэков
 // (без дублей), в порядке приоритета.
 func (p *OpenRouterProvider) candidateModels() []string {
 	seen := map[string]bool{}
@@ -97,25 +97,25 @@ func (p *OpenRouterProvider) candidateModels() []string {
 	return out
 }
 
-// GenerateAnalysisSummary — генерирует текстовый анализ.
+// GenerateAnalysisSummary - генерирует текстовый анализ.
 func (p *OpenRouterProvider) GenerateAnalysisSummary(ctx context.Context, userInput string) (string, error) {
 	return p.complete(ctx,
-		"Ты — медицинский аналитик. Проанализируй данные и дай рекомендации.",
+		"Ты - медицинский аналитик. Проанализируй данные и дай рекомендации.",
 		userInput, nil, false, 3000)
 }
 
-// GenerateAnalysisJSON — генерирует JSON-анализ.
+// GenerateAnalysisJSON - генерирует JSON-анализ.
 func (p *OpenRouterProvider) GenerateAnalysisJSON(ctx context.Context, userInput string) (string, error) {
 	return p.complete(ctx,
-		"Ты — медицинский аналитик. Верни ответ в формате JSON.",
+		"Ты - медицинский аналитик. Верни ответ в формате JSON.",
 		userInput, nil, true, 4000)
 }
 
-// GenerateAnalysisFromFileWithContext — анализирует файл (изображение или PDF) с контекстом.
+// GenerateAnalysisFromFileWithContext - анализирует файл (изображение или PDF) с контекстом.
 func (p *OpenRouterProvider) GenerateAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	if isImageMime(mimeType) {
 		return p.complete(ctx,
-			"Ты — опытный врач-диагност. Проанализируй приложенные медицинские изображения и дай развёрнутый анализ с рекомендациями.",
+			"Ты - опытный врач-диагност. Проанализируй приложенные медицинские изображения и дай развёрнутый анализ с рекомендациями.",
 			contextText, []visionImage{{data: data, mimeType: mimeType}}, false, 4000)
 	}
 	if mimeType == "application/pdf" {
@@ -127,13 +127,13 @@ func (p *OpenRouterProvider) GenerateAnalysisFromFileWithContext(ctx context.Con
 			return "", fmt.Errorf("openrouter: PDF не содержит извлекаемого текста (возможно, это сканированное изображение)")
 		}
 		return p.complete(ctx,
-			"Ты — опытный врач-диагност. Проанализируй медицинский документ и дай развёрнутый анализ с рекомендациями.",
+			"Ты - опытный врач-диагност. Проанализируй медицинский документ и дай развёрнутый анализ с рекомендациями.",
 			contextText+"\n\nТекст документа (PDF):\n"+text, nil, false, 4000)
 	}
 	return "", fmt.Errorf("openrouter supports only image or pdf files for analysis")
 }
 
-// GenerateBioscanJSON — анализирует фото для bioscan и возвращает JSON.
+// GenerateBioscanJSON - анализирует фото для bioscan и возвращает JSON.
 func (p *OpenRouterProvider) GenerateBioscanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
 	imgs := make([]visionImage, 0, len(photosData))
 	for _, d := range photosData {
@@ -145,11 +145,11 @@ func (p *OpenRouterProvider) GenerateBioscanJSON(ctx context.Context, photosData
 		return "", fmt.Errorf("no photo data provided")
 	}
 	return p.complete(ctx,
-		"Ты — опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев.",
+		"Ты - опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев.",
 		locales.PromptForBioscan(contextInfo), imgs, true, 8000)
 }
 
-// GenerateBodyScanJSON — генерирует JSON премиального отчёта Bioscan PRO
+// GenerateBodyScanJSON - генерирует JSON премиального отчёта Bioscan PRO
 // (Body Intelligence) по фотографиям + данным опросника.
 func (p *OpenRouterProvider) GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
 	imgs := make([]visionImage, 0, len(photosData))
@@ -162,15 +162,15 @@ func (p *OpenRouterProvider) GenerateBodyScanJSON(ctx context.Context, photosDat
 		return "", fmt.Errorf("no photo data provided")
 	}
 	return p.complete(ctx,
-		"Ты — опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев.",
+		"Ты - опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев.",
 		locales.PromptForBodyScanJSON(contextInfo), imgs, true, 8000)
 }
 
-// GenerateAnalysisFromFileJSON — анализирует файл (изображение или PDF) и возвращает JSON.
+// GenerateAnalysisFromFileJSON - анализирует файл (изображение или PDF) и возвращает JSON.
 func (p *OpenRouterProvider) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	if isImageMime(mimeType) {
 		return p.complete(ctx,
-			"Ты — опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев.",
+			"Ты - опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев.",
 			locales.PromptForAnalysisJSON(contextText), []visionImage{{data: data, mimeType: mimeType}}, true, 8000)
 	}
 	if mimeType == "application/pdf" {
@@ -182,14 +182,14 @@ func (p *OpenRouterProvider) GenerateAnalysisFromFileJSON(ctx context.Context, d
 			return "", fmt.Errorf("openrouter: PDF не содержит извлекаемого текста (возможно, это сканированное изображение)")
 		}
 		return p.complete(ctx,
-			"Ты — опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев.",
+			"Ты - опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев.",
 			locales.PromptForAnalysisJSON(contextText)+"\n\nТекст документа (PDF):\n"+text, nil, true, 8000)
 	}
 	return "", fmt.Errorf("openrouter supports only image or pdf files for analysis")
 }
 
-// complete — универсальный вызов chat-completions с перебором моделей по
-// цепочке фоллбэков. userText — текстовая инструкция/контекст, images — опциональные
+// complete - универсальный вызов chat-completions с перебором моделей по
+// цепочке фоллбэков. userText - текстовая инструкция/контекст, images - опциональные
 // изображения для vision. jsonMode добавляет требование «только JSON» в системный промпт.
 // GenerateDossierJSON generates the JSON of the universal health-dossier report.
 func (p *OpenRouterProvider) GenerateDossierJSON(ctx context.Context, userInput string) (string, error) {
@@ -246,7 +246,7 @@ func (p *OpenRouterProvider) complete(ctx context.Context, systemPrompt, userTex
 				log.Printf(locales.LogOpenRouterModelFailed, model, err)
 				continue
 			}
-			return "", fmt.Errorf("openrouter: модель %s — %w", model, err)
+			return "", fmt.Errorf("openrouter: модель %s - %w", model, err)
 		}
 
 		if len(resp.Choices) == 0 || strings.TrimSpace(resp.Choices[0].Message.Content) == "" {
@@ -270,7 +270,7 @@ func isOpenRouterFallbackError(err error) bool {
 	}
 	var apiErr *openai.Error
 	// Таймаут / отмена контекста (в т.ч. Client.Timeout транспорта при
-	// «висении» free-модели) — пробуем следующую модель цепочки, вместо
+	// «висении» free-модели) - пробуем следующую модель цепочки, вместо
 	// того чтобы валить весь провайдер OpenRouter.
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return true
@@ -301,8 +301,8 @@ func isOpenRouterFallbackError(err error) bool {
 
 // extractPDFText извлекает весь текст из PDF через чистый Go-парсер
 // (ledongthuc/pdf). Используется, т.к. OpenAI-совместимые API (в т.ч. OpenRouter)
-// не принимают PDF-файлы напрямую — только текст/картинки. Для сканированных
-// PDF (только картинки) вернёт пустоту — это обрабатывается вызывающей стороной.
+// не принимают PDF-файлы напрямую - только текст/картинки. Для сканированных
+// PDF (только картинки) вернёт пустоту - это обрабатывается вызывающей стороной.
 func extractPDFText(data []byte) (string, error) {
 	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {

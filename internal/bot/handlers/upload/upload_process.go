@@ -55,7 +55,7 @@ func processSingleFile(
 			return
 		}
 		combined := fileText + "\n\nДанные пациента и опросника об образе жизни:\n" + contextInfo
-		// Сравнительный контекст: если ранее уже делали расширенный анализ —
+		// Сравнительный контекст: если ранее уже делали расширенный анализ -
 		// подставляем предыдущий отчёт для СРАВНИТЕЛЬНОГО досье.
 		if prevJSON, ok := monitoring.PreviousReportJSON(ctx, saver, chatID, "analysis"); ok {
 			combined += locales.ComparisonContext(prevJSON, "analysis")
@@ -142,7 +142,7 @@ func processMultipleFiles(
 			return
 		}
 		combined += "\n\nДанные пациента и опросника об образе жизни:\n" + contextInfo
-		// Сравнительный контекст: если ранее уже делали расширенный анализ —
+		// Сравнительный контекст: если ранее уже делали расширенный анализ -
 		// подставляем предыдущий отчёт для СРАВНИТЕЛЬНОГО досье.
 		if prevJSON, ok := monitoring.PreviousReportJSON(ctx, saver, chatID, "analysis"); ok {
 			combined += locales.ComparisonContext(prevJSON, "analysis")
@@ -182,7 +182,7 @@ func deleteLoadingMessages(ctx context.Context, b *tgbot.Bot, chatID int64, load
 // вместе с главным меню и сбрасывает состояние. Это гарантирует, что после
 // неудачной обработки пользователь не «зависает» без клавиатуры и может
 // вернуться в меню. Раньше ошибка отправлялась через helpers.SendError без
-// клавиатуры и без сброса состояния — из-за этого пропадало меню и не было
+// клавиатуры и без сброса состояния - из-за этого пропадало меню и не было
 // пути назад. loadingMsg/textMsg безопасно обрабатываются, если nil.
 func sendAnalysisError(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64, loadingMsg, textMsg *models.Message) {
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
@@ -219,7 +219,7 @@ func sendAnalysisCompleteNote(ctx context.Context, b *tgbot.Bot, stateManager st
 
 // buildReportNote собирает текст доп. блока для выдачи расширенного отчёта:
 // напоминание о сравнении повторных отчётов + краткое сравнение (summary),
-// если ИИ сформировал сравнительный отчёт. jsonResult — JSON отчёта.
+// если ИИ сформировал сравнительный отчёт. jsonResult - JSON отчёта.
 func buildReportNote(jsonResult string) string {
 	parts := []string{locales.MsgReportProgressNote}
 	if s := monitoring.ParseComparisonSummary(jsonResult); s != "" {

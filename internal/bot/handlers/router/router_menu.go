@@ -68,7 +68,7 @@ func (r *router) handleMenuButtons(ctx context.Context, b *tgbot.Bot, chatID int
 	case locales.BtnExtendedAnalysis:
 		return r.handleExtendedAnalysis(ctx, b, chatID)
 	case locales.BtnBioscan:
-		// Устаревшая текстовая кнопка «📸 Bioscan» (из старой клавиатуры) —
+		// Устаревшая текстовая кнопка «📸 Bioscan» (из старой клавиатуры) -
 		// безопасно направляем в бесплатный базовый режим.
 		return r.handleBioscanBasicStart(ctx, b, chatID)
 	case locales.BtnBioscanBasic:

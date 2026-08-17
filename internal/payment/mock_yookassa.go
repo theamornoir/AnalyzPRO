@@ -12,26 +12,26 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// PaymentRequest — запрос на создание платежа.
+// PaymentRequest - запрос на создание платежа.
 type PaymentRequest struct {
 	UserID   int64  `json:"user_id"`
 	TariffID string `json:"tariff_id"`
 }
 
-// PaymentResponse — ответ с ссылкой на оплату.
+// PaymentResponse - ответ с ссылкой на оплату.
 type PaymentResponse struct {
 	PaymentID string `json:"payment_id"`
 	URL       string `json:"url"`
 	Amount    int    `json:"amount"`
 }
 
-// YookassaWebhook — входящий вебхук от YooKassa.
+// YookassaWebhook - входящий вебхук от YooKassa.
 type YookassaWebhook struct {
 	Type   string      `json:"type"`
 	Object WebhookData `json:"object"`
 }
 
-// WebhookData — данные события вебхука.
+// WebhookData - данные события вебхука.
 type WebhookData struct {
 	ID        string    `json:"id"`
 	Status    string    `json:"succeeded"`
@@ -41,7 +41,7 @@ type WebhookData struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// MockPaymentService — мок-сервис платежей (замена YooKassa).
+// MockPaymentService - мок-сервис платежей (замена YooKassa).
 type MockPaymentService struct {
 	mu          sync.RWMutex
 	payments    map[string]*MockPayment
@@ -50,7 +50,7 @@ type MockPaymentService struct {
 	dataFile    string                     // файл для сохранения состояния Premium
 }
 
-// PremiumUser — информация о премиум-пользователе.
+// PremiumUser - информация о премиум-пользователе.
 type PremiumUser struct {
 	UserID           int64     `json:"user_id"`
 	IsPremium        bool      `json:"is_premium"`
@@ -60,7 +60,7 @@ type PremiumUser struct {
 }
 
 // NewMockPaymentService создаёт мок-сервис платежей.
-// dataFile — путь к JSON-файлу для сохранения состояния Premium-пользователей.
+// dataFile - путь к JSON-файлу для сохранения состояния Premium-пользователей.
 func NewMockPaymentService(dataFile string) *MockPaymentService {
 	s := &MockPaymentService{
 		payments: make(map[string]*MockPayment),
@@ -74,11 +74,11 @@ func NewMockPaymentService(dataFile string) *MockPaymentService {
 	return s
 }
 
-// loadUsers — загружает пользователей из JSON-файла.
+// loadUsers - загружает пользователей из JSON-файла.
 func (s *MockPaymentService) loadUsers() {
 	data, err := os.ReadFile(s.dataFile)
 	if err != nil {
-		// Файл не существует — это нормально
+		// Файл не существует - это нормально
 		return
 	}
 
@@ -90,7 +90,7 @@ func (s *MockPaymentService) loadUsers() {
 	log.Printf("📂 Loaded %d premium user(s) from %s", len(s.users), s.dataFile)
 }
 
-// saveUsers — сериализует пользователей под RLock и ПОСЛЕ снятия лока
+// saveUsers - сериализует пользователей под RLock и ПОСЛЕ снятия лока
 // пишет файл. ВАЖНО: не держит блокировку во время записи на диск и не
 // вызывается из-под уже взятого s.mu (иначе self-deadlock на не-
 // реентерабельном sync.RWMutex).
@@ -112,7 +112,7 @@ func (s *MockPaymentService) saveUsers() {
 	}
 }
 
-// MockPayment — мок-запись платежа.
+// MockPayment - мок-запись платежа.
 type MockPayment struct {
 	PaymentID string
 	UserID    int64
@@ -122,7 +122,7 @@ type MockPayment struct {
 	CreatedAt time.Time
 }
 
-// CreatePayment — создаёт платеж (мокирует YooKassa).
+// CreatePayment - создаёт платеж (мокирует YooKassa).
 func (s *MockPaymentService) CreatePayment(req PaymentRequest) (*PaymentResponse, error) {
 	log.Printf(locales.LogPaymentCreate, req.UserID, req.TariffID)
 
@@ -149,7 +149,7 @@ func (s *MockPaymentService) CreatePayment(req PaymentRequest) (*PaymentResponse
 	log.Printf(locales.LogPaymentCreated, paymentID, tariff.Name, tariff.Price/100)
 
 	// В реальном YooKassa здесь была бы генерация ссылки на оплату
-	// Для мока — возвращаем тестовую ссылку
+	// Для мока - возвращаем тестовую ссылку
 	return &PaymentResponse{
 		PaymentID: paymentID,
 		URL:       fmt.Sprintf("https://pay.test/checkout/%s", paymentID),
@@ -157,7 +157,7 @@ func (s *MockPaymentService) CreatePayment(req PaymentRequest) (*PaymentResponse
 	}, nil
 }
 
-// HandleWebhook — обрабатывает вебхук от YooKassa.
+// HandleWebhook - обрабатывает вебхук от YooKassa.
 func (s *MockPaymentService) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	var webhook YookassaWebhook
 	if err := json.NewDecoder(r.Body).Decode(&webhook); err != nil {
@@ -193,7 +193,7 @@ func (s *MockPaymentService) HandleWebhook(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-// activatePremium — активирует Premium для пользователя.
+// activatePremium - активирует Premium для пользователя.
 // Берёт write-lock только на время мутации map, затем СНИМАЕТ его перед
 // saveUsers(), иначе saveUsers() (который берёт RLock) вызвал бы
 // self-deadlock на не-реентерабельном sync.RWMutex и заморозил бы весь
@@ -229,16 +229,16 @@ func (s *MockPaymentService) activatePremium(userID int64, tariffID string) erro
 	log.Printf(locales.LogPaymentPremiumActivated, userID, tariff.Name, user.PremiumExpiresAt.Format("2006-01-02"))
 	s.mu.Unlock()
 
-	// Сохраняем состояние в файл (saveUsers берёт свой собственный RLock —
+	// Сохраняем состояние в файл (saveUsers берёт свой собственный RLock -
 	// write-lock уже снят, поэтому deadlock не возникает).
 	s.saveUsers()
 
 	return nil
 }
 
-// IsPremium — проверка, является ли пользователь Premium.
+// IsPremium - проверка, является ли пользователь Premium.
 // Используем write-lock: при истечении срока здесь происходит мутация
-// (user.IsPremium = false), и брать RLock для записи — data race.
+// (user.IsPremium = false), и брать RLock для записи - data race.
 func (s *MockPaymentService) IsPremium(userID int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -262,7 +262,7 @@ func (s *MockPaymentService) IsPremium(userID int64) bool {
 	return true
 }
 
-// GetPremiumInfo — информация о Premium пользователя.
+// GetPremiumInfo - информация о Premium пользователя.
 func (s *MockPaymentService) GetPremiumInfo(userID int64) *PremiumUser {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -277,22 +277,38 @@ func (s *MockPaymentService) GetPremiumInfo(userID int64) *PremiumUser {
 	return &cp
 }
 
-// SetWebhookHandler — устанавливает callback для обработки вебхуков.
+// SetWebhookHandler - устанавливает callback для обработки вебхуков.
 func (s *MockPaymentService) SetWebhookHandler(fn func(payload []byte) error) {
 	s.webhookFunc = fn
 }
 
-// ActivatePremiumManually — ручная активация Premium (для симуляции оплаты).
+// ActivatePremiumManually - ручная активация Premium (для симуляции оплаты).
 func (s *MockPaymentService) ActivatePremiumManually(userID int64, tariffID string) error {
 	return s.activatePremium(userID, tariffID)
 }
 
-// IsUserPremium — проверка, является ли пользователь Premium.
+// IsUserPremium - проверка, является ли пользователь Premium.
 func (s *MockPaymentService) IsUserPremium(userID int64) bool {
 	return s.IsPremium(userID)
 }
 
-// SimulatePaymentSuccess — симулирует успешную оплату по ID платежа.
+// ResetPremium сбрасывает Premium-статус пользователя (IsPremium=false и
+// срок действия - в ноль). Используется админ-командой для тестирования
+// полного цикла покупки.
+func (s *MockPaymentService) ResetPremium(userID int64) {
+	s.mu.Lock()
+	if u, ok := s.users[userID]; ok {
+		u.IsPremium = false
+		u.PremiumExpiresAt = time.Time{}
+	}
+	s.mu.Unlock()
+
+	// Сохраняем состояние (saveUsers берёт свой собственный RLock; write-lock
+	// уже снят, поэтому deadlock не возникает).
+	s.saveUsers()
+}
+
+// SimulatePaymentSuccess - симулирует успешную оплату по ID платежа.
 // Находит платеж по ID и меняет его статус на "succeeded".
 // Лок снимается ДО вызова activatePremium/saveUsers, чтобы избежать
 // вложенной блокировки (self-deadlock на sync.RWMutex).

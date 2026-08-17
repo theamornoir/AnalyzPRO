@@ -61,7 +61,7 @@ const (
 // Логи для платежей.
 const (
 	LogPaymentCreate           = "💳 Создание платежа: user=%d, tariff=%s"
-	LogPaymentCreated          = "✅ Платёж создан: %s (%s — %d ₽)"
+	LogPaymentCreated          = "✅ Платёж создан: %s (%s - %d ₽)"
 	LogPaymentWebhookReceived  = "📡 Вебхук YooKassa: type=%s, id=%s"
 	LogPaymentWebhookIgnored   = "⏭️ Вебхук проигнорирован: %s"
 	LogPaymentNotSucceeded     = "⏭️ Платёж не succeeded: %s"
@@ -87,7 +87,7 @@ const (
 	// Логи OpenRouter
 	LogOpenRouterModel       = "🌐 OpenRouter model: %s"
 	LogOpenRouterTrying      = "🔄 OpenRouter: пробуем модель %s"
-	LogOpenRouterModelFailed = "⚠️ OpenRouter: модель %s недоступна — %v"
+	LogOpenRouterModelFailed = "⚠️ OpenRouter: модель %s недоступна - %v"
 )
 
 // Ошибки для платежей.

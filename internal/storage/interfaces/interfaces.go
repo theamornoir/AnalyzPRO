@@ -12,6 +12,7 @@ type UserRepository interface {
 	CreateUser(ctx context.Context, user *sm.User) error
 	GetUserByTelegramID(ctx context.Context, telegramID int64) (*sm.User, error)
 	UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time) error
+	UpdateUserOnboardingStatus(ctx context.Context, userID uint, completed bool) error
 }
 
 // DiagnosisRepository - репозиторий диагнозов.

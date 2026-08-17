@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 
@@ -11,7 +12,9 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/onboarding"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/upload"
+	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
@@ -118,7 +121,7 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 
 	// Режим ввода отзыва: перехватываем ЛЮБОЕ сообщение пользователя
 	// (текст/фото/документ), чтобы переслать его разработчику. Перехват
-	// идёт до приоритета кнопок главного меню — иначе отзыв, случайно
+	// идёт до приоритета кнопок главного меню - иначе отзыв, случайно
 	// совпадающий по тексту с кнопкой меню, «проглотился» бы как команда.
 	// Исключение: нажатие самой кнопки главного меню во время ввода отзыва
 	// выходит из режима отзыва и навигирует как обычно (иначе меню
@@ -134,7 +137,7 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 	// Кнопки главного меню имеют приоритет над «зависшим» состоянием потока
 	// (например, сохранённое в states.json состояние bioscan не должно
 	// «проглатывать» нажатие «📊 Мой Дашборд»). Фото/документы (text=="")
-	// пропускаем — их обрабатывают шаги потока/загрузки.
+	// пропускаем - их обрабатывают шаги потока/загрузки.
 	if text != "" && r.isMainMenuButton(text) {
 		if r.handleMenuButtons(ctx, b, chatID, text, update) {
 			return
@@ -170,11 +173,59 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 	r.handleText(ctx, b, chatID, text)
 }
 
-// handleCallback — обработка callback-запросов от inline-кнопок.
+// handleOnboarding обрабатывает callback-запросы онбординга (префикс
+// onboarding_). Удаляет сообщение с нажатой кнопкой (чтобы не плодить
+// историю чата) и отправляет следующий шаг / соглашение / финал.
+// Возвращает true, если callback принадлежит онбордингу и обработан.
+func (r *router) handleOnboarding(ctx context.Context, b *tgbot.Bot, chatID int64, callbackData string, update *models.Update) bool {
+	if !strings.HasPrefix(callbackData, "onboarding_") {
+		return false
+	}
+
+	// Удаляем сообщение с нажатой кнопкой - онбординг не должен
+	// оставлять «мусор» в истории чата.
+	if m := update.CallbackQuery.Message; m.Message != nil {
+		helpers.DeleteMessage(ctx, b, chatID, m.Message.ID)
+	}
+
+	switch {
+	case callbackData == "onboarding_agreement":
+		// Шаг 4 → соглашение.
+		onboarding.SendAgreement(ctx, b, chatID)
+	case callbackData == "onboarding_accept":
+		// Финал: фиксируем соглашение + онбординг, показываем главное меню.
+		r.agreementStorage.SetAgreed(chatID)
+		if r.appStorage != nil {
+			_ = r.appStorage.SetOnboardingCompleted(ctx, chatID, true)
+		}
+		r.stateManager.SetState(chatID, states.StateIdle)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgOnboardingDone,
+			ReplyMarkup: keyboards.MainMenu(),
+			ParseMode:   "Markdown",
+		})
+	default:
+		// Переход к следующему шагу: onboarding_step_N (N от 2 до 4).
+		var nextStep int
+		if _, err := fmt.Sscanf(callbackData, "onboarding_step_%d", &nextStep); err == nil {
+			if nextStep >= 2 && nextStep <= len(onboarding.Steps) {
+				onboarding.SendStep(ctx, b, chatID, nextStep)
+			}
+		}
+	}
+
+	_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+		CallbackQueryID: update.CallbackQuery.ID,
+	})
+	return true
+}
+
+// handleCallback - обработка callback-запросов от inline-кнопок.
 func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *models.Update) {
 	callbackData := update.CallbackQuery.Data
 
-	// У callback-запросов верхнеуровневый update.Message почти всегда nil —
+	// У callback-запросов верхнеуровневый update.Message почти всегда nil -
 	// брать chatID оттуда нельзя (nil-pointer panic). В приватном чате
 	// ChatID пользователя совпадает с ID отправителя.
 	chatID := update.CallbackQuery.From.ID
@@ -182,12 +233,20 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	log.Printf(locales.LogRouterCallback, chatID, callbackData)
 
 	// Ловим панику в обработчике: tgbot иногда «глотает» панику, и тогда
-	// сообщение не отправляется, а в логах — тишина. Логируем явно.
+	// сообщение не отправляется, а в логах - тишина. Логируем явно.
 	defer func() {
 		if rec := recover(); rec != nil {
 			log.Printf("🔥 PANIC in handleCallback (chatID=%d, data=%q): %v", chatID, callbackData, rec)
 		}
 	}()
+
+	// Онбординг (callback'и onboarding_*): обрабатываем до прочих, чтобы
+	// не конфликтовали с премиум/хабами и не доходили до спиннера в конце.
+	if strings.HasPrefix(callbackData, "onboarding_") {
+		if r.handleOnboarding(ctx, b, chatID, callbackData, update) {
+			return
+		}
+	}
 
 	// Premium confirm (симуляция оплаты → активация Premium).
 	// Проверяем ДО «premium_», иначе данные вида
@@ -200,7 +259,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		return
 	}
 
-	// Premium change tariff (для уже активного Premium) — проверяем ДО
+	// Premium change tariff (для уже активного Premium) - проверяем ДО
 	// общего «premium_», иначе «premium_change» попал бы в выбор тарифа.
 	if callbackData == "premium_change" {
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "premium_change")
@@ -220,9 +279,9 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 
 	// «Назад» из любого раздела/флоу (блок-хаб или сообщение под-действия
 	// вроде Сводки/Мониторинга). Удаляем само сообщение с inline-кнопкой, а
-	// дальше — иерархический возврат (на уровень выше: в хаб раздела, либо из
-	// хаба — в Главное меню). Поведение совпадает с reply-кнопкой «⬅️ Назад»
-	// (handleBack) — единый UX на всех этапах.
+	// дальше - иерархический возврат (на уровень выше: в хаб раздела, либо из
+	// хаба - в Главное меню). Поведение совпадает с reply-кнопкой «⬅️ Назад»
+	// (handleBack) - единый UX на всех этапах.
 	if callbackData == "hub_back" || callbackData == "msg_back" {
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, callbackData)
 
@@ -301,7 +360,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		r.handleFeedbackStart(ctx, b, chatID)
 	case "section_about":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_about")
-		// Выбрано под-действие — убираем блок-хаб.
+		// Выбрано под-действие - убираем блок-хаб.
 		r.deleteHubBlock(ctx, b, chatID)
 		r.setCurrentSection(chatID, "service")
 		menu.AboutHandler()(ctx, b, update)

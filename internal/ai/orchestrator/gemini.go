@@ -7,13 +7,13 @@ import (
 	"github.com/theamornoir/analyzpro/internal/ai/gemini"
 )
 
-// GeminiProvider — обёртка над GeminiClient для оркестратора.
+// GeminiProvider - обёртка над GeminiClient для оркестратора.
 type GeminiProvider struct {
 	client *gemini.GeminiClient
 }
 
 // NewGeminiProvider создаёт GeminiProvider с ключом из окружения.
-// Возвращает nil если ключ пустой — провайдер не будет добавлен в оркестратор.
+// Возвращает nil если ключ пустой - провайдер не будет добавлен в оркестратор.
 func NewGeminiProvider() *GeminiProvider {
 	apiKey := os.Getenv("GOOGLE_GEMINI_API_KEY")
 	if apiKey == "" {
@@ -28,37 +28,37 @@ func NewGeminiProvider() *GeminiProvider {
 	}
 }
 
-// GenerateAnalysisSummary — генерирует текстовый анализ.
+// GenerateAnalysisSummary - генерирует текстовый анализ.
 func (p *GeminiProvider) GenerateAnalysisSummary(ctx context.Context, userInput string) (string, error) {
 	return p.client.GenerateAnalysisSummary(ctx, userInput)
 }
 
-// GenerateAnalysisJSON — генерирует JSON-анализ.
+// GenerateAnalysisJSON - генерирует JSON-анализ.
 func (p *GeminiProvider) GenerateAnalysisJSON(ctx context.Context, userInput string) (string, error) {
 	return p.client.GenerateAnalysisJSON(ctx, userInput)
 }
 
-// GenerateAnalysisFromFileWithContext — анализирует файл с контекстом.
+// GenerateAnalysisFromFileWithContext - анализирует файл с контекстом.
 func (p *GeminiProvider) GenerateAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	return p.client.GenerateAnalysisFromFileWithContext(ctx, data, mimeType, contextText)
 }
 
-// GenerateBioscanJSON — генерирует JSON bioscan по фото.
+// GenerateBioscanJSON - генерирует JSON bioscan по фото.
 func (p *GeminiProvider) GenerateBioscanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
 	return p.client.GenerateBioscanJSON(ctx, photosData, mimeType, contextInfo)
 }
 
-// GenerateBodyScanJSON — генерирует JSON премиального отчёта Bioscan PRO.
+// GenerateBodyScanJSON - генерирует JSON премиального отчёта Bioscan PRO.
 func (p *GeminiProvider) GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
 	return p.client.GenerateBodyScanJSON(ctx, photosData, mimeType, contextInfo)
 }
 
-// GenerateAnalysisFromFileJSON — генерирует JSON-анализ из файла.
+// GenerateAnalysisFromFileJSON - генерирует JSON-анализ из файла.
 func (p *GeminiProvider) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	return p.client.GenerateAnalysisFromFileJSON(ctx, data, mimeType, contextText)
 }
 
-// GenerateDossierJSON — генерирует JSON универсального отчёта-досье здоровья.
+// GenerateDossierJSON - генерирует JSON универсального отчёта-досье здоровья.
 func (p *GeminiProvider) GenerateDossierJSON(ctx context.Context, userInput string) (string, error) {
 	return p.client.GenerateDossierJSON(ctx, userInput)
 }

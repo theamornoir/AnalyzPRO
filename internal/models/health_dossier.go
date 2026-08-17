@@ -1,6 +1,6 @@
 package models
 
-// HealthDossier — универсальный расширенный отчёт-досье здоровья.
+// HealthDossier - универсальный расширенный отчёт-досье здоровья.
 // Строится на основе присланных пользователем анализов и 20-вопросного
 // опросника об образе жизни. Генерируется ИИ в виде JSON и рендерится в
 // богатый print-ready HTML (templates/health_dossier.html).
@@ -11,20 +11,20 @@ type HealthDossier struct {
 	Survey     []SurveyQA         `json:"survey"`
 	Lifestyle  []LifestyleSection `json:"lifestyle"`
 	LabSystems []LabSystem        `json:"lab_systems"`
-	// Synthesis — общая картина здоровья: связный развёрнутый разбор,
+	// Synthesis - общая картина здоровья: связный развёрнутый разбор,
 	// объединяющий образ жизни и присланные анализы в единый «портрет».
 	// Рендерится на обложке отчёта как отдельный блок «Общая картина».
 	Synthesis  string            `json:"synthesis"`
 	Priorities []DossierPriority `json:"priorities"`
 	References []Reference       `json:"references"`
-	// Comparison — блок сравнения с ПРЕДЫДУЩИМ досье (для повторного
+	// Comparison - блок сравнения с ПРЕДЫДУЩИМ досье (для повторного
 	// расширенного анализа). Заполняется ИИ; рендерится как «что стало
 	// лучше / что улучшить» + таблица показателей до→после.
 	Comparison ReportComparison `json:"comparison"`
 	Disclaimer string                  `json:"disclaimer"`
 }
 
-// DossierPatient — идентификационные данные из опросника.
+// DossierPatient - идентификационные данные из опросника.
 type DossierPatient struct {
 	Name   string `json:"name"`
 	Age    string `json:"age"`
@@ -32,7 +32,7 @@ type DossierPatient struct {
 	Date   string `json:"date"`
 }
 
-// DossierScores — интегральные оценки для обложки (каждая 0-100).
+// DossierScores - интегральные оценки для обложки (каждая 0-100).
 type DossierScores struct {
 	Health    int `json:"health"`    // состояние здоровья
 	Potential int `json:"potential"` // потенциал улучшения
@@ -45,14 +45,14 @@ type DossierScores struct {
 	Focus     int `json:"focus"`
 }
 
-// SurveyQA — один вопрос/ответ из 20-вопросного опросника.
+// SurveyQA - один вопрос/ответ из 20-вопросного опросника.
 type SurveyQA struct {
 	Num      int    `json:"num"`
 	Question string `json:"question"`
 	Answer   string `json:"answer"`
 }
 
-// LifestyleSection — один раздел образа жизни (сон, стресс, питание,
+// LifestyleSection - один раздел образа жизни (сон, стресс, питание,
 // активность, семейный анамнез и т.п.).
 type LifestyleSection struct {
 	Key             string   `json:"key"`
@@ -63,7 +63,7 @@ type LifestyleSection struct {
 	Recommendations []string `json:"recommendations"`
 }
 
-// LabSystem — одна лабораторная система (углеводный обмен, липиды, печень,
+// LabSystem - одна лабораторная система (углеводный обмен, липиды, печень,
 // почки, гематология, гормоны и т.п.).
 type LabSystem struct {
 	Key             string             `json:"key"`
@@ -75,7 +75,7 @@ type LabSystem struct {
 	Recommendations []string           `json:"recommendations"`
 }
 
-// DossierIndicator — один лабораторный показатель внутри системы.
+// DossierIndicator - один лабораторный показатель внутри системы.
 type DossierIndicator struct {
 	Name   string `json:"name"`
 	Value  string `json:"value"`
@@ -84,14 +84,14 @@ type DossierIndicator struct {
 	Status string `json:"status"` // normal | warning | critical
 }
 
-// DossierPriority — один приоритетный блок интегральных рекомендаций.
+// DossierPriority - один приоритетный блок интегральных рекомендаций.
 type DossierPriority struct {
 	Title  string   `json:"title"`
 	Period string   `json:"period"`
 	Items  []string `json:"items"`
 }
 
-// Reference — научный источник/методология.
+// Reference - научный источник/методология.
 type Reference struct {
 	Source string `json:"source"`
 	Detail string `json:"detail"`

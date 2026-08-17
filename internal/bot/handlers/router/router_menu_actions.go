@@ -18,12 +18,12 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// WebAppAssetsVersion — версия статических активов Mini App (Сводка здоровья
+// WebAppAssetsVersion - версия статических активов Mini App (Сводка здоровья
 // и Мониторинг). Увеличивайте при изменении index.html/app.js/style.css,
 // чтобы Telegram WebView перезапросил свежие файлы (иначе отдаёт
-// закэшированную старую версию — отсюда «пустой/старый» дашборд после правок).
+// закэшированную старую версию - отсюда «пустой/старый» дашборд после правок).
 // Должна совпадать с ?v= в ссылках на активы в webapp_files/index.html.
-const WebAppAssetsVersion = "v15"
+const WebAppAssetsVersion = "v16"
 
 // WithWebAppVersion добавляет ?v=<version> к URL Mini App, сбрасывая кэш
 // Telegram WebView при обновлении активов. Пустой URL не трогает.
@@ -37,20 +37,20 @@ func WithWebAppVersion(u string) string {
 	return u + "?v=" + WebAppAssetsVersion
 }
 
-// hubMessageKey — ключ в user-data, в котором хранится message_id текущего
+// hubMessageKey - ключ в user-data, в котором хранится message_id текущего
 // «блока-хаба» (раздел Анализы/Здоровье/Сервис). Блок редактируется на месте
 // (editMessage) при переключении разделов, чтобы не плодить сообщения: один
 // блок перерисовывается вкладками, а результаты под-действий приходят
 // отдельными сообщениями.
 const hubMessageKey = "hub_message_id"
 
-// hubAnchorKey — ключ в user-data для message_id «якорного» сообщения раздела.
+// hubAnchorKey - ключ в user-data для message_id «якорного» сообщения раздела.
 // Оно несёт внизу единую Reply-клавиатуру [Назад] (висит на всём протяжении
 // раздела). Telegram не позволяет совместить inline-кнопки действий и эту
-// Reply-клавиатуру в одном сообщении, поэтому «якорь» и блок — два сообщения.
+// Reply-клавиатуру в одном сообщении, поэтому «якорь» и блок - два сообщения.
 const hubAnchorKey = "hub_anchor_id"
 
-// lastMsgKey — ключ в user-data для message_id последнего «шагового»
+// lastMsgKey - ключ в user-data для message_id последнего «шагового»
 // сообщения раздела/флоу. Используется обработчиком «Назад», чтобы удалить
 // именно текущее сообщение раздела перед возвратом в главное меню.
 const lastMsgKey = "last_msg_id"
@@ -70,11 +70,11 @@ func hubSections() map[string]hubSection {
 	}
 }
 
-// renderHub — показывает/переключает «блок-хаб» раздела ДВУМЯ сообщениями:
-//  1. «якорь» — описание раздела + единая Reply-клавиатура [Назад] внизу;
-//  2. «блок» — инлайн-кнопки под-действий раздела + подсказка
+// renderHub - показывает/переключает «блок-хаб» раздела ДВУМЯ сообщениями:
+//  1. «якорь» - описание раздела + единая Reply-клавиатура [Назад] внизу;
+//  2. «блок» - инлайн-кнопки под-действий раздела + подсказка
 //     «👇 Выберите действие:». Telegram не позволяет совместить инлайн-кнопки
-//     действий и Reply-клавиатуру [Назад] в одном сообщении, поэтому хаб —
+//     действий и Reply-клавиатуру [Назад] в одном сообщении, поэтому хаб -
 //     два сообщения.
 //
 // Если у пользователя уже открыты оба сообщения хаба (сохранены hub_anchor_id
@@ -95,13 +95,13 @@ func (r *router) renderHub(ctx context.Context, b *tgbot.Bot, chatID int64, sect
 	anchorID := r.hubAnchorID(chatID)
 	msgID := r.hubMessageID(chatID)
 
-	// Оба сообщения на месте — перерисовываем на месте (edit), чтобы не
+	// Оба сообщения на месте - перерисовываем на месте (edit), чтобы не
 	// плодить новые сообщения при переключении разделов.
 	if anchorID > 0 && msgID > 0 && r.editHubPair(ctx, b, chatID, anchorID, msgID, sec) {
 		return true
 	}
 
-	// Не удалось отредактировать (сообщения удалены пользователем и т.п.) —
+	// Не удалось отредактировать (сообщения удалены пользователем и т.п.) -
 	// чистим остатки и отправляем хаб заново.
 	r.deleteHubBlock(ctx, b, chatID)
 
@@ -158,11 +158,11 @@ func (r *router) editHubPair(ctx context.Context, b *tgbot.Bot, chatID int64, an
 	return true
 }
 
-// deleteHubBlock — удаляет текущий «блок-хаб» (раздел Анализы/Здоровье/
+// deleteHubBlock - удаляет текущий «блок-хаб» (раздел Анализы/Здоровье/
 // Сервис) из чата вместе с «якорем» (Reply-клавиатура [Назад]) и сбрасывает
 // сохранённые id. Используется, когда пользователь выбирает под-действие
 // (анализ/консультация и т.п.) или нажимает «Назад» из раздела: в чате не
-// должно висеть устаревшее меню раздела (иначе — «куча непонятно чего»).
+// должно висеть устаревшее меню раздела (иначе - «куча непонятно чего»).
 // Безопасно, если блока/якоря нет.
 func (r *router) deleteHubBlock(ctx context.Context, b *tgbot.Bot, chatID int64) {
 	msgID := r.hubMessageID(chatID)
@@ -180,7 +180,7 @@ func (r *router) deleteHubBlock(ctx context.Context, b *tgbot.Bot, chatID int64)
 	r.setHubMessageID(chatID, 0)
 }
 
-// hubMessageID / setHubMessageID — чтение/запись message_id текущего блока-хаба.
+// hubMessageID / setHubMessageID - чтение/запись message_id текущего блока-хаба.
 func (r *router) hubMessageID(chatID int64) int {
 	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, hubMessageKey))
 	if err != nil || n <= 0 {
@@ -193,7 +193,7 @@ func (r *router) setHubMessageID(chatID int64, msgID int) {
 	r.stateManager.SetUserData(chatID, hubMessageKey, strconv.Itoa(msgID))
 }
 
-// hubAnchorID / setHubAnchorID — чтение/запись message_id «якоря» раздела
+// hubAnchorID / setHubAnchorID - чтение/запись message_id «якоря» раздела
 // (сообщение с Reply-клавиатурой [Назад]).
 func (r *router) hubAnchorID(chatID int64) int {
 	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, hubAnchorKey))
@@ -207,7 +207,7 @@ func (r *router) setHubAnchorID(chatID int64, msgID int) {
 	r.stateManager.SetUserData(chatID, hubAnchorKey, strconv.Itoa(msgID))
 }
 
-// lastMsgID / setLastMsg — чтение/запись message_id последнего «шагового»
+// lastMsgID / setLastMsg - чтение/запись message_id последнего «шагового»
 // сообщения раздела/флоу (для удаления при нажатии «Назад»).
 func (r *router) lastMsgID(chatID int64) int {
 	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, lastMsgKey))
@@ -227,7 +227,7 @@ func (r *router) setLastMsg(chatID int64, msgID int) {
 func (r *router) handleFeedbackStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf("[FEEDBACK] открытие раздела для chatID=%d", chatID)
 
-	// Выбрано под-действие — убираем блок-хаб.
+	// Выбрано под-действие - убираем блок-хаб.
 	r.deleteHubBlock(ctx, b, chatID)
 
 	if !r.agreementStorage.IsAgreed(chatID) {
@@ -262,14 +262,14 @@ func (r *router) handleFeedbackStart(ctx context.Context, b *tgbot.Bot, chatID i
 func (r *router) handleFeedbackMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string, update *models.Update) bool {
 	log.Printf("[FEEDBACK] ввод сообщения от chatID=%d", chatID)
 
-	// Отмена / возврат — на уровень выше (хаб Сервис), а не в главное меню.
+	// Отмена / возврат - на уровень выше (хаб Сервис), а не в главное меню.
 	if text == locales.BtnCancel || text == locales.BtnBack {
 		log.Printf("[FEEDBACK] отмена ввода chatID=%d", chatID)
 		r.backToParent(ctx, b, chatID)
 		return true
 	}
 
-	// Получатель не настроен — отзыв некуда доставлять.
+	// Получатель не настроен - отзыв некуда доставлять.
 	if r.adminChatID == 0 {
 		log.Printf("[FEEDBACK] adminChatID не задан, доставка невозможна chatID=%d", chatID)
 		r.stateManager.SetState(chatID, states.StateIdle)
@@ -282,8 +282,8 @@ func (r *router) handleFeedbackMessage(ctx context.Context, b *tgbot.Bot, chatID
 	}
 
 	from := update.Message.From
-	fullName := "—"
-	username := "—"
+	fullName := "-"
+	username := "-"
 	if from != nil {
 		name := strings.TrimSpace(from.FirstName + " " + from.LastName)
 		if name != "" {
@@ -301,7 +301,7 @@ func (r *router) handleFeedbackMessage(ctx context.Context, b *tgbot.Bot, chatID
 		ParseMode: "Markdown",
 	})
 
-	// Пересылаем само сообщение (текст/фото/документ) как есть — так
+	// Пересылаем само сообщение (текст/фото/документ) как есть - так
 	// разработчик видит оригинал, включая вложения.
 	if update.Message != nil {
 		if _, fErr := b.ForwardMessage(ctx, &tgbot.ForwardMessageParams{
@@ -352,7 +352,7 @@ func (r *router) handleRegularAnalysis(ctx context.Context, b *tgbot.Bot, chatID
 	r.stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
 	r.setCurrentSection(chatID, "analysis")
 
-	// Выбрано под-действие — убираем блок-хаб, чтобы в чате не висело меню
+	// Выбрано под-действие - убираем блок-хаб, чтобы в чате не висело меню
 	// раздела поверх начатого анализа.
 	r.deleteHubBlock(ctx, b, chatID)
 
@@ -381,13 +381,25 @@ func (r *router) handleExtendedAnalysis(ctx context.Context, b *tgbot.Bot, chatI
 		return true
 	}
 
+	// Расширенный анализ - функция Premium: без подписки не запускаем
+	// опросник, предлагаем оформить Premium.
+	if !r.paymentService.IsUserPremium(chatID) {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgExtendedAnalysisPremiumRequired,
+			ReplyMarkup: keyboards.BackMenu(),
+			ParseMode:   "Markdown",
+		})
+		return true
+	}
+
 	r.stateManager.SetUserData(chatID, "analysis_type", "extended")
 	r.stateManager.SetUserData(chatID, "analysis_subtype", "extended")
 
 	r.stateManager.SetState(chatID, states.StateWaitingName)
 	r.setCurrentSection(chatID, "analysis")
 
-	// Выбрано под-действие — убираем блок-хаб.
+	// Выбрано под-действие - убираем блок-хаб.
 	r.deleteHubBlock(ctx, b, chatID)
 
 	// Единая Reply-клавиатура [Назад] внизу на всём протяжении опросника.
@@ -435,7 +447,7 @@ func (r *router) handleBioscanBasicStart(ctx context.Context, b *tgbot.Bot, chat
 }
 
 // handleBioscanExtendedStart - запускает РАСШИРЕННЫЙ (Premium) Bioscan PRO:
-// 4 фото -> детальный PDF-отчёт. Premium-гейт: без подписки — сообщение об
+// 4 фото -> детальный PDF-отчёт. Premium-гейт: без подписки - сообщение об
 // оформлении Premium (анализ не начинается).
 func (r *router) handleBioscanExtendedStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf("[BIOSCAN] запуск РАСШИРЕННОГО (PRO) для chatID=%d", chatID)
@@ -490,13 +502,13 @@ func (r *router) handleBioscanExtendedStart(ctx context.Context, b *tgbot.Bot, c
 	return true
 }
 
-// handleDashboard — открывает веб-дашборд. Если demo=true — добавляет
+// handleDashboard - открывает веб-дашборд. Если demo=true - добавляет
 // ?demo=1 к URL, чтобы открыть «полностью заполненную» синтетическую
 // сводку без реальных анализов и без Premium (для предпросмотра графиков).
 func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64, demo bool) bool {
 	log.Printf(locales.LogRouterDashboard, chatID)
 
-	// Выбрано под-действие — убираем блок-хаб, чтобы в чате не висело меню
+	// Выбрано под-действие - убираем блок-хаб, чтобы в чате не висело меню
 	// раздела поверх открытого дашборда.
 	r.deleteHubBlock(ctx, b, chatID)
 	r.setCurrentSection(chatID, "health")
@@ -505,7 +517,7 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 	log.Printf(locales.LogDashboardPremiumCheck, chatID, isPremium)
 
 	// Версия в URL сбрасывает кэш Telegram WebView (см. WebAppAssetsVersion).
-	// При demo добавляем ?demo=1 — бэкенд отдаст синтетические метрики.
+	// При demo добавляем ?demo=1 - бэкенд отдаст синтетические метрики.
 	webAppTarget := WithWebAppVersion(r.webAppURL)
 	if demo {
 		if strings.Contains(webAppTarget, "?") {
@@ -526,13 +538,13 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 
 	text := locales.MsgHealthSummaryIntro + "\n\n"
 	if !isPremium {
-		// Полный доступ к показателям — по Premium, но профиль заполнить
+		// Полный доступ к показателям - по Premium, но профиль заполнить
 		// можно бесплатно (онбординг доступен всем).
-		text += "📝 Профиль можно заполнить бесплатно — после этого сводка оживёт. " +
-			"Полный доступ к показателям крови и динамике — по Premium-подписке.\n\n"
+		text += "📝 Профиль можно заполнить бесплатно - после этого сводка оживёт. " +
+			"Полный доступ к показателям крови и динамике - по Premium-подписке.\n\n"
 	}
 
-	// Только Mini App — без ссылок и «открыть в браузере».
+	// Только Mini App - без ссылок и «открыть в браузере».
 	rows := [][]models.InlineKeyboardButton{
 		{
 			{Text: "Открыть", WebApp: &models.WebAppInfo{URL: webAppTarget}},
@@ -558,7 +570,7 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 
 // monitoringWebAppURL подменяет суффикс /dashboard на /monitoring в базовом
 // URL, сохраняя хост/протокол (туннель и локальный сервер обслуживают оба
-// пути). Если суффикса нет — возвращает URL как есть.
+// пути). Если суффикса нет - возвращает URL как есть.
 func monitoringWebAppURL(base string) string {
 	if base == "" {
 		return ""
@@ -570,13 +582,13 @@ func monitoringWebAppURL(base string) string {
 	return base
 }
 
-// handleMonitoring — открывает веб-приложение «Мониторинг». Если
-// demo=true — добавляет ?demo=1 к URL, открывая синтетические проекты
+// handleMonitoring - открывает веб-приложение «Мониторинг». Если
+// demo=true - добавляет ?demo=1 к URL, открывая синтетические проекты
 // (без реальных записей и без Premium) для предпросмотра графиков.
 func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int64, demo bool) bool {
 	log.Printf("[MONITORING] открытие для chatID=%d (demo=%v)", chatID, demo)
 
-	// Выбрано под-действие — убираем блок-хаб.
+	// Выбрано под-действие - убираем блок-хаб.
 	r.deleteHubBlock(ctx, b, chatID)
 	r.setCurrentSection(chatID, "health")
 
@@ -614,10 +626,10 @@ func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int6
 		return true
 	}
 
-	text := "📊 **Мониторинг**\n\n" +
+	text := "📊 Мониторинг\n\n" +
 		"Создавайте проекты и отслеживайте показатели во времени: курсы препаратов, диабет, похудение, здоровье."
 
-	// Только Mini App — без ссылок и «открыть в браузере».
+	// Только Mini App - без ссылок и «открыть в браузере».
 	rows := [][]models.InlineKeyboardButton{
 		{
 			{Text: "Открыть", WebApp: &models.WebAppInfo{URL: webAppTarget}},
@@ -645,15 +657,15 @@ func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int6
 // Быстрая консультация (с ИИ)
 // ============================================================================
 
-// freeConsultationLimit — сколько бесплатных консультаций доступно
-// не-Premium пользователю. Premium — безлимит.
+// freeConsultationLimit - сколько бесплатных консультаций доступно
+// не-Premium пользователю. Premium - безлимит.
 const freeConsultationLimit = 3
 
-// consultUserKey — ключ счётчика использованных бесплатных консультаций
+// consultUserKey - ключ счётчика использованных бесплатных консультаций
 // в user-data состояния.
 const consultUserKey = "ai_consult_count"
 
-// consultCount — сколько бесплатных консультаций уже использовано.
+// consultCount - сколько бесплатных консультаций уже использовано.
 func (r *router) consultCount(chatID int64) int {
 	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, consultUserKey))
 	if err != nil || n < 0 {
@@ -662,22 +674,22 @@ func (r *router) consultCount(chatID int64) int {
 	return n
 }
 
-// consultSetCount — сохраняет счётчик использованных бесплатных консультаций.
+// consultSetCount - сохраняет счётчик использованных бесплатных консультаций.
 func (r *router) consultSetCount(chatID int64, n int) {
 	r.stateManager.SetUserData(chatID, consultUserKey, strconv.Itoa(n))
 }
 
-// consultationTextPrompt — формирует запрос к ИИ для текстовой консультации:
+// consultationTextPrompt - формирует запрос к ИИ для текстовой консультации:
 // задаёт роль консультанта и просит дать рекомендации + дисклеймер.
 func consultationTextPrompt(question string) string {
 	return "Вопрос пользователя о здоровье: " + strings.TrimSpace(question) +
-		"\n\nТвоя задача — дать медицинскую консультацию: ответь на вопрос, " +
+		"\n\nТвоя задача - дать медицинскую консультацию: ответь на вопрос, " +
 		"объясни возможные причины, дай практические рекомендации по облегчению " +
 		"состояния. В конце обязательно напомни, что это информационная " +
 		"консультация и не заменяет очный визит к врачу."
 }
 
-// consultationImageContext — формирует контекст к ИИ для консультации по
+// consultationImageContext - формирует контекст к ИИ для консультации по
 // фотографии (травма/проблемная зона). При наличии добавляет текстовый
 // вопрос пользователя к фото.
 func consultationImageContext(question string) string {
@@ -692,14 +704,14 @@ func consultationImageContext(question string) string {
 	return base
 }
 
-// handleConsultationStart — запускает режим консультации: проверяет
+// handleConsultationStart - запускает режим консультации: проверяет
 // соглашение, Premium и оставшуюся бесплатную квоту. Если квота исчерпана и
-// Premium нет — предлагает оформить подписку. Иначе переводит пользователя
+// Premium нет - предлагает оформить подписку. Иначе переводит пользователя
 // в StateWaitingConsultation, ожидая вопрос (текст) или фото.
 func (r *router) handleConsultationStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf("[CONSULT] запуск для chatID=%d", chatID)
 
-	// Выбрано под-действие — убираем блок-хаб.
+	// Выбрано под-действие - убираем блок-хаб.
 	r.deleteHubBlock(ctx, b, chatID)
 
 	if !r.agreementStorage.IsAgreed(chatID) {
@@ -738,14 +750,14 @@ func (r *router) handleConsultationStart(ctx context.Context, b *tgbot.Bot, chat
 	return true
 }
 
-// handleConsultationMessage — обрабатывает сообщение пользователя в режиме
+// handleConsultationMessage - обрабатывает сообщение пользователя в режиме
 // StateWaitingConsultation: текстовый вопрос или фото травмы. Отправляет его
 // ИИ (GenerateAnalysisSummary / анализ фото) и возвращает консультацию.
 // Возвращает true, если сообщение обработано как консультация.
 func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string, update *models.Update) bool {
 	log.Printf("[CONSULT] ввод сообщения от chatID=%d", chatID)
 
-	// Отмена / возврат — на уровень выше (хаб Здоровье), а не в главное меню.
+	// Отмена / возврат - на уровень выше (хаб Здоровье), а не в главное меню.
 	if text == locales.BtnCancel || text == locales.BtnBack {
 		log.Printf("[CONSULT] отмена chatID=%d", chatID)
 		r.backToParent(ctx, b, chatID)
@@ -754,7 +766,7 @@ func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, ch
 
 	hasPhoto := update.Message != nil && len(update.Message.Photo) > 0
 
-	// Пустое/неподдерживаемое сообщение (стикер, голос, ничего) — просим
+	// Пустое/неподдерживаемое сообщение (стикер, голос, ничего) - просим
 	// прислать вопрос или фото.
 	if strings.TrimSpace(text) == "" && !hasPhoto {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
@@ -779,11 +791,9 @@ func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, ch
 		return true
 	}
 
-	// Индикатор «ИИ думает».
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text:   locales.MsgConsultationProcessing,
-	})
+	// Индикатор ожидания: стикер + анимированный текст (формирую отчёт /
+	// считаю показатели и т.п.). Гасится при получении результата или ошибке.
+	loadingMsg, textMsg := helpers.SendLoadingMessages(ctx, b, chatID, r.stickerID, nil)
 
 	var (
 		result string
@@ -802,6 +812,7 @@ func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, ch
 				Text:        locales.MsgConsultationError,
 				ReplyMarkup: keyboards.MainMenu(),
 			})
+			helpers.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
 			return true
 		}
 		result, err = r.analysisService.HandleAnalysisFromFileWithContext(ctx, data, mimeType, consultationImageContext(text))
@@ -817,6 +828,7 @@ func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, ch
 			Text:        locales.MsgConsultationError,
 			ReplyMarkup: keyboards.MainMenu(),
 		})
+		helpers.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
 		return true
 	}
 
@@ -826,7 +838,7 @@ func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, ch
 	}
 	r.stateManager.SetState(chatID, states.StateIdle)
 
-	// Собираем итоговый текст (без Markdown — результат ИИ неконтролируем,
+	// Собираем итоговый текст (без Markdown - результат ИИ неконтролируем,
 	// чтобы не сломать разметку). Клавиатуру (главное меню) крепим к
 	// последнему куску через sendLongMessage.
 	full := locales.MsgConsultationResultIntro + result
@@ -840,11 +852,12 @@ func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, ch
 		}
 	}
 
+	helpers.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
 	sendLongMessage(ctx, b, chatID, full, keyboards.MainMenu())
 	return true
 }
 
-// sendLongMessage — отправляет текст, разбивая его на куски ≤ 4000 символов
+// sendLongMessage - отправляет текст, разбивая его на куски ≤ 4000 символов
 // по границам строк, чтобы не упереться в лимит Telegram (4096). Клавиатура
 // (keyboard) крепится только к последнему куску.
 func sendLongMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string, keyboard models.ReplyKeyboardMarkup) {

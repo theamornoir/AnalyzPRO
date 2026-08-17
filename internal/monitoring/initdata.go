@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// initDataUser — часть полезной нагрузки initData (поле "user").
+// initDataUser - часть полезной нагрузки initData (поле "user").
 type initDataUser struct {
 	ID int64 `json:"id"`
 }
@@ -27,14 +27,14 @@ type initDataUser struct {
 // В официальной документации Telegram и в эталонной библиотеке
 // telegram-mini-apps/init-data-golang есть расхождение в порядке аргументов
 // HMAC для secret_key: один источник утверждает, что secret_key =
-// HMAC_SHA256(<bot_token>, "WebAppData") (бот-токен — КЛЮЧ), другой — что
+// HMAC_SHA256(<bot_token>, "WebAppData") (бот-токен - КЛЮЧ), другой - что
 // HMAC_SHA256("WebAppData", <bot_token>). Чтобы не зависеть от версии и не
 // гадать, принимаем initData, если совпадает ЛЮБОЙ из двух порядков, и логируем,
 // какой именно подошёл.
 //
 // Дополнительно проверяем auth_date (не старше 24ч), чтобы исключить
 // replay-атаки. При неудаче пишем в лог конкретную причину (включая bot_id
-// токена сервера и signedUserID из initData) — это помогает отличить
+// токена сервера и signedUserID из initData) - это помогает отличить
 // «неправильный порядок HMAC» от «токен сервера ≠ токену, которым Telegram
 // подписал initData».
 //
@@ -51,7 +51,7 @@ func ValidateInitData(initData, botToken string) (int64, bool) {
 	return id, ok
 }
 
-// botID возвращает идентификатор бота (часть до первого ':') из токена —
+// botID возвращает идентификатор бота (часть до первого ':') из токена -
 // используется в диагностике, чтобы сверить: тот ли BOT_TOKEN запущен на
 // сервере, что подписал initData.
 func botID(token string) string {
@@ -61,13 +61,13 @@ func botID(token string) string {
 	return "<no-colon>"
 }
 
-// validateInitDataDetailed — то же, что ValidateInitData, но возвращает
+// validateInitDataDetailed - то же, что ValidateInitData, но возвращает
 // человекочитаемую причину отказа для логов.
 func validateInitDataDetailed(initData, botToken string) (int64, bool, string) {
 	if strings.TrimSpace(initData) == "" {
 		return 0, false, "initData пустой (не передан из Mini App)"
 	}
-	// Защитно обрезаем возможные пробелы/переводы строк в токене — частая
+	// Защитно обрезаем возможные пробелы/переводы строк в токене - частая
 	// причина несовпадения hash при чтении BOT_TOKEN из .env.
 	botToken = strings.TrimSpace(botToken)
 	if botToken == "" {
@@ -137,7 +137,7 @@ func validateInitDataDetailed(initData, botToken string) (int64, bool, string) {
 		return u.ID, true, ""
 	}
 	if computedB == hash {
-		log.Printf("[INITDATA] совпал альтернативный порядок HMAC (B: key=WebAppData) — server botID=%s", botID(botToken))
+		log.Printf("[INITDATA] совпал альтернативный порядок HMAC (B: key=WebAppData) - server botID=%s", botID(botToken))
 		return u.ID, true, ""
 	}
 

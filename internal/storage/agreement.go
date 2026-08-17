@@ -67,3 +67,12 @@ func (s *AgreementStorage) IsAgreed(chatID int64) bool {
 	defer s.mu.RUnlock()
 	return s.data[chatID]
 }
+
+// Reset сбрасывает статус согласия пользователя (используется админ-
+// командой для повторного прохождения онбординга/соглашения).
+func (s *AgreementStorage) Reset(chatID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data[chatID] = false
+	go s.save()
+}

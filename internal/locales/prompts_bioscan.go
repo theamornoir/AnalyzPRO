@@ -1,6 +1,6 @@
 package locales
 
-// PromptForBioscan — промпт для bioscan JSON.
+// PromptForBioscan - промпт для bioscan JSON.
 func PromptForBioscan(contextInfo string) string {
 	return `Ты анализируешь фото тела для фитнес отчёта.
 

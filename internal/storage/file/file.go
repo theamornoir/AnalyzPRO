@@ -17,7 +17,7 @@ import (
 // the storage interfaces. It is intended as a drop-in persistence layer for
 // single-instance deployments (the bot enforces a single instance via a file
 // lock, see app.go acquireInstanceLock). To migrate to a real RDBMS, implement
-// the same four interfaces against SQL and swap the constructor in storage.go —
+// the same four interfaces against SQL and swap the constructor in storage.go -
 // no caller changes are required.
 //
 // All mutations go through a single mutex; the on-disk write uses an atomic
@@ -59,7 +59,7 @@ func New(path string) *Store {
 func (s *Store) load() {
 	f, err := os.Open(s.path)
 	if err != nil {
-		return // пустой старт — файл появится после первой записи
+		return // пустой старт - файл появится после первой записи
 	}
 	defer f.Close()
 	_ = json.NewDecoder(f).Decode(s.data)
@@ -71,7 +71,7 @@ func (s *Store) load() {
 	}
 }
 
-// save — вызывать ТОЛЬКО под s.mu. Атомарная запись через temp + rename.
+// save - вызывать ТОЛЬКО под s.mu. Атомарная запись через temp + rename.
 func (s *Store) save() {
 	if dir := filepath.Dir(s.path); dir != "" && dir != "." {
 		_ = os.MkdirAll(dir, 0o755)
@@ -144,6 +144,20 @@ func (s *Store) UpdateUserPremiumStatus(ctx context.Context, userID uint, isPrem
 		if u.ID == userID {
 			u.IsPremium = isPremium
 			u.PremiumExpiresAt = expiresAt
+			s.save()
+			return nil
+		}
+	}
+	return fmt.Errorf("user with ID %d not found", userID)
+}
+
+func (s *Store) UpdateUserOnboardingStatus(ctx context.Context, userID uint, completed bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, u := range s.data.Users {
+		if u.ID == userID {
+			u.OnboardingCompleted = completed
 			s.save()
 			return nil
 		}

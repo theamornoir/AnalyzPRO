@@ -19,24 +19,24 @@ type AnalysisService interface {
 	HandleAnalysisWithContext(ctx context.Context, text string, contextInfo string) (string, error)
 	HandleAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error)
 	HandleBioscan(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error)
-	// HandleBioscanText — базовый (бесплатный) Bioscan: 1 фото -> plain-text
+	// HandleBioscanText - базовый (бесплатный) Bioscan: 1 фото -> plain-text
 	// отчёт (без markdown) для вывода обычным сообщением в чат.
 	HandleBioscanText(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error)
-	// HandleBioscanPDF — расширенный (Premium) Bioscan: 4 фото -> PDF-отчёт
+	// HandleBioscanPDF - расширенный (Premium) Bioscan: 4 фото -> PDF-отчёт
 	// (для пользователя) + HTML (для сохранения в историю/профиль). Один
 	// вызов ИИ: JSON -> models.Report -> PDF + HTML.
 	HandleBioscanPDF(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (pdf []byte, filename string, htmlReport string, err error)
-	// HandleBioscanPro — расширенный (Premium) Bioscan PRO: 4 фото -> подробный
+	// HandleBioscanPro - расширенный (Premium) Bioscan PRO: 4 фото -> подробный
 	// premium HTML-отчёт Body Intelligence (из фото + опросника). Один вызов
 	// ИИ: JSON -> models.BodyScanReport -> HTML (для документа и истории/профиля).
-	// Возвращает также jsonReport — «чистый» JSON отчёта, который сохраняется
+	// Возвращает также jsonReport - «чистый» JSON отчёта, который сохраняется
 	// в историю (для графиков дашборда «Сводка здоровья») и используется при
 	// сравнительном повторном анализе.
 	HandleBioscanPro(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (html string, jsonReport string, err error)
 	// Методы для работы с JSON
 	HandleAnalysisJSON(ctx context.Context, text string) (string, error)
 	HandleAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error)
-	// HandleExtendedDossierJSON — строит JSON универсального отчёта-досье
+	// HandleExtendedDossierJSON - строит JSON универсального отчёта-досье
 	// здоровья (анализы пользователя + 20-вопросный опросник) и возвращает
 	// сырой JSON для последующего рендера в HTML (report.Renderer.RenderDossier).
 	HandleExtendedDossierJSON(ctx context.Context, combinedText string) (string, error)
@@ -88,7 +88,7 @@ func (s *analysisService) HandleAnalysisFromFileWithContext(
 	return s.aiClient.GenerateAnalysisFromFileWithContext(ctx, data, mimeType, textPrompt)
 }
 
-// HandleBioscan — обрабатывает фото для Bioscan и возвращает HTML-отчёт
+// HandleBioscan - обрабатывает фото для Bioscan и возвращает HTML-отчёт
 func (s *analysisService) HandleBioscan(
 	ctx context.Context,
 	photosData [][]byte,
@@ -125,7 +125,7 @@ func (s *analysisService) bioscanReportFromJSON(jsonText string) (models.Report,
 	return rep, nil
 }
 
-// HandleBioscanText — базовый (бесплатный) Bioscan: 1 фото -> plain-text
+// HandleBioscanText - базовый (бесплатный) Bioscan: 1 фото -> plain-text
 // отчёт без markdown (для вывода обычным сообщением в чат).
 func (s *analysisService) HandleBioscanText(
 	ctx context.Context,
@@ -146,7 +146,7 @@ func (s *analysisService) HandleBioscanText(
 	return report.RenderBioscanPlainText(rep), nil
 }
 
-// HandleBioscanPDF — расширенный (Premium) Bioscan: 4 фото -> PDF-отчёт
+// HandleBioscanPDF - расширенный (Premium) Bioscan: 4 фото -> PDF-отчёт
 // (для пользователя) + HTML (для сохранения в историю/профиль). Один вызов ИИ.
 func (s *analysisService) HandleBioscanPDF(
 	ctx context.Context,
@@ -177,10 +177,10 @@ func (s *analysisService) HandleBioscanPDF(
 	return pdfBytes, "Bioscan_report.pdf", htmlReport, nil
 }
 
-// HandleBioscanPro — расширенный (Premium) Bioscan PRO: строит подробный
+// HandleBioscanPro - расширенный (Premium) Bioscan PRO: строит подробный
 // premium HTML-отчёт Body Intelligence из 4 фото + опросника. Один вызов ИИ:
 // JSON -> models.BodyScanReport -> HTML (через renderer.RenderBodyScan).
-// Возвращает также «чистый» JSON-отчёт (jsonReport) — он сохраняется в
+// Возвращает также «чистый» JSON-отчёт (jsonReport) - он сохраняется в
 // историю для графиков дашборда и используется при сравнительном анализе.
 func (s *analysisService) HandleBioscanPro(
 	ctx context.Context,
@@ -269,7 +269,7 @@ func (s *analysisService) renderReportFromJSON(jsonText string, isBioscan bool) 
 	return html, nil
 }
 
-// HandleAnalysisJSON — возвращает JSON-анализ текста
+// HandleAnalysisJSON - возвращает JSON-анализ текста
 func (s *analysisService) HandleAnalysisJSON(
 	ctx context.Context,
 	text string,
@@ -277,7 +277,7 @@ func (s *analysisService) HandleAnalysisJSON(
 	return s.aiClient.GenerateAnalysisJSON(ctx, text)
 }
 
-// HandleAnalysisFromFileJSON — возвращает JSON-анализ файла
+// HandleAnalysisFromFileJSON - возвращает JSON-анализ файла
 func (s *analysisService) HandleAnalysisFromFileJSON(
 	ctx context.Context,
 	data []byte,
@@ -288,7 +288,7 @@ func (s *analysisService) HandleAnalysisFromFileJSON(
 	return s.aiClient.GenerateAnalysisFromFileJSON(ctx, data, mimeType, textPrompt)
 }
 
-// HandleExtendedDossierJSON — строит универсальное отчёт-досье здоровья.
+// HandleExtendedDossierJSON - строит универсальное отчёт-досье здоровья.
 // combinedText содержит текст присланных анализов (файлы→текст) и ответы
 // 20-вопросного опросника об образе жизни. Возвращает сырой JSON-досье.
 func (s *analysisService) HandleExtendedDossierJSON(
@@ -298,7 +298,7 @@ func (s *analysisService) HandleExtendedDossierJSON(
 	return s.aiClient.GenerateDossierJSON(ctx, combinedText)
 }
 
-// HandleAdaptiveAnalysis — возвращает адаптивный HTML-отчёт по тексту
+// HandleAdaptiveAnalysis - возвращает адаптивный HTML-отчёт по тексту
 func (s *analysisService) HandleAdaptiveAnalysis(
 	ctx context.Context,
 	text string,
@@ -311,7 +311,7 @@ func (s *analysisService) HandleAdaptiveAnalysis(
 	return s.renderAdaptiveFromJSON(jsonText)
 }
 
-// HandleAdaptiveAnalysisWithContext — адаптивный отчёт с контекстом
+// HandleAdaptiveAnalysisWithContext - адаптивный отчёт с контекстом
 func (s *analysisService) HandleAdaptiveAnalysisWithContext(
 	ctx context.Context,
 	text string,
@@ -326,7 +326,7 @@ func (s *analysisService) HandleAdaptiveAnalysisWithContext(
 	return s.renderAdaptiveFromJSON(jsonText)
 }
 
-// renderAdaptiveFromJSON — парсит JSON от AI и рендерит адаптивный HTML
+// renderAdaptiveFromJSON - парсит JSON от AI и рендерит адаптивный HTML
 func (s *analysisService) renderAdaptiveFromJSON(jsonText string) (string, error) {
 	if strings.TrimSpace(jsonText) == "" {
 		return "", fmt.Errorf(locales.ErrEmptyJSONFromAI)

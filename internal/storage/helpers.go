@@ -23,7 +23,7 @@ func (s *Storage) EnsureUser(ctx context.Context, telegramID int64) (*sm.User, e
 
 	created, err := s.Users.GetUserByTelegramID(ctx, telegramID)
 	if err != nil {
-		// По крайней мере сохранили — возвращаем переданный объект.
+		// По крайней мере сохранили - возвращаем переданный объект.
 		return u, nil
 	}
 
@@ -37,6 +37,26 @@ func (s *Storage) EnsureUser(ctx context.Context, telegramID int64) (*sm.User, e
 		})
 	}
 	return created, nil
+}
+
+// SetOnboardingCompleted устанавливает (и создаёт при необходимости)
+// пользователя с флагом прохождения онбординга по TelegramID.
+func (s *Storage) SetOnboardingCompleted(ctx context.Context, telegramID int64, completed bool) error {
+	u, err := s.EnsureUser(ctx, telegramID)
+	if err != nil {
+		return err
+	}
+	return s.Users.UpdateUserOnboardingStatus(ctx, u.ID, completed)
+}
+
+// IsOnboardingCompleted возвращает true, если пользователь уже прошёл
+// онбординг. Для несуществующего пользователя - false.
+func (s *Storage) IsOnboardingCompleted(ctx context.Context, telegramID int64) bool {
+	u, err := s.Users.GetUserByTelegramID(ctx, telegramID)
+	if err != nil {
+		return false
+	}
+	return u.OnboardingCompleted
 }
 
 // SaveDiagnosisForUser сохраняет результат анализа/биоскана, привязывая

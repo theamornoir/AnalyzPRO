@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// EventType — категория аналитического события.
+// EventType - категория аналитического события.
 type EventType string
 
 const (
@@ -21,7 +21,7 @@ const (
 	EventError    EventType = "error"
 )
 
-// Event — одно аналитическое событие (строка JSONL в файле ANALYTICS_PATH).
+// Event - одно аналитическое событие (строка JSONL в файле ANALYTICS_PATH).
 type Event struct {
 	Type       EventType              `json:"type"`
 	TelegramID int64                  `json:"telegram_id"`
@@ -35,7 +35,7 @@ var (
 	path string
 )
 
-// Init — инициализирует хранилище событий (создаёт директорию при необходимости).
+// Init - инициализирует хранилище событий (создаёт директорию при необходимости).
 // Вызывается один раз при старте приложения (app.New).
 func Init(p string) {
 	mu.Lock()
@@ -47,8 +47,8 @@ func Init(p string) {
 	log.Printf("[ANALYTICS] инициализировано: path=%s", p)
 }
 
-// EmitEvent — добавляет событие в JSONL-файл (персистентно между перезапусками).
-// Потокобезопасно; при отсутствии Init (path=="") — тихо игнорируется.
+// EmitEvent - добавляет событие в JSONL-файл (персистентно между перезапусками).
+// Потокобезопасно; при отсутствии Init (path=="") - тихо игнорируется.
 func EmitEvent(ctx context.Context, e Event) {
 	if e.Timestamp.IsZero() {
 		e.Timestamp = time.Now()
