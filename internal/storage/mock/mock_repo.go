@@ -103,13 +103,24 @@ func (m *MockDiagnosisRepository) SaveDiagnosis(ctx context.Context, diagnosis *
 	return nil
 }
 
-func (m *MockDiagnosisRepository) GetAllDiagnosesByUserID(ctx context.Context, userID uint) ([]sm.Diagnosis, error) {
+func (m *MockDiagnosisRepository) GetAllDiagnosesByUserID(ctx context.Context, userID uint, limit, offset int) ([]sm.Diagnosis, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	var result []sm.Diagnosis
 	for _, d := range m.diagnoses {
 		if d.UserID == userID {
 			result = append(result, d)
+		}
+	}
+	if limit > 0 {
+		if offset >= len(result) {
+			result = nil
+		} else {
+			end := offset + limit
+			if end > len(result) {
+				end = len(result)
+			}
+			result = result[offset:end]
 		}
 	}
 	return result, nil

@@ -38,8 +38,49 @@ func (r *router) handleBack(ctx context.Context, b *tgbot.Bot, chatID int64, tex
 		return false
 	}
 
+	state := r.stateManager.GetState(chatID)
+
+	// Шаг «Назад» внутри опросника анализа - возврат к предыдущему вопросу
+	// (без сброса уже собранных данных).
+	if isQuestionnaireState(state) {
+		log.Printf(locales.LogRouterBack, chatID, state)
+		r.backQuestionnaire(ctx, b, chatID, state)
+		return true
+	}
+	// Шаг «Назад» внутри опросника Bioscan PRO - возврат к предыдущему вопросу.
+	if bioscan.IsBioscanQuestionnaireState(state) {
+		log.Printf(locales.LogRouterBack, chatID, state)
+		r.backBioscanQuestionnaire(ctx, b, chatID, state)
+		return true
+	}
+
 	log.Printf(locales.LogRouterBack, chatID, r.stateManager.GetState(chatID))
 	r.backToParent(ctx, b, chatID)
+	return true
+}
+
+// handleCancel - обработка кнопки «❌ Отмена» внутри анкеты/опросника:
+// полный выход из сбора данных без сохранения, возврат в хаб «Анализы».
+// Возвращает true, если обработано.
+func (r *router) handleCancel(ctx context.Context, b *tgbot.Bot, chatID int64, text string) bool {
+	if text != locales.BtnCancel {
+		return false
+	}
+	state := r.stateManager.GetState(chatID)
+	if !isQuestionnaireState(state) && !bioscan.IsBioscanQuestionnaireState(state) {
+		return false
+	}
+	bioscan.ResetBioscanData(r.stateManager, chatID)
+	r.stateManager.SetState(chatID, states.StateIdle)
+	r.stateManager.SetUserData(chatID, "analysis_type", "")
+	r.stateManager.SetUserData(chatID, "analysis_subtype", "")
+	r.setCurrentSection(chatID, "analysis")
+	r.deleteHubBlock(ctx, b, chatID)
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        locales.MsgBackToAnalysisType,
+		ReplyMarkup: keyboards.MainMenu(),
+	})
 	return true
 }
 

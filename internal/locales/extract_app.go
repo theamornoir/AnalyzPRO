@@ -14,6 +14,9 @@ const (
 	// LogDBInitialized - БД открыта и промигрирована.
 	LogDBInitialized = "🗄️ База данных инициализирована: path=%s"
 
+	// LogDBErrorClose - ошибка при закрытии соединения с БД на выходе.
+	LogDBErrorClose = "⚠️ Ошибка закрытия соединения с БД: %v"
+
 	// LogUsingMockStorage - выбрано мок-хранилище (USE_MOCK=true).
 	LogUsingMockStorage = "🗄️ Используется МОК-хранилище (USE_MOCK=true)"
 

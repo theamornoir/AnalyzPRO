@@ -85,6 +85,9 @@ func Migrate(conn *sql.DB) error {
 			report_html TEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_diagnoses_user ON diagnoses(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_diagnoses_date ON diagnoses(date)`,
+		`CREATE INDEX IF NOT EXISTS idx_diagnoses_user_type ON diagnoses(user_id, type)`,
+		`CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at)`,
 		`CREATE TABLE IF NOT EXISTS cycles (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL,
@@ -110,6 +113,9 @@ func Migrate(conn *sql.DB) error {
 			created_at DATETIME NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_monitoring_projects_user ON monitoring_projects(telegram_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_monitoring_projects_created ON monitoring_projects(created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_monitoring_projects_user_type ON monitoring_projects(telegram_id, type)`,
+
 		`CREATE TABLE IF NOT EXISTS monitoring_history (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			telegram_id INTEGER NOT NULL,
@@ -120,6 +126,8 @@ func Migrate(conn *sql.DB) error {
 			report_html TEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_monitoring_history_user ON monitoring_history(telegram_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_monitoring_history_date ON monitoring_history(date)`,
+		`CREATE INDEX IF NOT EXISTS idx_monitoring_history_user_type ON monitoring_history(telegram_id, type)`,
 		`CREATE TABLE IF NOT EXISTS monitoring_project_entries (
 			project_id INTEGER NOT NULL,
 			entry_id INTEGER NOT NULL,

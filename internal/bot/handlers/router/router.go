@@ -81,6 +81,22 @@ func MessageRouter(
 
 // handle - точка входа маршрутизатора.
 func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update) {
+	// Ловим панику на уровне всего обработчика сообщения: tgbot иногда
+	// «глотает» панику внутри горутины апдейта, из-за чего сообщение
+	// теряется и не обрабатывается повторно. Логируем явно (как в
+	// handleCallback), чтобы видеть причину в логах вместо тишины.
+	var panicChatID int64
+	if update.CallbackQuery != nil {
+		panicChatID = update.CallbackQuery.From.ID
+	} else if update.Message != nil {
+		panicChatID = update.Message.Chat.ID
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.Printf("🔥 PANIC in handle (chatID=%d): %v", panicChatID, rec)
+		}
+	}()
+
 	// Аналитика PostHog: фиксируем КАЖДОЕ взаимодействие пользователя как
 	// событие «interaction» (нажатие inline/reply-кнопки, команда, сообщение).
 	// Это гарантирует полный clickstream в дашборде, независимо от того,
@@ -179,6 +195,11 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 
 	// Обработка кнопки "Назад"
 	if r.handleBack(ctx, b, chatID, text) {
+		return
+	}
+
+	// Обработка кнопки "Отмена" внутри анкеты/опросника (выход без сохранения)
+	if r.handleCancel(ctx, b, chatID, text) {
 		return
 	}
 

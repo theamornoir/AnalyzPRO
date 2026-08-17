@@ -141,6 +141,23 @@ func BackMenu() models.ReplyKeyboardMarkup {
 	}
 }
 
+// BackCancelMenu - меню анкеты: кнопки "Назад" и "❌ Отмена". Позволяет
+// пользователю в любой момент выйти из опросника (❌ Отмена) или вернуться
+// на предыдущий вопрос (Назад).
+func BackCancelMenu() models.ReplyKeyboardMarkup {
+	return models.ReplyKeyboardMarkup{
+		Keyboard: [][]models.KeyboardButton{
+			{
+				{Text: locales.BtnBack},
+			},
+			{
+				{Text: locales.BtnCancel},
+			},
+		},
+		ResizeKeyboard: true,
+	}
+}
+
 // AgreementMenu - меню с кнопкой "Принять" для соглашения
 func AgreementMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{

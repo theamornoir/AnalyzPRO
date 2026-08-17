@@ -1,8 +1,14 @@
 package payment
 
-import "time"
+import (
+	"time"
 
-// Tariff - тарифная модель.
+	"github.com/theamornoir/analyzpro/internal/locales"
+)
+
+// Tariff - тарифная модель. Все параметры тарифа (цена, длительность, название,
+// описание, список фич) централизованы в locales.TariffText по ID; здесь код
+// только собирает структуру и задаёт порядок вывода в меню.
 type Tariff struct {
 	ID          string        `json:"id"`
 	Name        string        `json:"name"`
@@ -12,49 +18,32 @@ type Tariff struct {
 	Features    []string      `json:"features"`
 }
 
-// AvailableTariffs - доступные тарифы.
-var AvailableTariffs = []Tariff{
-	{
-		ID:          "premium_monthly",
-		Name:        "Premium (1 месяц)",
-		Description: "Полный доступ ко всем функциям бота на 30 дней",
-		Price:       49900, // 499 ₽
-		Duration:    30 * 24 * time.Hour,
-		Features: []string{
-			"📊 Адаптивные HTML-отчёты",
-			"📊 Интерактивный дашборд",
-			"🔬 Расширенный анализ",
-			"📸 Bioscan без ограничений",
-			"🤖 Быстрая консультация (безлимит)",
-			"🏥 Приоритетная поддержка",
-		},
-	},
-	{
-		ID:          "premium_quarterly",
-		Name:        "Premium (3 месяца)",
-		Description: "Полный доступ на 90 дней со скидкой 15%",
-		Price:       127500, // 1275 ₽ (~425 ₽/мес)
-		Duration:    90 * 24 * time.Hour,
-		Features: []string{
-			"Всё из месячного тарифа",
-			"🤖 Быстрая консультация (безлимит)",
-			"🎁 Скидка 15%",
-			"📊 Расширенная аналитика",
-		},
-	},
-	{
-		ID:          "premium_yearly",
-		Name:        "Premium (1 год)",
-		Description: "Полный доступ на 365 дней со скидкой 30%",
-		Price:       179900, // 1799 ₽ (~150 ₽/мес)
-		Duration:    365 * 24 * time.Hour,
-		Features: []string{
-			"Всё из квартального тарифа",
-			"🤖 Быстрая консультация (безлимит)",
-			"🎁 Скидка 30%",
-			"🏆 Ранний доступ к новым функциям",
-		},
-	},
+// tariffOrder - порядок вывода тарифов в меню (только ID; тексты/цены в locales).
+// Гарантирует детерминированный порядок, т.к. перебор map в Go случаен.
+var tariffOrder = []string{
+	"premium_monthly",
+	"premium_quarterly",
+	"premium_yearly",
+}
+
+// AvailableTariffs - доступные тарифы (все данные из locales.TariffText).
+var AvailableTariffs []Tariff
+
+func init() {
+	for _, id := range tariffOrder {
+		t, ok := locales.TariffText[id]
+		if !ok {
+			continue
+		}
+		AvailableTariffs = append(AvailableTariffs, Tariff{
+			ID:          id,
+			Name:        t.Name,
+			Description: t.Description,
+			Price:       t.PriceKopecks,
+			Duration:    time.Duration(t.DurationDays) * 24 * time.Hour,
+			Features:    t.Features,
+		})
+	}
 }
 
 // GetTariffByID - найти тариф по ID.

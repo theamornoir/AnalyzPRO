@@ -13,6 +13,9 @@ const (
 	LogGeminiMarshalPayloadErr = "❌ Failed to marshal payload: %v"
 	LogGeminiBodySize          = "📦 Request body size: %d bytes"
 	LogGeminiResponseStatus    = "📥 Response status: %d"
+	// LogGeminiResponseBodySize - логируем ТОЛЬКО статус и размер ответа.
+	// Полное тело НЕ логируется: оно содержит персональные мед. данные (PII).
+	LogGeminiResponseBodySize  = "📥 Response: status=%d, size=%d bytes"
 	LogGeminiResponseBodyShort = "📄 Response body (first 500 chars): %s..."
 	LogGeminiResponseBody      = "📄 Response body: %s"
 	LogGeminiUnmarshalErr      = "❌ Failed to unmarshal response: %v"

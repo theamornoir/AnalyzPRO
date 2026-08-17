@@ -40,6 +40,9 @@ type Config struct {
 	// PostHogAPIKey - Project API Key сервиса аналитики PostHog. Если пуст -
 	// события не отправляются (клиент posthog-go становится no-op).
 	PostHogAPIKey string
+	// LogLevel - уровень логирования (DEBUG/INFO/WARN/ERROR). Читается из
+	// LOG_LEVEL; по умолчанию INFO. Применяется централизованно в logging.
+	LogLevel string
 }
 
 func Load() (*Config, error) {
@@ -95,6 +98,7 @@ func Load() (*Config, error) {
 		AnalyticsPath:      getEnv("ANALYTICS_PATH", "./data/analytics.jsonl"),
 		DBPath:             getEnv("DB_PATH", "./data/analyzpro.db"),
 		PostHogAPIKey:      os.Getenv("POSTHOG_API_KEY"),
+		LogLevel:           getEnv("LOG_LEVEL", "INFO"),
 	}, nil
 }
 

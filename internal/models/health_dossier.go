@@ -21,7 +21,7 @@ type HealthDossier struct {
 	// расширенного анализа). Заполняется ИИ; рендерится как «что стало
 	// лучше / что улучшить» + таблица показателей до→после.
 	Comparison ReportComparison `json:"comparison"`
-	Disclaimer string                  `json:"disclaimer"`
+	Disclaimer string           `json:"disclaimer"`
 }
 
 // DossierPatient - идентификационные данные из опросника.

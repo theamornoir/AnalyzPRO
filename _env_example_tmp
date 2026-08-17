@@ -27,8 +27,13 @@ LOADING_STICKER_ID=your_sticker_id
 ADMIN_CHAT_ID=your_admin_chat_id
 
 # AI Models — Gemini
-GOOGLE_GEMINI_API_KEY=your_gemini_api_key_here
+GOOGLE_GEMINI_API_KEY=your_gemini_api_key
 GOOGLE_AI_MODEL=gemini-2.0-flash
+
+# AI Models — OpenRouter (основной бесплатный провайдер; ключ читается
+# напрямую из окружения в internal/ai/orchestrator/openrouter.go)
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=google/gemma-4-26b-a4b-it:free
 
 # AI Models — DeepSeek (опционально)
 DEEPSEEK_API_KEY=
@@ -42,12 +47,14 @@ YANDEX_GPT_FOLDER_ID=
 YANDEX_GPT_MODEL=yandexgpt-lite
 YANDEX_GPT_VISION_MODEL=yandexgpt
 
-# Хранение данных
+# Хранение данных (SQLite; путь задаётся DB_PATH, Postgres не используется)
 UPLOAD_DIR=./uploads
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/analyzpro?sslmode=disable
 
 # PDF Generation
 HTML2PDF_API_KEY=your_html2pdf_api_key_here
+
+# Аналитика (PostHog; опционально - пусто = события не отправляются)
+POSTHOG_API_KEY=
 
 # Web App (Дашборд)
 WEBAPP_URL=http://localhost:8080/dashboard

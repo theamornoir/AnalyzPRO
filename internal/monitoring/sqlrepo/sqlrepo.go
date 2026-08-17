@@ -258,13 +258,18 @@ func (r *repo) ListHistory(ctx context.Context, telegramID int64, entryType stri
 	}
 
 	query := `SELECT id, telegram_id, type, title, date, json_data, report_html ` + base + ` ORDER BY date DESC`
-	if pageSize > 0 {
-		if page < 1 {
-			page = 1
-		}
-		offset := (page - 1) * pageSize
-		query += fmt.Sprintf(" LIMIT %d OFFSET %d", pageSize, offset)
+	// При pageSize<=0 (вызывающий не задал лимит) ставим безопасный предел,
+	// чтобы не грузить в память все записи пользователя сразу (index
+	// idx_monitoring_history_date покрывает сортировку). 200 записей - более
+	// чем достаточно для личной истории анализов/биосканов одного юзера.
+	if pageSize <= 0 {
+		pageSize = 200
 	}
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * pageSize
+	query += fmt.Sprintf(" LIMIT %d OFFSET %d", pageSize, offset)
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {

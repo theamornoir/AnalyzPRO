@@ -6,7 +6,9 @@ import (
 
 	tgbot "github.com/go-telegram/bot"
 
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/userdata"
+	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
@@ -184,4 +186,49 @@ func isQuestionnaireState(state states.State) bool {
 		return true
 	}
 	return false
+}
+
+// backQuestionnaire - шаг «Назад» внутри 20-вопросного опросника анализа:
+// возврат к предыдущему вопросу без сброса уже собранных данных. Если вопрос
+// первый - выход из опросника в хаб «Анализы».
+func (r *router) backQuestionnaire(ctx context.Context, b *tgbot.Bot, chatID int64, state states.State) {
+	prev := userdata.PrevStep(state)
+	if prev == states.StateIdle {
+		// Первый вопрос - выходим из опросника.
+		r.stateManager.SetState(chatID, states.StateIdle)
+		r.stateManager.SetUserData(chatID, "analysis_type", "")
+		r.stateManager.SetUserData(chatID, "analysis_subtype", "")
+		r.setCurrentSection(chatID, "analysis")
+		r.deleteHubBlock(ctx, b, chatID)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgBackToAnalysisType,
+			ReplyMarkup: keyboards.MainMenu(),
+		})
+		return
+	}
+	r.stateManager.SetState(chatID, prev)
+	collector := userdata.NewUserDataCollector(r.stateManager)
+	collector.SendStep(ctx, b, chatID, prev, userdata.PromptForState(prev))
+}
+
+// backBioscanQuestionnaire - шаг «Назад» внутри опросника Bioscan PRO: возврат
+// к предыдущему вопросу. Если вопрос первый - выход из Bioscan в хаб «Анализы».
+func (r *router) backBioscanQuestionnaire(ctx context.Context, b *tgbot.Bot, chatID int64, state states.State) {
+	prev := bioscan.BioscanPrevQuestionState(state)
+	if prev == states.StateIdle {
+		// Первый вопрос опросника - выходим из Bioscan.
+		bioscan.ResetBioscanData(r.stateManager, chatID)
+		r.stateManager.SetState(chatID, states.StateIdle)
+		r.setCurrentSection(chatID, "analysis")
+		r.deleteHubBlock(ctx, b, chatID)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgBackToAnalysisType,
+			ReplyMarkup: keyboards.MainMenu(),
+		})
+		return
+	}
+	r.stateManager.SetState(chatID, prev)
+	bioscan.SendBioscanQuestion(ctx, b, chatID, prev)
 }

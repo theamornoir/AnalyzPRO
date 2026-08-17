@@ -137,9 +137,14 @@ func (r *Repo) SaveDiagnosis(ctx context.Context, diagnosis *sm.Diagnosis) error
 	return nil
 }
 
-func (r *Repo) GetAllDiagnosesByUserID(ctx context.Context, userID uint) ([]sm.Diagnosis, error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, user_id, date, type, json_data, report_html FROM diagnoses WHERE user_id = ? ORDER BY date DESC`, userID)
+func (r *Repo) GetAllDiagnosesByUserID(ctx context.Context, userID uint, limit, offset int) ([]sm.Diagnosis, error) {
+	q := `SELECT id, user_id, date, type, json_data, report_html FROM diagnoses WHERE user_id = ? ORDER BY date DESC`
+	// Пагинация: при limit>0 добавляем LIMIT/OFFSET (index idx_diagnoses_date
+	// покрывает сортировку). limit<=0 - без ограничения (обратная совместимость).
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d OFFSET %d", limit, offset)
+	}
+	rows, err := r.db.QueryContext(ctx, q, userID)
 	if err != nil {
 		return nil, fmt.Errorf("чтение диагнозов: %w", err)
 	}

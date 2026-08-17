@@ -18,7 +18,7 @@ type UserRepository interface {
 // DiagnosisRepository - репозиторий диагнозов.
 type DiagnosisRepository interface {
 	SaveDiagnosis(ctx context.Context, diagnosis *sm.Diagnosis) error
-	GetAllDiagnosesByUserID(ctx context.Context, userID uint) ([]sm.Diagnosis, error)
+	GetAllDiagnosesByUserID(ctx context.Context, userID uint, limit, offset int) ([]sm.Diagnosis, error)
 	GetLastDiagnosisByType(ctx context.Context, userID uint, diagnosisType string) (*sm.Diagnosis, error)
 }
 

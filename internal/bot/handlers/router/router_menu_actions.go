@@ -13,6 +13,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/botutil"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/userdata"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -388,16 +389,9 @@ func (r *router) handleExtendedAnalysis(ctx context.Context, b *tgbot.Bot, chatI
 	// Выбрано под-действие - убираем блок-хаб.
 	r.deleteHubBlock(ctx, b, chatID)
 
-	// Единая Reply-клавиатура [Назад] внизу на всём протяжении опросника.
-	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgExtendedAnalysisIntro,
-		ReplyMarkup: keyboards.BackMenu(),
-		ParseMode:   "Markdown",
-	})
-	if msg != nil {
-		r.setLastMsg(chatID, msg.ID)
-	}
+	// Единая Reply-клавиатура [Назад / ❌ Отмена] на всём протяжении
+	// опросника; первый вопрос показывается с прогресс-баром.
+	userdata.NewUserDataCollector(r.stateManager).SendStep(ctx, b, chatID, states.StateWaitingName, locales.MsgExtendedAnalysisIntro)
 	return true
 }
 

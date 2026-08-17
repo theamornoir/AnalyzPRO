@@ -81,7 +81,7 @@ func TestDiagnosisRoundTrip(t *testing.T) {
 		t.Error("expected non-zero diagnosis ID")
 	}
 
-	all, err := r.GetAllDiagnosesByUserID(ctx, 1)
+	all, err := r.GetAllDiagnosesByUserID(ctx, 1, 0, 0)
 	if err != nil || len(all) != 1 {
 		t.Fatalf("get all: %v (len=%d)", err, len(all))
 	}

@@ -48,11 +48,9 @@ func (c *GeminiClient) generate(ctx context.Context, parts []geminiPart) (string
 	}
 
 	log.Printf(locales.LogGeminiResponseStatus, respBody.status)
-	if len(respBody.body) > 500 {
-		log.Printf(locales.LogGeminiResponseBodyShort, string(respBody.body[:500]))
-	} else {
-		log.Printf(locales.LogGeminiResponseBody, string(respBody.body))
-	}
+	// НЕ логируем содержимое ответа: оно может содержать персональные
+	// медицинские данные пользователя (PII). Логируем только статус и размер.
+	log.Printf(locales.LogGeminiResponseBodySize, respBody.status, len(respBody.body))
 
 	if respBody.status != http.StatusOK {
 		return c.handleErrorResponse(respBody)
@@ -66,8 +64,13 @@ func (c *GeminiClient) generate(ctx context.Context, parts []geminiPart) (string
 
 	if result.Error != nil {
 		log.Printf(locales.LogGeminiAPIError, result.Error.Code, result.Error.Message)
+		// ВАЖНО: при ошибках API (429/401/403/500) возвращаем РЕАЛЬНУЮ
+		// ошибку, а не заглушку-текст. Иначе оркестратор видит err==nil,
+		// считает ответ успешным и НЕ переключается на запасного провайдера
+		// (OpenRouter/Yandex) - пользователь тихо получал бы канонический
+		// «сервис недоступен» вместо реального анализа.
 		if result.Error.Code == 429 || result.Error.Code == 401 || result.Error.Code == 403 || result.Error.Code == 500 {
-			return serviceUnavailableFallback(), nil
+			return "", fmt.Errorf("gemini API error %d: %s", result.Error.Code, result.Error.Message)
 		}
 		return "", fmt.Errorf("gemini error: %s", result.Error.Message)
 	}
@@ -76,8 +79,9 @@ func (c *GeminiClient) generate(ctx context.Context, parts []geminiPart) (string
 	log.Printf(locales.LogGeminiExtractedLen, len(text))
 
 	if text == "" {
+		// Модель вернула пустой текст - используем запасной мок-отчёт.
+		// Тело ответа НЕ логируем (может содержать PII).
 		log.Printf(locales.LogGeminiEmptyResponse)
-		log.Printf(locales.LogGeminiFullResponse, string(respBody.body))
 		return mock.MockAnalysis(""), nil
 	}
 
@@ -118,7 +122,7 @@ func (c *GeminiClient) generateRaw(ctx context.Context, parts []geminiPart) (str
 	}
 
 	if respBody.status != http.StatusOK {
-		return "", fmt.Errorf("gemini error: %s", string(respBody.body))
+		return "", fmt.Errorf("gemini error (HTTP %d, body %d bytes)", respBody.status, len(respBody.body))
 	}
 
 	var result geminiResponse
@@ -143,7 +147,7 @@ func (c *GeminiClient) handleErrorResponse(respBody *rawResponse) (string, error
 	log.Printf(locales.LogGeminiNonOKStatus, respBody.status)
 
 	if respBody.status == 429 {
-		return rateLimitFallback(), nil
+		return "", fmt.Errorf("gemini rate limit (HTTP 429)")
 	}
 
 	if respBody.status == 400 {
@@ -154,10 +158,12 @@ func (c *GeminiClient) handleErrorResponse(respBody *rawResponse) (string, error
 		}
 		if err := json.Unmarshal(respBody.body, &errResp); err == nil {
 			if strings.Contains(errResp.Error.Message, "location is not supported") {
-				return locationErrorFallback(), nil
+				return "", fmt.Errorf("gemini location not supported (HTTP 400)")
 			}
 		}
-		return serviceUnavailableFallback(), nil
+		// Возвращаем ошибку, чтобы оркестратор переключился на запасного
+		// провайдера, вместо маскировки под успешный ответ-заглушку.
+		return "", fmt.Errorf("gemini service unavailable (HTTP 400): %s", errResp.Error.Message)
 	}
 
 	var errResp struct {
@@ -171,15 +177,15 @@ func (c *GeminiClient) handleErrorResponse(respBody *rawResponse) (string, error
 		log.Printf(locales.LogGeminiErrorDetails, errResp.Error.Code, errResp.Error.Message)
 
 		if errResp.Error.Code == 429 || errResp.Error.Code == 401 || errResp.Error.Code == 403 || errResp.Error.Code == 500 {
-			return serviceUnavailableFallback(), nil
+			return "", fmt.Errorf("gemini API error %d: %s", errResp.Error.Code, errResp.Error.Message)
 		}
 		return "", fmt.Errorf("gemini error %d: %s", errResp.Error.Code, errResp.Error.Message)
 	}
 
 	if respBody.status == 401 || respBody.status == 403 || respBody.status == 500 {
-		return serviceUnavailableFallback(), nil
+		return "", fmt.Errorf("gemini request failed with status %d", respBody.status)
 	}
 
-	return "", fmt.Errorf("gemini request failed with status %d: %s",
-		respBody.status, strings.TrimSpace(string(respBody.body)))
+	return "", fmt.Errorf("gemini request failed with status %d (body %d bytes)",
+		respBody.status, len(respBody.body))
 }

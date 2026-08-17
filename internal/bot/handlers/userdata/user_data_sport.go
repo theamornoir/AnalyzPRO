@@ -6,7 +6,6 @@ import (
 
 	tgbot "github.com/go-telegram/bot"
 
-	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
@@ -16,12 +15,7 @@ func (c *UserDataCollector) HandleSportType(ctx context.Context, b *tgbot.Bot, c
 	c.stateManager.SetUserData(chatID, "sport_type", strings.TrimSpace(text))
 	c.stateManager.SetState(chatID, states.StateWaitingGoal)
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgUserGoal,
-		ReplyMarkup: keyboards.BackMenu(),
-		ParseMode:   "Markdown",
-	})
+	c.SendStep(ctx, b, chatID, states.StateWaitingGoal, locales.MsgUserGoal)
 }
 
 // HandleGoal - обрабатывает цель и завершает сбор (20 вопросов).

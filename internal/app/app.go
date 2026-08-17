@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/config"
 	"github.com/theamornoir/analyzpro/internal/db"
 	"github.com/theamornoir/analyzpro/internal/locales"
+	"github.com/theamornoir/analyzpro/internal/logging"
 	monitoring_sqlrepo "github.com/theamornoir/analyzpro/internal/monitoring/sqlrepo"
 	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
@@ -26,8 +28,9 @@ import (
 )
 
 type App struct {
-	cfg *config.Config
-	bot *bot.Bot
+	cfg    *config.Config
+	bot    *bot.Bot
+	dbConn *sql.DB
 }
 
 func New() (*App, error) {
@@ -159,12 +162,18 @@ func New() (*App, error) {
 	}
 
 	return &App{
-		cfg: cfg,
-		bot: telegramBot,
+		cfg:    cfg,
+		bot:    telegramBot,
+		dbConn: dbConn,
 	}, nil
 }
 
 func (a *App) Run(parent context.Context) {
+	// Централизованная настройка slog с уровнем из LOG_LEVEL (перенаправляет
+	// и стандартный пакет log на slog). Идемпотентна - если уже настроена в
+	// main, повторный вызов безопасен.
+	logging.SetupLogging(a.cfg.LogLevel)
+
 	// Завершаем работу корректно по SIGINT/SIGTERM: отменяем контекст,
 	// HTTP-сервер и long-polling Telegram останавливаются сами.
 	ctx, stop := signal.NotifyContext(parent, syscall.SIGINT, syscall.SIGTERM)
@@ -173,6 +182,17 @@ func (a *App) Run(parent context.Context) {
 	// Корректно закрываем клиент аналитики PostHog (flush очереди событий)
 	// при выходе из Run (после остановки бота).
 	defer analytics.ClosePostHog()
+
+	// Корректно закрываем соединение с БД при выходе (сброс WAL, освобождение
+	// файловых дескрипторов SQLite). bot.Start(ctx) блокирует выполнение до
+	// отмены контекста, поэтому закрытие происходит уже после остановки бота.
+	if a.dbConn != nil {
+		defer func() {
+			if err := a.dbConn.Close(); err != nil {
+				log.Printf(locales.LogDBErrorClose, err)
+			}
+		}()
+	}
 
 	// Запрещаем запуск второго экземпляра с тем же токеном. Два long-polling
 	// инстанса конкурируют за обновления Telegram - из-за этого часть ответов

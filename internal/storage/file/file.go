@@ -189,7 +189,7 @@ func (s *Store) SaveDiagnosis(ctx context.Context, diagnosis *sm.Diagnosis) erro
 	return nil
 }
 
-func (s *Store) GetAllDiagnosesByUserID(ctx context.Context, userID uint) ([]sm.Diagnosis, error) {
+func (s *Store) GetAllDiagnosesByUserID(ctx context.Context, userID uint, limit, offset int) ([]sm.Diagnosis, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -197,6 +197,17 @@ func (s *Store) GetAllDiagnosesByUserID(ctx context.Context, userID uint) ([]sm.
 	for _, d := range s.data.Diagnoses {
 		if d.UserID == userID {
 			out = append(out, d)
+		}
+	}
+	if limit > 0 {
+		if offset >= len(out) {
+			out = nil
+		} else {
+			end := offset + limit
+			if end > len(out) {
+				end = len(out)
+			}
+			out = out[offset:end]
 		}
 	}
 	return out, nil

@@ -6,26 +6,10 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// rateLimitFallback - сообщение при достижении лимита запросов.
-func rateLimitFallback() string {
-	log.Printf(locales.LogGeminiFallbackRateLimit)
-	return locales.MsgFallbackRateLimit
-}
-
-// locationErrorFallback - сообщение при недоступности сервиса в регионе.
-func locationErrorFallback() string {
-	log.Printf(locales.LogGeminiFallbackLocationError)
-	return locales.MsgFallbackLocation
-}
-
-// noKeyFallback - сообщение при отсутствии API-ключа.
+// noKeyFallback - сообщение при отсутствии API-ключа. Это НЕ маскируется под
+// успешный ответ: gemini_file.go возвращает его текстом вместе с ошибкой
+// (err != nil), чтобы оркестратор мог переключиться на другого провайдера.
 func noKeyFallback() string {
 	log.Printf(locales.LogGeminiFallbackNoKey)
 	return locales.MsgFallbackNoKey
-}
-
-// serviceUnavailableFallback - сообщение при недоступности сервиса.
-func serviceUnavailableFallback() string {
-	log.Printf(locales.LogGeminiFallbackUnavailable)
-	return locales.MsgFallbackServiceUnavailable
 }

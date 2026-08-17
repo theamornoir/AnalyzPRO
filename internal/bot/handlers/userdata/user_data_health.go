@@ -6,7 +6,6 @@ import (
 
 	tgbot "github.com/go-telegram/bot"
 
-	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
@@ -16,12 +15,7 @@ func (c *UserDataCollector) HandleChronicDiseases(ctx context.Context, b *tgbot.
 	c.stateManager.SetUserData(chatID, "chronic_diseases", strings.TrimSpace(text))
 	c.stateManager.SetState(chatID, states.StateWaitingAllergies)
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgUserAllergies,
-		ReplyMarkup: keyboards.BackMenu(),
-		ParseMode:   "Markdown",
-	})
+	c.SendStep(ctx, b, chatID, states.StateWaitingAllergies, locales.MsgUserAllergies)
 }
 
 // HandleAllergies - обрабатывает аллергии.
@@ -29,12 +23,7 @@ func (c *UserDataCollector) HandleAllergies(ctx context.Context, b *tgbot.Bot, c
 	c.stateManager.SetUserData(chatID, "allergies", strings.TrimSpace(text))
 	c.stateManager.SetState(chatID, states.StateWaitingMedications)
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgUserMedications,
-		ReplyMarkup: keyboards.BackMenu(),
-		ParseMode:   "Markdown",
-	})
+	c.SendStep(ctx, b, chatID, states.StateWaitingMedications, locales.MsgUserMedications)
 }
 
 // HandleMedications - обрабатывает лекарства.
@@ -42,12 +31,7 @@ func (c *UserDataCollector) HandleMedications(ctx context.Context, b *tgbot.Bot,
 	c.stateManager.SetUserData(chatID, "medications", strings.TrimSpace(text))
 	c.stateManager.SetState(chatID, states.StateWaitingSmoking)
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgUserSmoking,
-		ReplyMarkup: keyboards.BackMenu(),
-		ParseMode:   "Markdown",
-	})
+	c.SendStep(ctx, b, chatID, states.StateWaitingSmoking, locales.MsgUserSmoking)
 }
 
 // HandleSmoking - обрабатывает курение.
@@ -55,12 +39,7 @@ func (c *UserDataCollector) HandleSmoking(ctx context.Context, b *tgbot.Bot, cha
 	c.stateManager.SetUserData(chatID, "smoking", strings.TrimSpace(text))
 	c.stateManager.SetState(chatID, states.StateWaitingAlcohol)
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgUserAlcohol,
-		ReplyMarkup: keyboards.BackMenu(),
-		ParseMode:   "Markdown",
-	})
+	c.SendStep(ctx, b, chatID, states.StateWaitingAlcohol, locales.MsgUserAlcohol)
 }
 
 // HandleAlcohol - обрабатывает алкоголь. После него переходим к семейному
@@ -69,10 +48,5 @@ func (c *UserDataCollector) HandleAlcohol(ctx context.Context, b *tgbot.Bot, cha
 	c.stateManager.SetUserData(chatID, "alcohol", strings.TrimSpace(text))
 	c.stateManager.SetState(chatID, states.StateWaitingFamilyHistory)
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgUserFamilyHistory,
-		ReplyMarkup: keyboards.BackMenu(),
-		ParseMode:   "Markdown",
-	})
+	c.SendStep(ctx, b, chatID, states.StateWaitingFamilyHistory, locales.MsgUserFamilyHistory)
 }
