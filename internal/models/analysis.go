@@ -123,3 +123,115 @@ type Progress struct {
 	Recheck string   `json:"recheck"`
 	Targets []string `json:"targets"`
 }
+
+// ============================================================================
+// BodyScanReport — структура премиального отчёта Bioscan PRO (Body Intelligence).
+// Строится ИИ из 4 фото + опросника и рендерится в подробный print-ready HTML
+// (templates/body_scan_report.html). Значения композиции — ЭКСПЕРТНЫЕ ОЦЕНКИ
+// по фото + данным пользователя, не заменяют инструментальные замеры.
+// ============================================================================
+
+type BodyScanReport struct {
+	Title     string `json:"title"`
+	ReportID  string `json:"report_id"`
+	Date      string `json:"date"`
+	Name      string `json:"name"`
+	Age       string `json:"age"`
+	Gender    string `json:"gender"`
+	Score     int    `json:"score"`
+	Level     string `json:"level"`
+	Summary   string `json:"summary"`
+	Potential int    `json:"potential"`
+	// Gap — разрыв между текущим и потенциальным (вычисляется в Go).
+	Gap int `json:"gap"`
+
+	// CoverMetrics — 5 ключевых метрик обложки.
+	CoverMetrics []BodyScanMetric `json:"cover_metrics"`
+	// Composition — детальная композиция тела (до 9 показателей).
+	Composition []BodyScanMetric `json:"composition"`
+
+	Strengths []BodyScanCard `json:"strengths"`
+	Improve   []BodyScanCard `json:"improve"`
+
+	Zones []BodyScanZone `json:"zones"`
+
+	Posture BodyScanPosture `json:"posture"`
+
+	PotentialAreas []BodyScanPotential `json:"potential_areas"`
+
+	// TrainingProgram — детальная программа тренировок (фазы/недели,
+	// сессии, упражнения). Рендерится отдельной страницей отчёта.
+	TrainingProgram []BodyScanTrainingPhase `json:"training_program"`
+
+	Recommendations []BodyScanRecommendation `json:"recommendations"`
+
+	Disclaimer string `json:"disclaimer"`
+}
+
+// BodyScanTrainingPhase — одна фаза/блок программы тренировок (например,
+// «Недели 1-2 · База и техника») с набором сессий.
+type BodyScanTrainingPhase struct {
+	Phase    string                    `json:"phase"`
+	Title    string                    `json:"title"`
+	Goal     string                    `json:"goal"`
+	Sessions []BodyScanTrainingSession `json:"sessions"`
+}
+
+// BodyScanTrainingSession — одна тренировочная сессия внутри фазы.
+type BodyScanTrainingSession struct {
+	Name      string   `json:"name"`
+	Focus     string   `json:"focus"`
+	Exercises []string `json:"exercises"`
+}
+
+// BodyScanMetric — один показатель композиции (значение + статус + референс).
+type BodyScanMetric struct {
+	Name           string `json:"name"`
+	Value          string `json:"value"`
+	Unit           string `json:"unit"`
+	Status         string `json:"status"` // good, warning, critical
+	Ref            string `json:"ref"`
+	Interpretation string `json:"interpretation"`
+}
+
+// BodyScanCard — карточка «сильная сторона» или «зона роста».
+type BodyScanCard struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+// BodyScanZone — зона тела (плечи, пресс, ноги и т.п.).
+type BodyScanZone struct {
+	Name    string `json:"name"`
+	Score   int    `json:"score"`
+	Status  string `json:"status"` // good, warning, critical
+	Comment string `json:"comment"`
+}
+
+// BodyScanPosture — осанка и баланс (7 осей для radar).
+type BodyScanPosture struct {
+	PostureScore    int    `json:"posture_score"`
+	Symmetry        int    `json:"symmetry"`
+	ShoulderBalance int    `json:"shoulder_balance"`
+	PelvicBalance   int    `json:"pelvic_balance"`
+	SpinalAlignment int    `json:"spinal_alignment"`
+	Mobility        int    `json:"mobility"`
+	Stability       int    `json:"stability"`
+	Narrative       string `json:"narrative"`
+}
+
+// BodyScanPotential — направление раскрытия потенциала.
+type BodyScanPotential struct {
+	Priority string `json:"priority"`
+	Action   string `json:"action"`
+	Effect   string `json:"effect"`
+}
+
+// BodyScanRecommendation — персональная рекомендация (4 категории).
+type BodyScanRecommendation struct {
+	Category string `json:"category"` // TRAINING, NUTRITION, RECOVERY, LIFESTYLE
+	Icon     string `json:"icon"`
+	Priority string `json:"priority"`
+	Action   string `json:"action"`
+	Effect   string `json:"effect"`
+}

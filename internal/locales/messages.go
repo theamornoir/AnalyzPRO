@@ -84,9 +84,15 @@ const (
 	MsgBioscanIncompleteData     = "❌ Не все данные собраны. Пожалуйста, начните заново."
 	MsgBioscanDownloadError      = "❌ Не удалось загрузить фотографию. Попробуйте еще раз."
 	MsgBioscanReportCaption      = "📄 **Ваш Bioscan отчёт**\n\n👤 " + "%s, " + "%s" + " лет\n📏 " + "%s" + " см, ⚖️ " + "%s" + " кг\n🎯 Цель: " + "%s" + "\n\n💪 Анализ тела\n📊 Оценка зон\n🏋️ Рекомендации"
-	MsgBioscanDone               = "✅ **Анализ завершён!**\n\nХотите сделать новый Bioscan? Отправьте новое фото или выберите действие в меню."
-	MsgBioscanLoadingStatusText  = "%s\n\n⏳ Подождите..."
-	MsgBioscanProcessingError    = "⚠️ Не удалось обработать фото. Ошибка: %v"
+	// MsgBioscanProCaption — подпись к детальному HTML-отчёту Bioscan PRO.
+	MsgBioscanProCaption = "📄 **Персональный отчёт Body Intelligence (Prisma)**\n\n" +
+		"🔬 Детальный разбор композиции тела, зон, осанки и баланса\n" +
+		"📊 Графики и оценки по 7 осям\n" +
+		"🏋️ Персональная программа тренировок, питания и восстановления\n\n" +
+		"📎 Откройте файл в браузере и при желании сохраните как PDF (Печать → Сохранить как PDF)."
+	MsgBioscanDone              = "✅ **Анализ завершён!**\n\nХотите сделать новый Bioscan? Отправьте новое фото или выберите действие в меню."
+	MsgBioscanLoadingStatusText = "%s\n\n⏳ Подождите..."
+	MsgBioscanProcessingError   = "⚠️ Не удалось обработать фото. Ошибка: %v"
 
 	// Bioscan validation messages
 	MsgBioscanAgeInvalid    = "❌ Пожалуйста, введите корректный возраст (от 10 до 120 лет)."

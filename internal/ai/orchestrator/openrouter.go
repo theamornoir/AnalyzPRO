@@ -149,6 +149,23 @@ func (p *OpenRouterProvider) GenerateBioscanJSON(ctx context.Context, photosData
 		locales.PromptForBioscan(contextInfo), imgs, true, 8000)
 }
 
+// GenerateBodyScanJSON — генерирует JSON премиального отчёта Bioscan PRO
+// (Body Intelligence) по фотографиям + данным опросника.
+func (p *OpenRouterProvider) GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
+	imgs := make([]visionImage, 0, len(photosData))
+	for _, d := range photosData {
+		if len(d) > 0 {
+			imgs = append(imgs, visionImage{data: d, mimeType: mimeType})
+		}
+	}
+	if len(imgs) == 0 {
+		return "", fmt.Errorf("no photo data provided")
+	}
+	return p.complete(ctx,
+		"Ты — опытный врач-диагност. Верни ответ строго в формате JSON, без markdown и комментариев.",
+		locales.PromptForBodyScanJSON(contextInfo), imgs, true, 8000)
+}
+
 // GenerateAnalysisFromFileJSON — анализирует файл (изображение или PDF) и возвращает JSON.
 func (p *OpenRouterProvider) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	if isImageMime(mimeType) {

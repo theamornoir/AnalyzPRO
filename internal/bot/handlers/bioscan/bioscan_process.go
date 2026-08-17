@@ -92,7 +92,9 @@ func ProcessBioscanWithPhotos(
 		return
 	}
 
-	pdfBytes, filename, htmlReport, err := analysisService.HandleBioscanPDF(
+	// Расширенный (Premium) Bioscan PRO -> подробный HTML-отчёт Body Intelligence.
+	filename := "Body_scan_report.html"
+	htmlReport, err := analysisService.HandleBioscanPro(
 		ctx,
 		photosData,
 		"image/jpeg",
@@ -114,17 +116,16 @@ func ProcessBioscanWithPhotos(
 	helpers.DeleteMessage(ctx, b, chatID, loadingMsg.ID)
 	helpers.DeleteMessage(ctx, b, chatID, textMsg.ID)
 
-	// Расширенный (Premium) Bioscan -> детальный PDF-отчёт.
-	if len(pdfBytes) > 0 {
+	if len(htmlReport) > 0 {
 		_, err = b.SendDocument(
 			ctx,
 			&tgbot.SendDocumentParams{
 				ChatID: chatID,
 				Document: &models.InputFileUpload{
 					Filename: filename,
-					Data:     bytes.NewReader(pdfBytes),
+					Data:     bytes.NewReader([]byte(htmlReport)),
 				},
-				Caption:   fmt.Sprintf(locales.MsgBioscanReportCaption, name, age, height, weight, goal),
+				Caption:   locales.MsgBioscanProCaption,
 				ParseMode: "Markdown",
 			},
 		)

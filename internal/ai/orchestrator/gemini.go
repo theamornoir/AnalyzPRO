@@ -48,6 +48,11 @@ func (p *GeminiProvider) GenerateBioscanJSON(ctx context.Context, photosData [][
 	return p.client.GenerateBioscanJSON(ctx, photosData, mimeType, contextInfo)
 }
 
+// GenerateBodyScanJSON — генерирует JSON премиального отчёта Bioscan PRO.
+func (p *GeminiProvider) GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
+	return p.client.GenerateBodyScanJSON(ctx, photosData, mimeType, contextInfo)
+}
+
 // GenerateAnalysisFromFileJSON — генерирует JSON-анализ из файла.
 func (p *GeminiProvider) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	return p.client.GenerateAnalysisFromFileJSON(ctx, data, mimeType, contextText)

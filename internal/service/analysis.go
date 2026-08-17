@@ -26,6 +26,10 @@ type AnalysisService interface {
 	// (для пользователя) + HTML (для сохранения в историю/профиль). Один
 	// вызов ИИ: JSON -> models.Report -> PDF + HTML.
 	HandleBioscanPDF(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (pdf []byte, filename string, htmlReport string, err error)
+	// HandleBioscanPro — расширенный (Premium) Bioscan PRO: 4 фото -> подробный
+	// premium HTML-отчёт Body Intelligence (из фото + опросника). Один вызов
+	// ИИ: JSON -> models.BodyScanReport -> HTML (для документа и истории/профиля).
+	HandleBioscanPro(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (html string, err error)
 	// Методы для работы с JSON
 	HandleAnalysisJSON(ctx context.Context, text string) (string, error)
 	HandleAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error)
@@ -168,6 +172,43 @@ func (s *analysisService) HandleBioscanPDF(
 	}
 
 	return pdfBytes, "Bioscan_report.pdf", htmlReport, nil
+}
+
+// HandleBioscanPro — расширенный (Premium) Bioscan PRO: строит подробный
+// premium HTML-отчёт Body Intelligence из 4 фото + опросника. Один вызов ИИ:
+// JSON -> models.BodyScanReport -> HTML (через renderer.RenderBodyScan).
+func (s *analysisService) HandleBioscanPro(
+	ctx context.Context,
+	photosData [][]byte,
+	mimeType string,
+	contextInfo string,
+) (string, error) {
+	jsonText, err := s.aiClient.GenerateBodyScanJSON(ctx, photosData, mimeType, contextInfo)
+	if err != nil {
+		return "", fmt.Errorf(locales.ErrGenerateBioscanJSON, err)
+	}
+
+	if strings.TrimSpace(jsonText) == "" {
+		return "", fmt.Errorf(locales.ErrEmptyJSONFromAI)
+	}
+
+	var rep models.BodyScanReport
+	if err := json.Unmarshal([]byte(jsonText), &rep); err != nil {
+		return "", fmt.Errorf(locales.ErrParseAnalysisJSON, err)
+	}
+
+	// Разрыв между текущим и потенциальным индексом.
+	rep.Gap = rep.Potential - rep.Score
+	if rep.Gap < 0 {
+		rep.Gap = 0
+	}
+
+	htmlReport, rerr := s.renderer.RenderBodyScan(rep)
+	if rerr != nil {
+		return "", fmt.Errorf(locales.ErrRenderReportHTML, rerr)
+	}
+
+	return htmlReport, nil
 }
 
 // formatTextWithContext объединяет базовый текст с дополнительным контекстом

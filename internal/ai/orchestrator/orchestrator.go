@@ -18,6 +18,9 @@ type AIProvider interface {
 	GenerateAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextText string) (string, error)
 	// GenerateBioscanJSON генерирует JSON-результат bioscan по фотографиям.
 	GenerateBioscanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error)
+	// GenerateBodyScanJSON генерирует JSON премиального отчёта Bioscan PRO
+	// (Body Intelligence) по фотографиям + данным опросника.
+	GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error)
 	// GenerateAnalysisFromFileJSON генерирует JSON-анализ из файла.
 	GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error)
 	// GenerateDossierJSON генерирует JSON универсального отчёта-досье
@@ -126,6 +129,13 @@ func (o *Orchestrator) GenerateAnalysisFromFileWithContext(ctx context.Context, 
 func (o *Orchestrator) GenerateBioscanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
 	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
 		return p.GenerateBioscanJSON(ctx, photosData, mimeType, contextInfo)
+	})
+}
+
+// GenerateBodyScanJSON — генерирует JSON премиального отчёта Bioscan PRO.
+func (o *Orchestrator) GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
+	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
+		return p.GenerateBodyScanJSON(ctx, photosData, mimeType, contextInfo)
 	})
 }
 

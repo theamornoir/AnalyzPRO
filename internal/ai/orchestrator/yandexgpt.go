@@ -231,6 +231,30 @@ func (p *YandexGPTProvider) GenerateBioscanJSON(ctx context.Context, photosData 
 	return yandexStripJSON(text), nil
 }
 
+// GenerateBodyScanJSON — генерирует JSON премиального отчёта Bioscan PRO.
+func (p *YandexGPTProvider) GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
+	var imgs []string
+	for _, d := range photosData {
+		if len(d) > 0 {
+			imgs = append(imgs, "data:"+mimeType+";base64,"+base64.StdEncoding.EncodeToString(d))
+		}
+	}
+	if len(imgs) == 0 {
+		return "", fmt.Errorf("no photo data provided")
+	}
+	text, err := p.complete(ctx, p.visionModel, []yandexMessage{
+		{
+			Role:   "user",
+			Text:   locales.PromptForBodyScanJSON(contextInfo),
+			Images: imgs,
+		},
+	}, 8000, 0.2)
+	if err != nil {
+		return "", err
+	}
+	return yandexStripJSON(text), nil
+}
+
 // GenerateAnalysisFromFileJSON — анализ изображения, возвращает JSON.
 func (p *YandexGPTProvider) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	if !isImageMime(mimeType) {

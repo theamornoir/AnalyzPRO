@@ -111,6 +111,20 @@ func (p *DeepSeekProvider) GenerateBioscanJSON(ctx context.Context, photosData [
 	return p.analyzeImagesVision(ctx, imgs, locales.PromptForBioscan(contextInfo), true, 8000)
 }
 
+// GenerateBodyScanJSON — генерирует JSON премиального отчёта Bioscan PRO.
+func (p *DeepSeekProvider) GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
+	imgs := make([]visionImage, 0, len(photosData))
+	for _, d := range photosData {
+		if len(d) > 0 {
+			imgs = append(imgs, visionImage{data: d, mimeType: mimeType})
+		}
+	}
+	if len(imgs) == 0 {
+		return "", fmt.Errorf("no photo data provided")
+	}
+	return p.analyzeImagesVision(ctx, imgs, locales.PromptForBodyScanJSON(contextInfo), true, 8000)
+}
+
 // GenerateAnalysisFromFileJSON — анализирует изображение и возвращает JSON.
 func (p *DeepSeekProvider) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	if !isImageMime(mimeType) {

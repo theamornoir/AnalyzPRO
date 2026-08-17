@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>{{.Title}}</title>
+<style>
+@page { size: A4; margin: 0; }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+    background: #DDE5E3;
+    font-family: 'Inter', 'SF Pro Display', 'Segoe UI', Arial, sans-serif;
+    color: #183236;
+    font-size: 10pt;
+    line-height: 1.55;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+:root {
+    --navy: #102F35;
+    --teal: #17464A;
+    --teal2: #286A6B;
+    --mint: #73D6C0;
+    --mint-light: #E8F7F3;
+    --bg: #F5F8F7;
+    --white: #FFFFFF;
+    --text: #183236;
+    --muted: #6C7D80;
+    --good: #3FA796;
+    --warn: #C99A4E;
+    --crit: #C97A6E;
+    --line: rgba(23,47,53,0.10);
+}
+
+.page {
+    position: relative;
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto 10mm;
+    padding: 16mm 18mm 14mm;
+    background: #fff;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    page-break-after: always;
+    break-after: page;
+    overflow: hidden;
+}
+.page:last-child { page-break-after: auto; break-after: auto; }
+
+@media print {
+    html, body { background: #fff; }
+    .page { margin: 0; box-shadow: none; page-break-after: always; break-after: page; }
+}
+
+.eyebrow {
+    font-size: 6.5pt;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--teal2);
+}
+.brand {
+    font-size: 7pt;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 800;
+    color: var(--teal2);
+}
+h1 { font-size: 26pt; line-height: 1.05; letter-spacing: -0.02em; color: var(--navy); font-weight: 800; margin: 0; }
+h2 { font-size: 14pt; line-height: 1.15; color: var(--navy); font-weight: 700; margin: 0; }
+.micro { font-size: 6.5pt; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.muted { color: var(--muted); }
+.small { font-size: 8pt; color: var(--muted); line-height: 1.5; }
+.lead { font-size: 9pt; line-height: 1.6; color: #35565a; max-width: 150mm; }
+.divider { height: 1px; background: var(--line); margin: 6px 0; border: 0; }
+
+.section { margin-top: 9px; }
+.section:first-of-type { margin-top: 2px; }
+.section-title { font-size: 11pt; font-weight: 700; color: var(--navy); letter-spacing: 0.02em; margin-bottom: 6px; }
+
+.page-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding-bottom: 5px; border-bottom: 1px solid var(--line); margin-bottom: 8px;
+}
+.page-footer {
+    margin-top: auto; padding-top: 5px; border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; font-size: 6.5pt; color: var(--muted);
+}
+
+.card {
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 9px 11px; break-inside: avoid; page-break-inside: avoid;
+}
+.card-soft { background: var(--mint-light); border-color: #cdeae3; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+.flex { display: flex; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+.flex-center { display: flex; align-items: center; gap: 10px; }
+.flex-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* COVER */
+.cover-hero {
+    background: linear-gradient(150deg, var(--navy), var(--teal));
+    border-radius: 16px; padding: 16px 18px; color: #fff; margin-bottom: 10px;
+}
+.cover-hero .brand { color: var(--mint); }
+.cover-name { font-size: 21pt; font-weight: 800; margin-top: 8px; color: #fff; }
+.cover-meta { font-size: 8.5pt; color: #bcd9d6; margin-top: 2px; letter-spacing: 0.02em; }
+
+.score-row { display: flex; gap: 14px; align-items: stretch; margin-top: 6px; }
+.score-block {
+    flex: 0 0 150px; background: var(--mint-light); border: 1px solid #cdeae3;
+    border-radius: 14px; padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.summary-block { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+
+.donut { width: 120px; height: 120px; position: relative; }
+.donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.donut circle { fill: none; stroke-width: 13; }
+.donut .bg { stroke: #d6ebe7; }
+.donut .fg { stroke: var(--teal2); stroke-linecap: round; }
+.donut .center {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+}
+.donut .num { font-size: 30pt; font-weight: 800; color: var(--navy); line-height: 1; }
+.donut .lbl { font-size: 6pt; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+
+.level { font-size: 13pt; font-weight: 700; color: var(--navy); }
+.summary { font-size: 9pt; line-height: 1.6; color: #35565a; margin-top: 6px; }
+
+/* CURRENT vs POTENTIAL bar */
+.cp { margin-top: 8px; }
+.cp-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.cp-label { width: 34mm; font-size: 8pt; font-weight: 600; color: var(--navy); }
+.cp-track { flex: 1; height: 9px; background: #e7efed; border-radius: 20px; overflow: hidden; }
+.cp-fill { height: 100%; border-radius: 20px; }
+.cp-val { width: 16mm; text-align: right; font-size: 9pt; font-weight: 700; color: var(--navy); }
+.cp-fill.current { background: linear-gradient(90deg, var(--teal2), var(--teal)); }
+.cp-fill.potential { background: linear-gradient(90deg, var(--mint), #4fb9a4); }
+
+/* KEY METRICS */
+.metric-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 7px; margin-top: 6px; }
+.metric {
+    border: 1px solid var(--line); border-radius: 11px; padding: 8px 7px; text-align: center;
+}
+.metric .m-name { font-size: 6.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.metric .m-val { font-size: 14pt; font-weight: 800; color: var(--navy); margin-top: 2px; }
+.metric .m-val .m-unit { font-size: 7pt; font-weight: 600; color: var(--muted); margin-left: 1px; }
+
+.pill {
+    display: inline-block; padding: 1px 7px; border-radius: 20px;
+    font-size: 6.5pt; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.pill.good { background: #e3f3ef; color: #2c7c6e; }
+.pill.warning { background: #f6efdf; color: #97742f; }
+.pill.critical { background: #f7e6e3; color: #a8544a; }
+
+/* COMPOSITION */
+.comp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.comp {
+    border: 1px solid var(--line); border-radius: 11px; padding: 8px 10px; break-inside: avoid;
+}
+.comp .c-top { display: flex; justify-content: space-between; align-items: baseline; }
+.comp .c-name { font-size: 9pt; font-weight: 600; color: var(--navy); }
+.comp .c-val { font-size: 12pt; font-weight: 800; color: var(--navy); }
+.comp .c-val .c-unit { font-size: 7pt; font-weight: 600; color: var(--muted); margin-left: 1px; }
+.comp .c-ref { font-size: 6.5pt; color: var(--muted); margin-top: 1px; }
+.comp .c-text { font-size: 7.6pt; line-height: 1.5; color: #3d5d59; margin-top: 4px; }
+
+/* STRENGTHS / IMPROVE */
+.si { display: flex; gap: 8px; align-items: flex-start; padding: 7px 9px; border: 1px solid var(--line); border-radius: 11px; margin-bottom: 6px; }
+.si.good { border-left: 3px solid var(--good); }
+.si.warning { border-left: 3px solid var(--warn); }
+.si .si-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex: 0 0 auto; }
+.si.good .si-dot { background: var(--good); }
+.si.warning .si-dot { background: var(--warn); }
+.si .si-title { font-size: 9pt; font-weight: 700; color: var(--navy); }
+.si .si-desc { font-size: 8pt; line-height: 1.5; color: #3d5d59; margin-top: 2px; }
+
+/* ZONES */
+.zones-wrap { display: flex; gap: 14px; align-items: stretch; }
+.zones-fig { flex: 0 0 64mm; display: flex; align-items: center; justify-content: center; }
+.zones-list { flex: 1; min-width: 0; }
+.zone { margin-bottom: 6px; }
+.zone .z-top { display: flex; justify-content: space-between; align-items: baseline; }
+.zone .z-name { font-size: 9pt; font-weight: 600; color: var(--navy); }
+.zone .z-score { font-size: 10pt; font-weight: 800; color: var(--navy); }
+.zone .z-track { height: 7px; background: #e7efed; border-radius: 20px; overflow: hidden; margin: 3px 0; }
+.zone .z-fill { height: 100%; border-radius: 20px; }
+.zone .z-comment { font-size: 7.6pt; line-height: 1.45; color: var(--muted); }
+
+/* POSTURE */
+.posture-grid { display: grid; grid-template-columns: 178px 1fr; gap: 14px; align-items: start; }
+.radar-box { border: 1px solid var(--line); border-radius: 12px; padding: 8px; max-width: 178px; }
+.radar-box svg { display: block; }
+.pmetric { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid #eef3f2; }
+.pmetric:last-child { border-bottom: 0; }
+.pmetric .p-name { font-size: 8pt; color: var(--navy); font-weight: 500; }
+.pmetric .p-bar { flex: 1; margin: 0 8px; height: 6px; background: #e7efed; border-radius: 20px; overflow: hidden; }
+.pmetric .p-fill { height: 100%; background: linear-gradient(90deg, var(--teal2), var(--mint)); border-radius: 20px; }
+.pmetric .p-val { font-size: 8.5pt; font-weight: 700; color: var(--navy); width: 22mm; text-align: right; }
+.posture-text { font-size: 9pt; line-height: 1.65; color: #3d5d59; margin-top: 8px; }
+
+/* POTENTIAL */
+.pot-hero { display: flex; gap: 14px; align-items: center; background: var(--navy); border-radius: 14px; padding: 12px 16px; color: #fff; }
+.pot-arrow { font-size: 16pt; color: var(--mint); font-weight: 800; }
+.pot-num { font-size: 28pt; font-weight: 800; color: #fff; line-height: 1; }
+.pot-num.pot { color: var(--mint); }
+.pot-cap { font-size: 7pt; letter-spacing: 0.12em; text-transform: uppercase; color: #bcd9d6; }
+.pot-gap { margin-left: auto; text-align: right; }
+.pot-gap .g-num { font-size: 20pt; font-weight: 800; color: var(--mint); }
+.pot-gap .g-cap { font-size: 7pt; letter-spacing: 0.1em; text-transform: uppercase; color: #bcd9d6; }
+
+.pa { border: 1px solid var(--line); border-radius: 11px; padding: 7px 10px; break-inside: avoid; }
+.pa .pa-prio { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--teal2); }
+.pa .pa-action { font-size: 8.5pt; font-weight: 600; color: var(--navy); margin-top: 2px; }
+.pa .pa-effect { font-size: 7.8pt; color: #3d5d59; margin-top: 2px; }
+
+/* RECOMMENDATIONS */
+.rec { border: 1px solid var(--line); border-radius: 12px; padding: 9px 11px; break-inside: avoid; }
+.rec .rec-cat {
+    display: inline-block; font-size: 6.5pt; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: #fff; background: var(--teal2); border-radius: 20px; padding: 1px 8px;
+}
+.rec .rec-prio { margin-left: 6px; font-size: 6.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.rec .rec-action { font-size: 8.5pt; font-weight: 600; color: var(--navy); margin-top: 5px; line-height: 1.5; }
+.rec .rec-effect { font-size: 7.8pt; color: #3d5d59; margin-top: 3px; line-height: 1.5; }
+
+.disclaimer { font-size: 7pt; color: var(--muted); line-height: 1.5; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+
+/* ZONE DONUTS (замена «силуэту человечка») */
+.zdonut-grid { display: flex; flex-wrap: wrap; gap: 9px; justify-content: center; margin: 4px 0 2px; }
+.zdonut { text-align: center; width: 78px; }
+.zdonut-label { font-size: 7pt; font-weight: 600; color: var(--navy); margin-top: 1px; }
+
+/* POSTURE narrative as paragraphs */
+.posture-text p { margin: 0 0 6px 0; }
+.posture-text p:last-child { margin-bottom: 0; }
+
+/* TRAINING PROGRAM */
+.tp-phase { margin-top: 8px; break-inside: avoid; page-break-inside: avoid; }
+.tp-phase-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.tp-badge { font-size: 6.5pt; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; background: var(--navy); border-radius: 20px; padding: 2px 9px; }
+.tp-title { font-size: 10pt; font-weight: 700; color: var(--navy); }
+.tp-goal { font-size: 8pt; line-height: 1.5; color: #3d5d59; margin: 2px 0 5px; }
+.tp-sessions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+.tp-session { border: 1px solid var(--line); border-radius: 11px; padding: 7px 10px; break-inside: avoid; }
+.tp-session-name { font-size: 8.7pt; font-weight: 700; color: var(--navy); }
+.tp-session-focus { font-size: 7pt; color: var(--muted); margin: 1px 0 4px; }
+.tp-ex { font-size: 7.7pt; line-height: 1.55; color: #3d5d59; position: relative; padding-left: 11px; }
+.tp-ex::before { content: "·"; position: absolute; left: 3px; color: var(--teal2); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<!-- ============================ PAGE 1: COVER ============================ -->
+<section class="page">
+    <div class="page-header">
+        <span class="brand">PRISMA · BODY INTELLIGENCE</span>
+        <span class="micro">{{.ReportID}} · {{.Date}}</span>
+    </div>
+
+    <div class="cover-hero">
+        <div class="brand">PERSONAL BODY REPORT</div>
+        <div class="cover-name">{{.Name}}</div>
+        <div class="cover-meta">Возраст {{.Age}} · {{.Gender}}</div>
+    </div>
+
+    <div class="score-row">
+        <div class="score-block">
+            <div class="donut">
+                <svg viewBox="0 0 200 200">
+                    <circle class="bg" cx="100" cy="100" r="80"/>
+                    <circle class="fg" cx="100" cy="100" r="80" stroke-dasharray="{{donutDash .Score}}"/>
+                </svg>
+                <div class="center">
+                    <div class="num">{{.Score}}</div>
+                    <div class="lbl">Body Score</div>
+                </div>
+            </div>
+        </div>
+        <div class="summary-block">
+            <div class="micro">OVERALL BODY SCORE</div>
+            <div class="level">{{.Level}}</div>
+            <div class="summary">{{.Summary}}</div>
+
+            <div class="cp">
+                <div class="cp-row">
+                    <div class="cp-label">Текущее состояние</div>
+                    <div class="cp-track"><div class="cp-fill current" style="width:{{.Score}}%;"></div></div>
+                    <div class="cp-val">{{.Score}}</div>
+                </div>
+                <div class="cp-row">
+                    <div class="cp-label">Потенциал</div>
+                    <div class="cp-track"><div class="cp-fill potential" style="width:{{.Potential}}%;"></div></div>
+                    <div class="cp-val">{{.Potential}}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Ключевые метрики</div>
+        <div class="metric-grid">
+            {{range .CoverMetrics}}
+            <div class="metric">
+                <div class="m-name">{{.Name}}</div>
+                <div class="m-val">{{.Value}}<span class="m-unit">{{.Unit}}</span></div>
+                <div style="margin-top:4px;"><span class="pill {{bodyStatusClass .Status}}">{{bodyStatusText .Status}}</span></div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <div class="disclaimer">{{.Disclaimer}}</div>
+
+    <div class="page-footer">
+        <span>Prisma · Body Intelligence</span>
+        <span>01</span>
+    </div>
+</section>
+
+<!-- ====================== PAGE 2: BODY OVERVIEW ====================== -->
+<section class="page">
+    <div class="page-header">
+        <span class="brand">BODY OVERVIEW</span>
+        <span class="micro">{{.ReportID}} · {{.Date}}</span>
+    </div>
+    <div class="eyebrow">Executive assessment</div>
+    <h2>Общий обзор тела</h2>
+
+    <div class="grid-2" style="margin-top:8px;">
+        <div>
+            <div class="micro">CURRENT STATE → POTENTIAL</div>
+            <div class="pot-hero" style="margin-top:6px;">
+                <div>
+                    <div class="pot-num">{{.Score}}</div>
+                    <div class="pot-cap">Current</div>
+                </div>
+                <div class="pot-arrow">→</div>
+                <div>
+                    <div class="pot-num pot">{{.Potential}}</div>
+                    <div class="pot-cap">Potential</div>
+                </div>
+                <div class="pot-gap">
+                    <div class="g-num">+{{.Gap}}</div>
+                    <div class="g-cap">Gap</div>
+                </div>
+            </div>
+            <div class="card card-soft" style="margin-top:8px;">
+                <div class="micro" style="color:var(--teal2);">Что даст наибольший эффект</div>
+                <div class="small" style="margin-top:3px;color:var(--navy);">
+                    Снижение процента жира при сохранении мышечной массы и работа над мобильностью
+                    таза — два рычага, которые быстрее всего поднимают итоговый индекс.
+                </div>
+            </div>
+        </div>
+        <div>
+            <div class="micro">YOUR STRENGTHS</div>
+            <div style="margin-top:6px;">
+                {{range .Strengths}}
+                <div class="si good">
+                    <div class="si-dot"></div>
+                    <div>
+                        <div class="si-title">{{.Title}}</div>
+                        <div class="si-desc">{{.Description}}</div>
+                    </div>
+                </div>
+                {{end}}
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="micro">AREAS TO IMPROVE</div>
+        <div style="margin-top:6px;">
+            {{range .Improve}}
+            <div class="si warning">
+                <div class="si-dot"></div>
+                <div>
+                    <div class="si-title">{{.Title}}</div>
+                    <div class="si-desc">{{.Description}}</div>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <div class="page-footer">
+        <span>Prisma · Body Intelligence</span>
+        <span>02</span>
+    </div>
+</section>
+
+<!-- ===================== PAGE 3: BODY COMPOSITION ===================== -->
+<section class="page">
+    <div class="page-header">
+        <span class="brand">BODY COMPOSITION</span>
+        <span class="micro">{{.ReportID}} · {{.Date}}</span>
+    </div>
+    <div class="eyebrow">01 · Composition</div>
+    <h2>Композиция тела</h2>
+    <p class="lead" style="margin-top:4px;">Детальный разбор состава тела: масса, жировая и мышечная ткань, водный и белковый баланс, основной обмен.</p>
+
+    <div class="comp-grid" style="margin-top:8px;">
+        {{range .Composition}}
+        <div class="comp">
+            <div class="c-top">
+                <span class="c-name">{{.Name}}</span>
+                <span class="c-val">{{.Value}}<span class="c-unit">{{.Unit}}</span></span>
+            </div>
+            <div class="c-ref">Референс: {{.Ref}}</div>
+            <div style="margin-top:3px;"><span class="pill {{bodyStatusClass .Status}}">{{bodyStatusText .Status}}</span></div>
+            <div class="c-text">{{.Interpretation}}</div>
+        </div>
+        {{end}}
+    </div>
+
+    <div class="page-footer">
+        <span>Prisma · Body Intelligence</span>
+        <span>03</span>
+    </div>
+</section>
+
+<!-- ======================== PAGE 4: BODY ZONES ======================== -->
+<section class="page">
+    <div class="page-header">
+        <span class="brand">BODY ZONES</span>
+        <span class="micro">{{.ReportID}} · {{.Date}}</span>
+    </div>
+    <div class="eyebrow">02 · Zones</div>
+    <h2>Зоны тела</h2>
+    <p class="lead" style="margin-top:4px;">Визуальная и детальная оценка развития ключевых зон тела. Каждый круговой индикатор отражает интегральную оценку зоны (0-100), цвет — статус.</p>
+
+    <div class="section">
+        <div class="section-title">Общая картина по зонам</div>
+        {{zoneDonuts .Zones}}
+    </div>
+
+    <div class="section">
+        <div class="section-title">Детализация по зонам</div>
+        {{range .Zones}}
+        <div class="zone">
+            <div class="z-top">
+                <span class="z-name">{{.Name}}</span>
+                <span class="z-score">{{.Score}}</span>
+            </div>
+            <div class="z-track">
+                <div class="z-fill" style="width:{{.Score}}%;background:
+                    {{if eq (bodyStatusClass .Status) "good"}}var(--good){{else if eq (bodyStatusClass .Status) "warning"}}var(--warn){{else}}var(--crit){{end}};"></div>
+            </div>
+            <div class="z-comment">{{.Comment}}</div>
+        </div>
+        {{end}}
+    </div>
+
+    <div class="page-footer">
+        <span>Prisma · Body Intelligence</span>
+        <span>04</span>
+    </div>
+</section>
+
+<!-- ===================== PAGE 5: POSTURE & BALANCE ===================== -->
+<section class="page">
+    <div class="page-header">
+        <span class="brand">POSTURE &amp; BALANCE</span>
+        <span class="micro">{{.ReportID}} · {{.Date}}</span>
+    </div>
+    <div class="eyebrow">03 · Posture</div>
+    <h2>Осанка и баланс тела</h2>
+
+    <div class="posture-grid" style="margin-top:8px;">
+        <div class="radar-box">{{radar .Posture}}</div>
+        <div>
+            <div class="micro">ПОКАЗАТЕЛИ (0-100)</div>
+            <div style="margin-top:4px;">
+                <div class="pmetric"><span class="p-name">Осанка</span><div class="p-bar"><div class="p-fill" style="width:{{.Posture.PostureScore}}%;"></div></div><span class="p-val">{{.Posture.PostureScore}}</span></div>
+                <div class="pmetric"><span class="p-name">Симметрия</span><div class="p-bar"><div class="p-fill" style="width:{{.Posture.Symmetry}}%;"></div></div><span class="p-val">{{.Posture.Symmetry}}</span></div>
+                <div class="pmetric"><span class="p-name">Баланс плеч</span><div class="p-bar"><div class="p-fill" style="width:{{.Posture.ShoulderBalance}}%;"></div></div><span class="p-val">{{.Posture.ShoulderBalance}}</span></div>
+                <div class="pmetric"><span class="p-name">Баланс таза</span><div class="p-bar"><div class="p-fill" style="width:{{.Posture.PelvicBalance}}%;"></div></div><span class="p-val">{{.Posture.PelvicBalance}}</span></div>
+                <div class="pmetric"><span class="p-name">Выравнивание позвоночника</span><div class="p-bar"><div class="p-fill" style="width:{{.Posture.SpinalAlignment}}%;"></div></div><span class="p-val">{{.Posture.SpinalAlignment}}</span></div>
+                <div class="pmetric"><span class="p-name">Мобильность</span><div class="p-bar"><div class="p-fill" style="width:{{.Posture.Mobility}}%;"></div></div><span class="p-val">{{.Posture.Mobility}}</span></div>
+                <div class="pmetric"><span class="p-name">Стабильность</span><div class="p-bar"><div class="p-fill" style="width:{{.Posture.Stability}}%;"></div></div><span class="p-val">{{.Posture.Stability}}</span></div>
+            </div>
+            <div class="small" style="margin-top:6px;color:var(--navy);">
+                Radar-диаграмма выше объединяет все семь осей баланса в единую форму:
+                чем ближе контур к внешнему кольцу, тем лучше развита соответствующая
+                характеристика. Ниже — подробный разбор каждого параметра и связанных с ним рисков.
+            </div>
+        </div>
+    </div>
+
+    <div class="posture-text">{{nl2p .Posture.Narrative}}</div>
+
+    <div class="page-footer">
+        <span>Prisma · Body Intelligence</span>
+        <span>05</span>
+    </div>
+</section>
+
+<!-- ======================== PAGE 6: POTENTIAL ======================== -->
+<section class="page">
+    <div class="page-header">
+        <span class="brand">YOUR POTENTIAL</span>
+        <span class="micro">{{.ReportID}} · {{.Date}}</span>
+    </div>
+    <div class="eyebrow">04 · Potential</div>
+    <h2>Ваш потенциал</h2>
+
+    <div class="pot-hero" style="margin-top:10px;">
+        <div>
+            <div class="pot-num">{{.Score}}</div>
+            <div class="pot-cap">Current State</div>
+        </div>
+        <div class="pot-arrow">→</div>
+        <div>
+            <div class="pot-num pot">{{.Potential}}</div>
+            <div class="pot-cap">Potential</div>
+        </div>
+        <div class="pot-gap">
+            <div class="g-num">+{{.Gap}}</div>
+            <div class="g-cap">Gap</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="micro">WHAT CAN MOVE THE NEEDLE</div>
+        <div class="grid-3" style="margin-top:6px;">
+            {{range .PotentialAreas}}
+            <div class="pa">
+                <div class="pa-prio">{{.Priority}}</div>
+                <div class="pa-action">{{.Action}}</div>
+                <div class="pa-effect">{{.Effect}}</div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <div class="page-footer">
+        <span>Prisma · Body Intelligence</span>
+        <span>06</span>
+    </div>
+</section>
+
+<!-- ==================== PAGE 7: RECOMMENDATIONS ==================== -->
+<section class="page">
+    <div class="page-header">
+        <span class="brand">RECOMMENDATIONS</span>
+        <span class="micro">{{.ReportID}} · {{.Date}}</span>
+    </div>
+    <div class="eyebrow">05 · Plan</div>
+    <h2>Персональные рекомендации</h2>
+
+    <div class="grid-2" style="margin-top:8px;">
+        {{range .Recommendations}}
+        <div class="rec">
+            <span class="rec-cat">
+                {{if eq .Category "TRAINING"}}Тренировки{{else if eq .Category "NUTRITION"}}Питание{{else if eq .Category "RECOVERY"}}Восстановление{{else if eq .Category "LIFESTYLE"}}Образ жизни{{else}}{{.Category}}{{end}}
+            </span>
+            <span class="rec-prio">Приоритет: {{.Priority}}</span>
+            <div class="rec-action">{{.Action}}</div>
+            <div class="rec-effect">Эффект: {{.Effect}}</div>
+        </div>
+        {{end}}
+    </div>
+
+    <div class="disclaimer">{{.Disclaimer}}</div>
+
+    <div class="page-footer">
+        <span>Prisma · Body Intelligence</span>
+        <span>07</span>
+    </div>
+</section>
+
+<!-- ==================== PAGE 8: TRAINING PROGRAM ==================== -->
+<section class="page">
+    <div class="page-header">
+        <span class="brand">TRAINING PROGRAM</span>
+        <span class="micro">{{.ReportID}} · {{.Date}}</span>
+    </div>
+    <div class="eyebrow">06 · Plan</div>
+    <h2>Программа тренировок</h2>
+    <p class="lead" style="margin-top:4px;">Персональный план на ближайшие 8 недель, построенный на вашей композиции, осанке и целях. Разбит по фазам: от отработки базы до рельефа и силового баланса. Веса подбирайте по самочувствию — рабочий вес на 8-12 повторений в техничном исполнении.</p>
+
+    {{range .TrainingProgram}}
+    <div class="tp-phase">
+        <div class="tp-phase-head">
+            <span class="tp-badge">{{.Phase}}</span>
+            <span class="tp-title">{{.Title}}</span>
+        </div>
+        {{if .Goal}}<div class="tp-goal">{{.Goal}}</div>{{end}}
+        <div class="tp-sessions">
+            {{range .Sessions}}
+            <div class="tp-session">
+                <div class="tp-session-name">{{.Name}}</div>
+                {{if .Focus}}<div class="tp-session-focus">Акцент: {{.Focus}}</div>{{end}}
+                {{range .Exercises}}
+                <div class="tp-ex">{{.}}</div>
+                {{end}}
+            </div>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+
+    <div class="card card-soft" style="margin-top:8px;">
+        <div class="micro" style="color:var(--teal2);">Общие принципы</div>
+        <div class="small" style="margin-top:3px;color:var(--navy);">
+            Разминка 8-10 мин и суставная гимнастика перед каждой сессией. Между подходами — 60-90 сек отдыха, в силовых базовых — до 120 сек.
+            Прогрессия нагрузки: когда осилите верхний диапазон повторений в технике — добавляйте ~2.5-5% веса. Один день в неделю — активное восстановление (ходьба 40-60 мин, растяжка).
+        </div>
+    </div>
+
+    <div class="page-footer">
+        <span>Prisma · Body Intelligence</span>
+        <span>08</span>
+    </div>
+</section>
+
+</body>
+</html>

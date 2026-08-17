@@ -145,6 +145,27 @@ func (p *ClaudeProvider) GenerateBioscanJSON(ctx context.Context, photosData [][
 		8000)
 }
 
+// GenerateBodyScanJSON — генерирует JSON премиального отчёта Bioscan PRO.
+func (p *ClaudeProvider) GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error) {
+	if p.apiKey == "" {
+		return "", fmt.Errorf("claude api key not set")
+	}
+	atts := make([]claudeAttachment, 0, len(photosData))
+	for _, d := range photosData {
+		if len(d) > 0 {
+			atts = append(atts, claudeAttachment{data: d, mimeType: mimeType})
+		}
+	}
+	if len(atts) == 0 {
+		return "", fmt.Errorf("no photo data provided")
+	}
+	return p.callClaudeMessages(ctx,
+		"Ты — эксперт премиального сервиса биометрической аналитики тела. Верни ответ строго в формате JSON, без markdown и комментариев.",
+		locales.PromptForBodyScanJSON(contextInfo),
+		atts,
+		8000)
+}
+
 // GenerateAnalysisFromFileJSON — анализирует файл (изображение или PDF) и возвращает JSON.
 func (p *ClaudeProvider) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	if !isSupportedMime(mimeType) {
