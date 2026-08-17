@@ -63,25 +63,16 @@ func (c *UserDataCollector) HandleSmoking(ctx context.Context, b *tgbot.Bot, cha
 	})
 }
 
-// HandleAlcohol - обрабатывает алкоголь.
+// HandleAlcohol - обрабатывает алкоголь. После него переходим к семейному
+// анамнезу, затем к ЖКТ, виду спорта и цели (20-вопросный опросник).
 func (c *UserDataCollector) HandleAlcohol(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
 	c.stateManager.SetUserData(chatID, "alcohol", strings.TrimSpace(text))
+	c.stateManager.SetState(chatID, states.StateWaitingFamilyHistory)
 
-	// Проверяем, спортсмен ли пользователь
-	onCourse := c.stateManager.GetUserData(chatID, "on_course")
-
-	if onCourse == "yes" {
-		// Если спортсмен - спрашиваем про вид спорта
-		c.stateManager.SetState(chatID, states.StateWaitingSportType)
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgUserSportType,
-			ReplyMarkup: keyboards.BackMenu(),
-			ParseMode:   "Markdown",
-		})
-		return
-	}
-
-	// Если не спортсмен - завершаем сбор
-	c.finishCollection(ctx, b, chatID)
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        locales.MsgUserFamilyHistory,
+		ReplyMarkup: keyboards.BackMenu(),
+		ParseMode:   "Markdown",
+	})
 }

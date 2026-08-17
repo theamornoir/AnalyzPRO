@@ -48,4 +48,8 @@ func ResetBioscanData(sm states.StateManager, chatID int64) {
 	sm.SetUserData(chatID, "bioscan_photo2", "")
 	sm.SetUserData(chatID, "bioscan_photo3", "")
 	sm.SetUserData(chatID, "bioscan_photo4", "")
+	// Очищаем ответы опросника Bioscan PRO (образ жизни / спорт / здоровье).
+	for _, key := range bioscanQuestionnaireKeys() {
+		sm.SetUserData(chatID, key, "")
+	}
 }

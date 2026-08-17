@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/theamornoir/analyzpro/internal/app"
+	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
 func main() {
@@ -19,7 +20,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	log.Printf("🚀 Prisma запускается...")
+	log.Printf(locales.LogAppStarting)
 
 	application.Run(ctx)
 }

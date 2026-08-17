@@ -237,7 +237,7 @@ func (s *analysisService) formatTextWithContext(baseText, contextInfo string) st
 	if contextInfo == "" {
 		return baseText
 	}
-	return fmt.Sprintf("%s\n\n❗ ВАЖНАЯ ИНФОРМАЦИЯ ДЛЯ АНАЛИЗА:\n%s", baseText, contextInfo)
+	return fmt.Sprintf("%s%s%s", baseText, locales.PromptContextHeader, contextInfo)
 }
 
 // renderReportFromJSON анмаршалит JSON в структуры report.Report и рендерит HTML

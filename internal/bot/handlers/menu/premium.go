@@ -31,7 +31,7 @@ const (
 func sendPremiumAnchor(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64) {
 	msg, err := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
-		Text:        "💎 Premium",
+		Text:        locales.BtnPremium,
 		ReplyMarkup: keyboards.BackMenu(),
 		ParseMode:   "Markdown",
 	})

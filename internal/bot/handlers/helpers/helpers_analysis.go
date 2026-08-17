@@ -16,38 +16,38 @@ func BuildAnalysisText(userData map[string]string) string {
 	if name == "" {
 		name = locales.MsgUserDefaultName
 	}
-	parts = append(parts, fmt.Sprintf("👤 Пациент: %s", name))
+	parts = append(parts, fmt.Sprintf(locales.MsgAnalysisPatient, name))
 	parts = append(parts, "")
 
-	parts = append(parts, "❗ ВАЖНАЯ ИНФОРМАЦИЯ ДЛЯ АНАЛИЗА:")
+	parts = append(parts, locales.MsgAnalysisImportantInfo)
 
 	if gender := userData["gender"]; gender != "" {
-		parts = append(parts, fmt.Sprintf("• Пол: %s", gender))
+		parts = append(parts, fmt.Sprintf(locales.MsgAnalysisGender, gender))
 	}
 	if age := userData["age"]; age != "" {
-		parts = append(parts, fmt.Sprintf("• Возраст: %s лет", age))
+		parts = append(parts, fmt.Sprintf(locales.MsgAnalysisAge, age))
 	}
 
 	height := userData["height"]
 	weight := userData["weight"]
 
 	if height != "" {
-		parts = append(parts, fmt.Sprintf("• Рост: %s см", height))
+		parts = append(parts, fmt.Sprintf(locales.MsgAnalysisHeight, height))
 	}
 	if weight != "" {
-		parts = append(parts, fmt.Sprintf("• Вес: %s кг", weight))
+		parts = append(parts, fmt.Sprintf(locales.MsgAnalysisWeight, weight))
 		if height != "" && weight != "" {
 			h, _ := strconv.ParseFloat(height, 64)
 			w, _ := strconv.ParseFloat(weight, 64)
 			if h > 0 && w > 0 {
 				bmi := w / ((h / 100) * (h / 100))
-				parts = append(parts, fmt.Sprintf("• ИМТ: %.1f", bmi))
+				parts = append(parts, fmt.Sprintf(locales.MsgAnalysisBMI, bmi))
 			}
 		}
 	}
 
 	if chronic := userData["chronic_diseases"]; chronic != "" && strings.ToLower(chronic) != "нет" {
-		parts = append(parts, fmt.Sprintf("• Хронические заболевания: %s", chronic))
+		parts = append(parts, fmt.Sprintf(locales.MsgAnalysisChronic, chronic))
 	}
 	if allergies := userData["allergies"]; allergies != "" && strings.ToLower(allergies) != "нет" {
 		parts = append(parts, fmt.Sprintf("• Аллергии: %s", allergies))

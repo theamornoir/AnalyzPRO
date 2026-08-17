@@ -124,7 +124,7 @@ func (p *YandexGPTProvider) complete(ctx context.Context, model string, messages
 	}
 	bodyJSON, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("yandexgpt marshal error: %w", err)
+		return "", fmt.Errorf(locales.ErrYandexMarshal, err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, yandexGPTEndpoint, bytes.NewReader(bodyJSON))

@@ -37,6 +37,11 @@ type MetricsResponse struct {
 	Activity        ActData   `json:"activity"`
 	Trend           TrendData `json:"trend"`
 	Recommendations []string  `json:"recommendations"`
+	// Groups - адаптивные блоки с РЕАЛЬНЫМИ показателями пользователя,
+	// собранными из его анализов/биосканов. Не показываем «общий анализ
+	// крови» заглушкой, если у человека нет крови: блок появляется только
+	// когда в истории есть соответствующие данные.
+	Groups []MetricGroup `json:"groups"`
 }
 
 type BloodData struct {
@@ -62,12 +67,30 @@ type TrendData struct {
 	Values []int    `json:"values"`
 }
 
+// MetricGroup - один адаптивный блок показателей в «Сводке здоровья»
+// (например, «🩸 Кровь», «🍎 Питание», «✨ Тело (Bioscan PRO)»). Строится
+// из РЕАЛЬНЫХ данных пользователя, поэтому пустой блок не рендерится - если
+// у человека нет анализа крови, блока «кровь» просто не будет.
+type MetricGroup struct {
+	Title string       `json:"title"`
+	Icon  string       `json:"icon"`
+	Items []MetricItem `json:"items"`
+}
+
+// MetricItem - одна строка показателя (имя/значение/статус).
+type MetricItem struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Status string `json:"status"` // "", "normal", "warning", "critical"
+}
+
 // Handler - HTTP-обработчики дашборда «Сводка здоровья».
 // Премиум-гейт реализован на уровне API /api/metrics через проверку
 // подлинности Telegram initData + статуса Premium пользователя.
 type Handler struct {
 	pay            *payment.MockPaymentService
 	botToken       string
+	botUsername    string
 	repo           monitoring.Repository
 	reportRenderer *report.Renderer
 	pdfConverter   pdfservice.Converter
@@ -75,8 +98,19 @@ type Handler struct {
 
 // NewHandler создаёт обработчик дашборда. reportRenderer/pdfConverter нужны,
 // чтобы по запросу отдавать сохранённые отчёты как PDF (/api/reports/file).
-func NewHandler(pay *payment.MockPaymentService, botToken string, repo monitoring.Repository, reportRenderer *report.Renderer, pdfConverter pdfservice.Converter) *Handler {
-	return &Handler{pay: pay, botToken: botToken, repo: repo, reportRenderer: reportRenderer, pdfConverter: pdfConverter}
+// botUsername - имя бота в Telegram, чтобы Mini App мог вести пользователя
+// в раздел Premium через t.me-ссылку (openTelegramLink).
+func NewHandler(pay *payment.MockPaymentService, botToken string, repo monitoring.Repository, reportRenderer *report.Renderer, pdfConverter pdfservice.Converter, botUsername string) *Handler {
+	return &Handler{pay: pay, botToken: botToken, botUsername: botUsername, repo: repo, reportRenderer: reportRenderer, pdfConverter: pdfConverter}
+}
+
+// Config - лёгкий публичный эндпоинт: отдаёт имя бота, чтобы Mini App мог
+// закрыть себя и перевести пользователя в раздел оформления Premium через
+// t.me-ссылку (openTelegramLink). initData не требуется - имя бота публично.
+func (h *Handler) Config(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	_ = json.NewEncoder(w).Encode(map[string]string{"botUsername": h.botUsername})
 }
 
 // ServeWebApp отдаёт статический веб-дашборд из embed-файлов.
@@ -141,7 +175,7 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 	// анализов и без Premium. Работает и без валидного initData (удобно для
 	// локальной отладки в браузере). Премиум-гейт не применяется.
 	if r.URL.Query().Get("demo") == "1" {
-		log.Printf("[DASHBOARD] /api/metrics (DEMO) отданы синтетические метрики")
+		log.Printf(locales.LogDashboardMetricsDemo)
 		_ = json.NewEncoder(w).Encode(h.buildDemoMetrics())
 		return
 	}
@@ -175,6 +209,10 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 		metrics.Nutrition = NutData{}
 		metrics.Activity = ActData{}
 		metrics.Trend = TrendData{}
+		// «Богатые» блоки показателей скрываем для не-Premium вместе с
+		// остальными rich-полями - они строятся из реальных анализов, но
+		// доступны только по подписке.
+		metrics.Groups = nil
 	}
 
 	if err := json.NewEncoder(w).Encode(metrics); err != nil {
@@ -182,7 +220,7 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("[DASHBOARD] /api/metrics отданы для user=%d (noData=%v)", telegramID, metrics.NoData)
+	log.Printf(locales.LogDashboardMetrics, telegramID, metrics.NoData)
 }
 
 // Reports - обработчик GET /api/reports. Возвращает последний и предыдущий
@@ -797,6 +835,10 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64) MetricsRes
 	resp.HealthIndex = healthIndex(len(entries), report)
 	resp.EnergyLevel = energyLevel(report, len(entries))
 
+	// Адаптивные блоки РЕАЛЬНЫХ показателей (кровь/биохимия/тело и т.п.)
+	// - строятся только из того, что есть у пользователя в истории.
+	resp.Groups = h.buildAdaptiveGroups(ctx, telegramID)
+
 	// Тренд: по одной точке на запись, от старых к новым.
 	labels := make([]string, 0, len(entries))
 	values := make([]int, 0, len(entries))
@@ -809,6 +851,173 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64) MetricsRes
 	resp.Trend = TrendData{Labels: labels, Values: values}
 
 	return resp
+}
+
+// buildAdaptiveGroups строит адаптивные блоки показателей из РЕАЛЬНОЙ
+// истории пользователя. Берёт последний анализ (по типам analysis/bioscan)
+// и собирает из него группы (кровь/биохимия/гормоны/...) и блок тела из
+// Bioscan PRO. Блок не появляется, если соответствующих данных нет - поэтому
+// «общий анализ крови» не висит заглушкой у тех, у кого нет крови.
+func (h *Handler) buildAdaptiveGroups(ctx context.Context, telegramID int64) []MetricGroup {
+	entries, _, err := h.repo.ListHistory(ctx, telegramID, "", 0, 0)
+	if err != nil || len(entries) == 0 {
+		return nil
+	}
+	groups := []MetricGroup{}
+	// Только последний анализ (записи отсортированы свежие → старые).
+	for _, e := range entries {
+		if e.Type == "analysis" {
+			if g := groupsFromAnalysis(e.JsonData); len(g) > 0 {
+				groups = append(groups, g...)
+			}
+			break
+		}
+	}
+	// Тело - из последнего Bioscan PRO.
+	for _, e := range entries {
+		if e.Type == "bioscan" {
+			if g := groupFromBioscan(e.JsonData); g != nil {
+				groups = append(groups, *g)
+			}
+			break
+		}
+	}
+	return groups
+}
+
+// categoryShape / indicatorJson - форма блока показателей в JSON отчёта
+// анализа (categories/sections → indicators).
+type categoryShape struct {
+	Name       string          `json:"name"`
+	Indicators []indicatorJson `json:"indicators"`
+}
+
+type indicatorJson struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Status string `json:"status"`
+}
+
+// groupsFromAnalysis строит группы показателей из категорий/секций отчёта
+// анализа (реальные индикаторы с их статусами из ИИ-отчёта).
+func groupsFromAnalysis(jsonStr string) []MetricGroup {
+	var doc struct {
+		Categories []categoryShape `json:"categories"`
+		Sections   []categoryShape `json:"sections"`
+	}
+	if err := json.Unmarshal([]byte(jsonStr), &doc); err != nil {
+		return nil
+	}
+	var groups []MetricGroup
+	add := func(c categoryShape) {
+		if strings.TrimSpace(c.Name) == "" {
+			return
+		}
+		items := []MetricItem{}
+		for _, ind := range c.Indicators {
+			if strings.TrimSpace(ind.Name) == "" {
+				continue
+			}
+			items = append(items, MetricItem{
+				Name:   ind.Name,
+				Value:  strings.TrimSpace(ind.Value),
+				Status: normStatus(ind.Status),
+			})
+		}
+		if len(items) > 0 {
+			groups = append(groups, MetricGroup{
+				Title: strings.TrimSpace(c.Name),
+				Icon:  iconForCategory(c.Name),
+				Items: items,
+			})
+		}
+	}
+	for _, c := range doc.Categories {
+		add(c)
+	}
+	for _, s := range doc.Sections {
+		add(s)
+	}
+	return groups
+}
+
+// groupFromBioscan строит блок «Тело (Bioscan PRO)» из отчёта биоскана:
+// Body Score + оценки зон тела. Возвращает nil, если данных нет.
+func groupFromBioscan(jsonStr string) *MetricGroup {
+	var doc struct {
+		Score   int `json:"score"`
+		Posture struct {
+			PostureScore int `json:"posture_score"`
+		} `json:"posture"`
+		Zones []struct {
+			Name   string `json:"name"`
+			Score  int    `json:"score"`
+			Status string `json:"status"`
+		} `json:"zones"`
+	}
+	if err := json.Unmarshal([]byte(jsonStr), &doc); err != nil {
+		return nil
+	}
+	items := []MetricItem{}
+	if doc.Score > 0 {
+		items = append(items, MetricItem{Name: "Body Score", Value: strconv.Itoa(doc.Score), Status: ""})
+	} else if doc.Posture.PostureScore > 0 {
+		items = append(items, MetricItem{Name: "Осанка", Value: strconv.Itoa(doc.Posture.PostureScore), Status: ""})
+	}
+	for _, z := range doc.Zones {
+		if strings.TrimSpace(z.Name) == "" {
+			continue
+		}
+		items = append(items, MetricItem{
+			Name:   z.Name,
+			Value:  strconv.Itoa(z.Score),
+			Status: normStatus(z.Status),
+		})
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	return &MetricGroup{Title: "Тело (Bioscan PRO)", Icon: "✨", Items: items}
+}
+
+// normStatus приводит статус показателя к каноническому виду для CSS-классов
+// фронта (ind-status-normal/warning/critical).
+func normStatus(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "normal", "норма", "good", "ok":
+		return "normal"
+	case "warning", "внимание", "warn":
+		return "warning"
+	case "critical", "критично", "alert":
+		return "critical"
+	default:
+		return ""
+	}
+}
+
+// iconForCategory подбирает эмодзи для заголовка группы по названию категории.
+func iconForCategory(name string) string {
+	n := strings.ToLower(strings.TrimSpace(name))
+	switch {
+	case strings.Contains(n, "кров"):
+		return "🩸"
+	case strings.Contains(n, "биохим"):
+		return "🧪"
+	case strings.Contains(n, "гормон"):
+		return "⚗️"
+	case strings.Contains(n, "моч"):
+		return "💧"
+	case strings.Contains(n, "кал"):
+		return "🧫"
+	case strings.Contains(n, "иммун"):
+		return "🛡️"
+	case strings.Contains(n, "витамин"):
+		return "💊"
+	case strings.Contains(n, "липид"), strings.Contains(n, "холест"):
+		return "🫀"
+	default:
+		return "📋"
+	}
 }
 
 // buildDemoMetrics возвращает синтетические «полностью заполненные» метрики
@@ -839,6 +1048,34 @@ func (h *Handler) buildDemoMetrics() MetricsResponse {
 			"Поддерживайте водный баланс (≈2 л воды в день).",
 			"Активность выросла - отличный прогресс за месяц (индекс 60 → 82).",
 			"Контролируйте уровень гемоглобина раз в 3–4 недели.",
+		},
+		// Адаптивные блоки (демо): показываем, как выглядят реальные
+		// показатели из анализа и Bioscan PRO.
+		Groups: []MetricGroup{
+			{
+				Title: "Кровь", Icon: "🩸",
+				Items: []MetricItem{
+					{Name: "Гемоглобин", Value: "145", Status: "normal"},
+					{Name: "Лейкоциты", Value: "6.2", Status: "normal"},
+					{Name: "Тромбоциты", Value: "250", Status: "normal"},
+				},
+			},
+			{
+				Title: "Питание", Icon: "🍎",
+				Items: []MetricItem{
+					{Name: "Белок", Value: "92 г", Status: "normal"},
+					{Name: "Углеводы", Value: "210 г", Status: "normal"},
+					{Name: "Жиры", Value: "65 г", Status: "normal"},
+				},
+			},
+			{
+				Title: "Тело (Bioscan PRO)", Icon: "✨",
+				Items: []MetricItem{
+					{Name: "Body Score", Value: "86", Status: ""},
+					{Name: "Осанка", Value: "84", Status: "normal"},
+					{Name: "Пресс", Value: "74", Status: "warning"},
+				},
+			},
 		},
 	}
 }

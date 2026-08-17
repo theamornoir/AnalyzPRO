@@ -86,6 +86,8 @@ func sendPhotoPrompt(ctx context.Context, b *tgbot.Bot, sm states.StateManager, 
 	var prompt string
 
 	switch nextState {
+	case states.StateWaitingBioscanPhoto1:
+		prompt = locales.MsgBioscanPhotoPrompt1
 	case states.StateWaitingBioscanPhoto2:
 		prompt = locales.MsgBioscanPhotoPrompt2
 	case states.StateWaitingBioscanPhoto3:

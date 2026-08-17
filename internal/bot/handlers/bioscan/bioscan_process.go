@@ -58,10 +58,10 @@ func ProcessBioscanWithPhotos(
 		return
 	}
 
-	contextInfo := fmt.Sprintf(
-		"Данные пользователя:\nИмя: %s\nВозраст: %s лет\nРост: %s см\nВес: %s кг\nЦель: %s",
-		name, age, height, weight, goal,
-	)
+	// Контекст для ИИ: базовые поля + весь опросник Bioscan PRO (образ
+	// жизни, тренировки, травмы, питание, привычки) - чтобы отчёт Body
+	// Intelligence учитывал и анкету, а не только фото.
+	contextInfo := BuildBioscanText(sm.GetAllUserData(chatID))
 
 	bioscanSteps := []string{
 		locales.BioscanStatusAnalyzingProportions,

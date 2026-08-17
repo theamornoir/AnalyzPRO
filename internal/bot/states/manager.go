@@ -34,11 +34,35 @@ const (
 	StateWaitingSportType          State = "waiting_sport_type"
 	StateWaitingGoal               State = "waiting_goal"
 
-	StateWaitingBioscanName    State = "waiting_bioscan_name"
-	StateWaitingBioscanAge     State = "waiting_bioscan_age"
-	StateWaitingBioscanHeight  State = "waiting_bioscan_height"
-	StateWaitingBioscanWeight  State = "waiting_bioscan_weight"
-	StateWaitingBioscanGoal    State = "waiting_bioscan_goal"
+	StateWaitingBioscanName   State = "waiting_bioscan_name"
+	StateWaitingBioscanAge    State = "waiting_bioscan_age"
+	StateWaitingBioscanHeight State = "waiting_bioscan_height"
+	StateWaitingBioscanWeight State = "waiting_bioscan_weight"
+	StateWaitingBioscanGoal   State = "waiting_bioscan_goal"
+
+	// Состояния опросника расширенного Bioscan PRO (отдельный от анализа
+	// блок вопросов про образ жизни, спорт, травмы и здоровье). Они идут
+	// ПОСЛЕ цели и ДО загрузки фотографий, чтобы отчёт Body Intelligence
+	// учитывал не только фото, но и анкету пользователя.
+	StateWaitingBioscanTrainingExp      State = "waiting_bioscan_training_exp"
+	StateWaitingBioscanTrainingFreq     State = "waiting_bioscan_training_freq"
+	StateWaitingBioscanTrainingType     State = "waiting_bioscan_training_type"
+	StateWaitingBioscanInjuries         State = "waiting_bioscan_injuries"
+	StateWaitingBioscanPostureIssues    State = "waiting_bioscan_posture_issues"
+	StateWaitingBioscanImproveZones     State = "waiting_bioscan_improve_zones"
+	StateWaitingBioscanMobility         State = "waiting_bioscan_mobility"
+	StateWaitingBioscanRecovery         State = "waiting_bioscan_recovery"
+	StateWaitingBioscanSleep            State = "waiting_bioscan_sleep"
+	StateWaitingBioscanStress           State = "waiting_bioscan_stress"
+	StateWaitingBioscanNutrition        State = "waiting_bioscan_nutrition"
+	StateWaitingBioscanProtein          State = "waiting_bioscan_protein"
+	StateWaitingBioscanWater            State = "waiting_bioscan_water"
+	StateWaitingBioscanSmoking          State = "waiting_bioscan_smoking"
+	StateWaitingBioscanAlcohol          State = "waiting_bioscan_alcohol"
+	StateWaitingBioscanSedentary        State = "waiting_bioscan_sedentary"
+	StateWaitingBioscanBodyFatGoal      State = "waiting_bioscan_body_fat_goal"
+	StateWaitingBioscanDietRestrictions State = "waiting_bioscan_diet_restrictions"
+
 	StateWaitingBioscanPhoto1  State = "waiting_bioscan_photo1"
 	StateWaitingBioscanPhoto2  State = "waiting_bioscan_photo2"
 	StateWaitingBioscanPhoto3  State = "waiting_bioscan_photo3"

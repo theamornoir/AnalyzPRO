@@ -7,6 +7,7 @@ import (
 
 	"github.com/jung-kurt/gofpdf"
 
+	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/models"
 )
 
@@ -37,12 +38,12 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 	pdf.SetXY(pdfMargin, 6)
 	pdf.SetFont("Arial", "", 16)
 	pdf.SetTextColor(255, 255, 255)
-	pdf.Cell(0, 8, "BIOSCAN - отчёт о телосложении")
+	pdf.Cell(0, 8, locales.RptMsgPdfHeader)
 
 	pdf.SetXY(pdfMargin, 15)
 	pdf.SetFont("Arial", "", 9)
 	pdf.SetTextColor(220, 230, 245)
-	sub := "Персональный фотографический анализ тела"
+	sub := locales.RptMsgPdfSubHeader
 	if rep.Profile.Name != "" {
 		sub += " · " + rep.Profile.Name
 	}
@@ -52,10 +53,10 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 
 	// Общий балл и уровень.
 	if rep.Score > 0 || rep.Level != "" {
-		w.heading("Общая оценка")
+		w.heading(locales.RptMsgPdfOverallAssessment)
 		line := ""
 		if rep.Score > 0 {
-			line += "Балл: " + strconv.Itoa(rep.Score)
+			line += locales.RptMsgPdfScoreLabel + strconv.Itoa(rep.Score)
 		}
 		if rep.Level != "" {
 			if line != "" {
@@ -68,59 +69,59 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 
 	// Параметры тела.
 	if rep.Body.Height != "" || rep.Body.Weight != "" || rep.Body.MuscleMass != "" || rep.Body.Fat != "" {
-		w.heading("Параметры тела")
+		w.heading(locales.RptMsgPdfBodyParams)
 		parts := []string{}
 		if rep.Body.Height != "" {
-			parts = append(parts, "Рост: "+rep.Body.Height)
+			parts = append(parts, locales.RptMsgPdfHeightLabel+rep.Body.Height)
 		}
 		if rep.Body.Weight != "" {
-			parts = append(parts, "Вес: "+rep.Body.Weight)
+			parts = append(parts, locales.RptMsgPdfWeightLabel+rep.Body.Weight)
 		}
 		if rep.Body.MuscleMass != "" {
-			parts = append(parts, "Мышечная масса: "+rep.Body.MuscleMass)
+			parts = append(parts, locales.RptMsgPdfMuscleMassLabel+rep.Body.MuscleMass)
 		}
 		if rep.Body.Fat != "" {
-			parts = append(parts, "Процент жира: "+rep.Body.Fat)
+			parts = append(parts, locales.RptMsgPdfBodyFatLabel+rep.Body.Fat)
 		}
 		w.paragraph(joinParts(parts, "   "))
 	}
 
 	// Композиция.
 	if rep.Composition != "" {
-		w.heading("Композиция тела")
+		w.heading(locales.RptMsgPdfComposition)
 		w.paragraph(rep.Composition)
 	}
 
 	// Профиль развития (диаграммы).
 	if rep.Profile.Composition > 0 || rep.Profile.MuscleDevelopment > 0 ||
 		rep.Profile.Balance > 0 || rep.Profile.Potential > 0 {
-		w.heading("Профиль развития")
-		w.barRow("Композиция", rep.Profile.Composition)
-		w.barRow("Развитие мышц", rep.Profile.MuscleDevelopment)
-		w.barRow("Баланс", rep.Profile.Balance)
-		w.barRow("Потенциал", rep.Profile.Potential)
+		w.heading(locales.RptMsgPdfProfileDev)
+		w.barRow(locales.RptMsgPdfCompositionLabel, rep.Profile.Composition)
+		w.barRow(locales.RptMsgPdfMuscleDevLabel, rep.Profile.MuscleDevelopment)
+		w.barRow(locales.RptMsgPdfBalanceLabel, rep.Profile.Balance)
+		w.barRow(locales.RptMsgPdfPotentialLabel, rep.Profile.Potential)
 		w.pdf.Ln(2)
 	}
 
 	// Резюме.
 	if rep.Summary != "" {
-		w.heading("Резюме")
+		w.heading(locales.RptMsgPdfSummary)
 		w.paragraph(rep.Summary)
 	}
 
 	// Зоны.
 	if len(rep.Zones) > 0 {
-		w.heading("Оценка зон тела")
+		w.heading(locales.RptMsgPdfZoneAssessment)
 		for _, z := range rep.Zones {
 			w.barRow(truncate(z.Name, 40), z.Score)
 			if z.Status != "" {
-				w.paragraph("Статус: " + z.Status)
+				w.paragraph(locales.RptMsgPdfStatusLabel + z.Status)
 			}
 			if z.Description != "" {
 				w.paragraph(z.Description)
 			}
 			if z.Recommendation != "" {
-				w.paragraph("Рекомендация: " + z.Recommendation)
+				w.paragraph(locales.RptMsgPdfRecLabel + z.Recommendation)
 			}
 			w.pdf.Ln(1)
 		}
@@ -128,7 +129,7 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 
 	// Мышцы.
 	if len(rep.Muscles) > 0 {
-		w.heading("Мышечные группы")
+		w.heading(locales.RptMsgPdfMuscleGroups)
 		for _, m := range rep.Muscles {
 			s := "• " + m.Name
 			if m.Level != "" {
@@ -136,31 +137,31 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 			}
 			w.paragraph(s)
 			if m.Assessment != "" {
-				w.paragraph("Оценка: " + m.Assessment)
+				w.paragraph(locales.RptMsgPdfAssessmentLabel + m.Assessment)
 			}
 			if m.Symmetry != "" {
-				w.paragraph("Симметрия: " + m.Symmetry)
+				w.paragraph(locales.RptMsgPdfSymmetryLabel + m.Symmetry)
 			}
 			if m.Recommendation != "" {
-				w.paragraph("Рекомендация: " + m.Recommendation)
+				w.paragraph(locales.RptMsgPdfRecLabel + m.Recommendation)
 			}
 		}
 	}
 
 	// Осанка.
 	if rep.Posture.Type != "" || rep.Posture.Description != "" {
-		w.heading("Осанка")
+		w.heading(locales.RptMsgPdfPosture)
 		if rep.Posture.Type != "" {
-			w.paragraph("Тип: " + rep.Posture.Type)
+			w.paragraph(locales.RptMsgPdfTypeLabel + rep.Posture.Type)
 		}
 		if rep.Posture.Head != "" {
-			w.paragraph("Голова: " + rep.Posture.Head)
+			w.paragraph(locales.RptMsgPdfHeadLabel + rep.Posture.Head)
 		}
 		if rep.Posture.Shoulders != "" {
-			w.paragraph("Плечи: " + rep.Posture.Shoulders)
+			w.paragraph(locales.RptMsgPdfShouldersLabel + rep.Posture.Shoulders)
 		}
 		if rep.Posture.Pelvis != "" {
-			w.paragraph("Таз: " + rep.Posture.Pelvis)
+			w.paragraph(locales.RptMsgPdfPelvisLabel + rep.Posture.Pelvis)
 		}
 		if rep.Posture.Description != "" {
 			w.paragraph(rep.Posture.Description)
@@ -169,21 +170,21 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 
 	// Зоны внимания.
 	if len(rep.AttentionZones) > 0 {
-		w.heading("Зоны внимания")
+		w.heading(locales.RptMsgPdfAttentionZones)
 		for _, a := range rep.AttentionZones {
 			w.paragraph("• " + a.Name)
 			if a.Problem != "" {
-				w.paragraph("Проблема: " + a.Problem)
+				w.paragraph(locales.RptMsgPdfProblemLabel + a.Problem)
 			}
 			if a.Solution != "" {
-				w.paragraph("Решение: " + a.Solution)
+				w.paragraph(locales.RptMsgPdfSolutionLabel + a.Solution)
 			}
 		}
 	}
 
 	// Приоритеты.
 	if len(rep.Priorities) > 0 {
-		w.heading("Приоритеты развития")
+		w.heading(locales.RptMsgPdfPriorities)
 		for _, p := range rep.Priorities {
 			s := "• " + p.Title
 			if p.Description != "" {
@@ -195,7 +196,7 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 
 	// Тренировки.
 	if len(rep.TrainingDays) > 0 {
-		w.heading("Программа тренировок")
+		w.heading(locales.RptMsgPdfTrainingProgram)
 		for _, d := range rep.TrainingDays {
 			w.paragraph("• " + d.Day)
 			for _, ex := range d.Exercises {
@@ -212,7 +213,7 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 
 	// Питание.
 	if len(rep.Nutrition) > 0 {
-		w.heading("Питание")
+		w.heading(locales.RptMsgPdfNutrition)
 		for _, n := range rep.Nutrition {
 			w.bullet(n)
 		}
@@ -220,7 +221,7 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 
 	// Восстановление.
 	if len(rep.Recovery) > 0 {
-		w.heading("Восстановление")
+		w.heading(locales.RptMsgPdfRecovery)
 		for _, n := range rep.Recovery {
 			w.bullet(n)
 		}
@@ -228,9 +229,9 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 
 	// Прогресс.
 	if rep.Progress.Recheck != "" || len(rep.Progress.Targets) > 0 {
-		w.heading("Контроль прогресса")
+		w.heading(locales.RptMsgPdfProgressControl)
 		if rep.Progress.Recheck != "" {
-			w.paragraph("Повторная проверка: " + rep.Progress.Recheck)
+			w.paragraph(locales.RptMsgPdfRecheckLabel + rep.Progress.Recheck)
 		}
 		for _, t := range rep.Progress.Targets {
 			w.bullet(t)
@@ -242,9 +243,7 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 	w.pdf.SetFont("Arial", "", 8)
 	w.pdf.SetTextColor(120, 120, 120)
 	w.pdf.MultiCell(pdfPageW-2*pdfMargin, 4,
-		"Отчёт сформирован автоматически на основе фотографий и носит "+
-			"информационный характер. Он не является медицинским диагнозом и не "+
-			"заменяет консультацию специалиста.", "", "L", false)
+		locales.RptMsgPdfDisclaimer, "", "L", false)
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {

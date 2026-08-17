@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"strings"
 
+	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/report/models"
 )
 
@@ -329,11 +330,11 @@ func RenderAdaptiveReport(data models.AdaptiveReportData) string {
 		"statusText": func(status string) string {
 			switch status {
 			case "normal":
-				return "Норма"
+				return locales.RptMsgAdaptiveStatusNormal
 			case "warning":
-				return "Внимание"
+				return locales.RptMsgAdaptiveStatusWarning
 			case "critical":
-				return "Критично"
+				return locales.RptMsgAdaptiveStatusCritical
 			default:
 				return ""
 			}
@@ -345,13 +346,13 @@ func RenderAdaptiveReport(data models.AdaptiveReportData) string {
 
 	tmpl, err := template.New("adaptive").Funcs(funcMap).Parse(adaptiveHTMLTemplate)
 	if err != nil {
-		return fmt.Sprintf("<h1>Ошибка рендера: %v</h1>", err)
+		return fmt.Sprintf(locales.RptErrAdaptiveRender, err)
 	}
 
 	var buf bytes.Buffer
 	err = tmpl.Execute(&buf, data)
 	if err != nil {
-		return fmt.Sprintf("<h1>Ошибка рендера: %v</h1>", err)
+		return fmt.Sprintf(locales.RptErrAdaptiveRender, err)
 	}
 
 	return sanitizeHTML(buf.String())

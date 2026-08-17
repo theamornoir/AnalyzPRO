@@ -60,7 +60,7 @@ func New() (*App, error) {
 	if err := db.Migrate(dbConn); err != nil {
 		return nil, fmt.Errorf("не удалось применить миграции БД: %w", err)
 	}
-	log.Printf("🗄️ База данных инициализирована: path=%s", cfg.DBPath)
+	log.Printf(locales.LogDBInitialized, cfg.DBPath)
 
 	stateManager := states.NewMemoryStateManager("./data/states.json")
 
@@ -87,10 +87,10 @@ func New() (*App, error) {
 	var appStorage *storage.Storage
 	if useMock {
 		appStorage = storage.NewMockStorage()
-		log.Printf("🗄️ Используется МОК-хранилище (USE_MOCK=true)")
+		log.Printf(locales.LogUsingMockStorage)
 	} else {
 		appStorage = storage.NewSQLStorage(dbConn)
-		log.Printf("🗄️ SQL-хранилище инициализировано (Users=%T, Diagnoses=%T, Cycles=%T, Preferences=%T)",
+		log.Printf(locales.LogSQLStorageInit,
 			appStorage.Users, appStorage.Diagnoses, appStorage.Cycles, appStorage.Preferences)
 	}
 
@@ -105,7 +105,7 @@ func New() (*App, error) {
 	// Слой аналитики (события: старт, анализ, премиум, ошибки). Персистентный
 	// JSONL-файл (ANALYTICS_PATH).
 	analytics.Init(cfg.AnalyticsPath)
-	log.Printf("📈 Аналитика инициализирована: path=%s", cfg.AnalyticsPath)
+	log.Printf(locales.LogAnalyticsInit, cfg.AnalyticsPath)
 
 	// HTML→PDF конвертер (внешний сервис html2pdf.app по HTML2PDF_API_KEY).
 	// Используется для расширенного анализа и Bioscan PRO - отчёты
@@ -142,16 +142,16 @@ func New() (*App, error) {
 	log.Printf(locales.LogUploadDir, cfg.UploadDir)
 	log.Printf(locales.LogMockMode, useMock)
 	log.Printf(locales.LogAdminChatID, cfg.AdminChatID)
-	log.Printf("🌐 Web App URL (для кнопки дашборда): %s", cfg.WebAppURL)
+	log.Printf(locales.LogWebAppURL, cfg.WebAppURL)
 	if cfg.DashboardURL != cfg.WebAppURL {
-		log.Printf("🌐 Dashboard URL: %s", cfg.DashboardURL)
+		log.Printf(locales.LogDashboardURL, cfg.DashboardURL)
 	}
 	if strings.HasPrefix(cfg.WebAppURL, "https") {
-		log.Printf("✅ Дашборд будет открываться как Mini App прямо в Telegram (HTTPS).")
+		log.Printf(locales.LogDashboardHTTPS)
 	} else if strings.Contains(cfg.WebAppURL, "localhost") || strings.Contains(cfg.WebAppURL, "127.0.0.1") {
-		log.Printf("💡 Дашборд откроется как Mini App в Telegram Desktop на этой же машине (localhost). На телефоне запустите `make tunnel` (cloudflared/ngrok) для HTTPS - бот сам подхватит https-URL.")
+		log.Printf(locales.LogDashboardLocalhost)
 	} else {
-		log.Printf("💡 Дашборд доступен по локальной сети (http). На телефоне в той же Wi-Fi откройте ссылку в браузере. Для Mini App запустите `make tunnel` (cloudflared/ngrok) и задайте WEBAPP_URL/HTTPS-туннель.")
+		log.Printf(locales.LogDashboardLAN)
 	}
 
 	return &App{
@@ -172,7 +172,7 @@ func (a *App) Run(parent context.Context) {
 	// доходит до пользователя. Блокировка снимается при выходе процесса
 	// (flock), поэтому зависших lock-файлов не остаётся.
 	if err := acquireInstanceLock(); err != nil {
-		log.Fatalf("⛔ Запуск отменён: %v\n   Возможно, уже запущен другой экземпляр бота с тем же токеном. Остановите его (Ctrl+C в том терминале) и повторите `make run`.", err)
+		log.Fatalf(locales.LogLaunchCancelled, err)
 	}
 
 	log.Printf(locales.LogBotRunning)
@@ -188,7 +188,7 @@ func acquireInstanceLock() error {
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		_ = f.Close()
-		return fmt.Errorf("не удалось заблокировать /tmp/analyzpro.lock (уже запущен?): %w", err)
+		return fmt.Errorf(locales.ErrLockAcquire, err)
 	}
 	// оставляем fd открытым на время жизни процесса - lock держится до выхода
 	return nil

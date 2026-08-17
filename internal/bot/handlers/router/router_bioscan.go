@@ -23,6 +23,13 @@ func (r *router) handleBioscanStates(ctx context.Context, b *tgbot.Bot, chatID i
 		return false
 	}
 
+	// Вопросы опросника Bioscan PRO (образ жизни / спорт / здоровье), которые
+	// идут после цели и до загрузки 4 фотографий. Возвращает true, если
+	// текущее состояние - один из вопросов и ввод обработан.
+	if bioscan.HandleBioscanQuestionnaireState(ctx, b, r.stateManager, chatID, text) {
+		return true
+	}
+
 	switch state {
 	case states.StateWaitingBioscanBasicPhoto:
 		log.Printf("[BIOSCAN] базовый: фото от chatID=%d", chatID)

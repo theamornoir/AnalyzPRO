@@ -140,11 +140,11 @@ func bodyStatusClass(status string) string {
 func bodyStatusText(status string) string {
 	switch status {
 	case "good", "normal":
-		return "в норме"
+		return locales.RptMsgBodyStatusNormal
 	case "warning", "attention":
-		return "внимание"
+		return locales.RptMsgBodyStatusWarning
 	case "critical", "risk":
-		return "риск"
+		return locales.RptMsgBodyStatusCritical
 	default:
 		return status
 	}
@@ -225,13 +225,13 @@ func postureRadar(p models.BodyScanPosture) template.HTML {
 		label string
 		value int
 	}{
-		{"Осанка", p.PostureScore},
-		{"Симметрия", p.Symmetry},
-		{"Плечи", p.ShoulderBalance},
-		{"Таз", p.PelvicBalance},
-		{"Позвоночник", p.SpinalAlignment},
-		{"Мобильность", p.Mobility},
-		{"Стабильность", p.Stability},
+		{locales.RptMsgPdfPosture, p.PostureScore},
+		{locales.RptMsgRadarAxisSymmetry, p.Symmetry},
+		{locales.RptMsgRadarAxisShoulders, p.ShoulderBalance},
+		{locales.RptMsgRadarAxisPelvis, p.PelvicBalance},
+		{locales.RptMsgRadarAxisSpine, p.SpinalAlignment},
+		{locales.RptMsgRadarAxisMobility, p.Mobility},
+		{locales.RptMsgRadarAxisStability, p.Stability},
 	}
 	const size = 230
 	cx, cy, R := float64(size)/2, float64(size)/2, 88.0
@@ -399,11 +399,11 @@ func NewRenderer() (*Renderer, error) {
 		"statusLabel": func(status string) string {
 			switch status {
 			case "normal", "good":
-				return "норма"
+				return locales.RptMsgStatusLabelNormal
 			case "warning":
-				return "внимание"
+				return locales.RptMsgStatusLabelWarning
 			case "critical", "risk":
-				return "риск"
+				return locales.RptMsgStatusLabelCritical
 			default:
 				return status
 			}

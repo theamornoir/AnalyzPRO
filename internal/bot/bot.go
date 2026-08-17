@@ -135,8 +135,15 @@ func (b *Bot) Start(ctx context.Context) {
 			// сессии → initData оказался бы пустым/чужим.
 			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 		})
-		dashHandler := dashboard.NewHandler(b.paymentService, b.botToken, b.monitorRepo, b.reportRenderer, b.pdfConverter)
+		// Имя бота нужно Mini App, чтобы по кнопке Premium закрыть себя
+		// и перевести пользователя в раздел оформления Premium (t.me-ссылка).
+		botUsername := ""
+		if me, meErr := b.client.GetMe(ctx); meErr == nil && me != nil {
+			botUsername = me.Username
+		}
+		dashHandler := dashboard.NewHandler(b.paymentService, b.botToken, b.monitorRepo, b.reportRenderer, b.pdfConverter, botUsername)
 		mux.HandleFunc("/dashboard/", dashHandler.ServeWebApp)
+		mux.HandleFunc("/api/config", dashHandler.Config)
 		mux.HandleFunc("/api/metrics", dashHandler.Metrics)
 		mux.HandleFunc("/api/profile", dashHandler.SaveProfile)
 		mux.HandleFunc("/api/reports", dashHandler.Reports)

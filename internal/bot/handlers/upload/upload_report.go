@@ -71,7 +71,7 @@ func renderAndSendReport(
 
 	// Авто-сохранение результата в историю пользователя (для модуля Мониторинг).
 	if saver != nil {
-		title := monitoring.ExtractTitle(cleanedJSON, "Анализ")
+		title := monitoring.ExtractTitle(cleanedJSON, locales.MsgUploadDefaultTitleAnalysis)
 		if saveErr := saver.SaveResult(ctx, &monitoring.HistoryEntry{
 			TelegramID: chatID,
 			Type:       "analysis",
@@ -80,25 +80,25 @@ func renderAndSendReport(
 			JsonData:   cleanedJSON,
 			ReportHTML: htmlResult,
 		}); saveErr != nil {
-			log.Printf("[MONITORING] не удалось сохранить историю chatID=%d: %v", chatID, saveErr)
+			log.Printf(locales.LogUploadMonitoringSaveErr, chatID, saveErr)
 		} else {
-			log.Printf("[MONITORING] история сохранена chatID=%d type=analysis", chatID)
+			log.Printf(locales.LogUploadMonitoringSaved, chatID)
 		}
 	}
 
 	// Персистим результат как Diagnosis (для профиля/истории пользователя).
 	if appStorage != nil {
 		if derr := appStorage.SaveDiagnosisForUser(ctx, chatID, "analysis", cleanedJSON, htmlResult); derr != nil {
-			log.Printf("[STORAGE] не удалось сохранить диагноз chatID=%d: %v", chatID, derr)
+			log.Printf(locales.LogUploadStorageSaveErr, chatID, derr)
 		} else {
-			log.Printf("[STORAGE] диагноз сохранён chatID=%d type=analysis", chatID)
+			log.Printf(locales.LogUploadStorageSaved, chatID)
 		}
 	}
 
 	analytics.EmitEvent(ctx, analytics.Event{
 		Type:       analytics.EventAnalysis,
 		TelegramID: chatID,
-		Meta:       map[string]interface{}{"title": monitoring.ExtractTitle(cleanedJSON, "Анализ")},
+		Meta:       map[string]interface{}{"title": monitoring.ExtractTitle(cleanedJSON, locales.MsgUploadDefaultTitleAnalysis)},
 	})
 
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
@@ -195,7 +195,7 @@ func renderAndSendDossier(
 
 	// Авто-сохранение результата в историю пользователя (для модуля Мониторинг).
 	if saver != nil {
-		title := monitoring.ExtractTitle(cleanedJSON, "Досье здоровья")
+		title := monitoring.ExtractTitle(cleanedJSON, locales.MsgUploadDefaultTitleDossier)
 		if saveErr := saver.SaveResult(ctx, &monitoring.HistoryEntry{
 			TelegramID: chatID,
 			Type:       "analysis",
@@ -204,18 +204,18 @@ func renderAndSendDossier(
 			JsonData:   cleanedJSON,
 			ReportHTML: htmlResult,
 		}); saveErr != nil {
-			log.Printf("[MONITORING] не удалось сохранить историю chatID=%d: %v", chatID, saveErr)
+			log.Printf(locales.LogUploadMonitoringSaveErr, chatID, saveErr)
 		} else {
-			log.Printf("[MONITORING] история сохранена chatID=%d type=analysis", chatID)
+			log.Printf(locales.LogUploadMonitoringSaved, chatID)
 		}
 	}
 
 	// Персистим результат как Diagnosis (для профиля/истории пользователя).
 	if appStorage != nil {
 		if derr := appStorage.SaveDiagnosisForUser(ctx, chatID, "analysis", cleanedJSON, htmlResult); derr != nil {
-			log.Printf("[STORAGE] не удалось сохранить диагноз chatID=%d: %v", chatID, derr)
+			log.Printf(locales.LogUploadStorageSaveErr, chatID, derr)
 		} else {
-			log.Printf("[STORAGE] диагноз сохранён chatID=%d type=analysis", chatID)
+			log.Printf(locales.LogUploadStorageSaved, chatID)
 		}
 	}
 

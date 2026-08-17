@@ -128,8 +128,10 @@ func HandleBioscanGoal(ctx context.Context, b *tgbot.Bot, sm states.StateManager
 	goal = strings.TrimPrefix(goal, "🧘 ")
 
 	sm.SetUserData(chatID, "bioscan_goal", goal)
-	sm.SetState(chatID, states.StateWaitingBioscanPhoto1)
+	sm.SetState(chatID, states.StateWaitingBioscanTrainingExp)
 
+	// Первый вопрос опросника Bioscan PRO (образ жизни / тренировки / здоровье),
+	// который идёт до загрузки 4 фотографий.
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgBioscanStepGoal,
