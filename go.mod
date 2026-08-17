@@ -8,14 +8,19 @@ require (
 	github.com/jung-kurt/gofpdf v1.16.2
 	github.com/ledongthuc/pdf v0.0.0-20220302134840-0c2507a12d80
 	github.com/openai/openai-go v1.12.0
+	github.com/posthog/posthog-go v1.23.1
 	github.com/tmc/langchaingo v0.1.14
 	modernc.org/sqlite v1.56.0
 )
 
 require (
+	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.10.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
+	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pkoukk/tiktoken-go v0.1.6 // indirect

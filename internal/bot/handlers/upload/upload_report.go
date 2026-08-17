@@ -101,6 +101,15 @@ func renderAndSendReport(
 		Meta:       map[string]interface{}{"title": monitoring.ExtractTitle(cleanedJSON, locales.MsgUploadDefaultTitleAnalysis)},
 	})
 
+	// PostHog: успешная обработка анализа (расширенный/обычный).
+	aType := "regular"
+	if isExtendedAnalysis(stateManager, chatID) {
+		aType = "extended"
+	}
+	analytics.Track(chatID, "analysis_processed", map[string]interface{}{
+		"analysis_type": aType,
+	})
+
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
 	// Расширенный анализ конвертируем в PDF и отправляем как PDF-документ.
@@ -223,6 +232,15 @@ func renderAndSendDossier(
 		Type:       analytics.EventAnalysis,
 		TelegramID: chatID,
 		Meta:       map[string]interface{}{"title": monitoring.ExtractTitle(cleanedJSON, "Досье здоровья")},
+	})
+
+	// PostHog: успешная обработка досье/биоскана PRO (расширенный анализ).
+	aType := "regular"
+	if isExtendedAnalysis(stateManager, chatID) {
+		aType = "extended"
+	}
+	analytics.Track(chatID, "analysis_processed", map[string]interface{}{
+		"analysis_type": aType,
 	})
 
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)

@@ -9,6 +9,7 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
@@ -80,6 +81,33 @@ func MessageRouter(
 
 // handle - точка входа маршрутизатора.
 func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update) {
+	// Аналитика PostHog: фиксируем КАЖДОЕ взаимодействие пользователя как
+	// событие «interaction» (нажатие inline/reply-кнопки, команда, сообщение).
+	// Это гарантирует полный clickstream в дашборде, независимо от того,
+	// какая ветка обработки дальше сработает. Предметные события
+	// (user_started, analysis_processed и т.д.) остаются и дополняют его.
+	if update.CallbackQuery != nil {
+		analytics.TrackInteraction(update.CallbackQuery.From.ID, "callback", update.CallbackQuery.Data, nil)
+	} else if update.Message != nil {
+		text := strings.TrimSpace(update.Message.Text)
+		source := "message"
+		if strings.HasPrefix(text, "/") {
+			source = "command"
+		}
+		media := "text"
+		switch {
+		case update.Message.Photo != nil:
+			media = "photo"
+		case update.Message.Document != nil:
+			media = "document"
+		case update.Message.Voice != nil:
+			media = "voice"
+		case update.Message.Video != nil:
+			media = "video"
+		}
+		analytics.TrackInteraction(update.Message.Chat.ID, source, text, map[string]interface{}{"media": media})
+	}
+
 	// Обработка callback-запросов (inline buttons)
 	if update.CallbackQuery != nil {
 		r.handleCallback(ctx, b, update)

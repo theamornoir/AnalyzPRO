@@ -205,6 +205,9 @@ func ProcessBioscanWithPhotos(
 		TelegramID: chatID,
 	})
 
+	// PostHog: успешное завершение Bioscan PRO.
+	analytics.Track(chatID, "bioscan_completed", nil)
+
 	sm.SetState(chatID, states.StateIdle)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{

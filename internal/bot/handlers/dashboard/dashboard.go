@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	apmodels "github.com/theamornoir/analyzpro/internal/models"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
@@ -179,6 +180,9 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
+
+	// PostHog: открытие Сводки здоровья реальным пользователем (не демо).
+	analytics.Track(telegramID, "dashboard_opened", nil)
 
 	metrics := h.buildMetrics(r.Context(), telegramID)
 

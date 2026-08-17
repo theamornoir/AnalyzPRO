@@ -37,6 +37,9 @@ type Config struct {
 	MonitoringPath string
 	AnalyticsPath  string
 	DBPath         string
+	// PostHogAPIKey - Project API Key сервиса аналитики PostHog. Если пуст -
+	// события не отправляются (клиент posthog-go становится no-op).
+	PostHogAPIKey string
 }
 
 func Load() (*Config, error) {
@@ -91,6 +94,7 @@ func Load() (*Config, error) {
 		MonitoringPath:     getEnv("MONITORING_PATH", "./data/monitoring.db.json"),
 		AnalyticsPath:      getEnv("ANALYTICS_PATH", "./data/analytics.jsonl"),
 		DBPath:             getEnv("DB_PATH", "./data/analyzpro.db"),
+		PostHogAPIKey:      os.Getenv("POSTHOG_API_KEY"),
 	}, nil
 }
 

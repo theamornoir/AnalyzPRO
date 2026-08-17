@@ -153,6 +153,14 @@ func HandlePremiumConfirm(
 			Meta:       map[string]interface{}{"tariff": tariffID, "changed": wasPremium},
 		})
 
+		// PostHog: событие покупки Premium (русская подпись "Купил Premium").
+		// changed=true - это смена тарифа уже активного Premium, false -
+		// первая активация.
+		analytics.Track(chatID, "premium_purchased", map[string]interface{}{
+			"tariff":  tariffID,
+			"changed": wasPremium,
+		})
+
 		botutil.AnswerLogged(ctx, b, tgbot.AnswerCallbackQueryParams{
 			CallbackQueryID: update.CallbackQuery.ID,
 			Text:            "✅ Premium активирован!",

@@ -39,6 +39,11 @@ func StartHandler(
 			TelegramID: chatID,
 		})
 
+		// PostHog: первый/повторный запуск бота пользователем.
+		analytics.Track(chatID, "user_started", map[string]interface{}{
+			"source": "start_command",
+		})
+
 		// /start всегда освобождает «зависшее» состояние от прошлых сессий
 		// (оно персистится в states.json между перезапусками бота), чтобы
 		// пользователь начинал с чистого главного меню, а не из середины

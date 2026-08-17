@@ -107,6 +107,10 @@ func New() (*App, error) {
 	analytics.Init(cfg.AnalyticsPath)
 	log.Printf(locales.LogAnalyticsInit, cfg.AnalyticsPath)
 
+	// Клиент аналитики PostHog (события активности в дашборд app.posthog.com).
+	// При отсутствии POSTHOG_API_KEY клиент работает как no-op.
+	analytics.InitPostHog(cfg.PostHogAPIKey)
+
 	// HTML→PDF конвертер (внешний сервис html2pdf.app по HTML2PDF_API_KEY).
 	// Используется для расширенного анализа и Bioscan PRO - отчёты
 	// отправляются как PDF (при сбое конвертации - как HTML).
@@ -165,6 +169,10 @@ func (a *App) Run(parent context.Context) {
 	// HTTP-сервер и long-polling Telegram останавливаются сами.
 	ctx, stop := signal.NotifyContext(parent, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Корректно закрываем клиент аналитики PostHog (flush очереди событий)
+	// при выходе из Run (после остановки бота).
+	defer analytics.ClosePostHog()
 
 	// Запрещаем запуск второго экземпляра с тем же токеном. Два long-polling
 	// инстанса конкурируют за обновления Telegram - из-за этого часть ответов

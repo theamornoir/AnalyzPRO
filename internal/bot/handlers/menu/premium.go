@@ -10,6 +10,7 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -51,6 +52,9 @@ func PremiumHandler(
 ) func(context.Context, *tgbot.Bot, *models.Update) {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update) {
 		chatID := update.Message.Chat.ID
+
+		// PostHog: открытие раздела Premium.
+		analytics.Track(chatID, "premium_view", nil)
 
 		// Проверяем, не идёт ли уже процесс
 		currentState := stateManager.GetState(chatID)
