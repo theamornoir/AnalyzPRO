@@ -396,7 +396,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// Подтверждение загрузки файлов (inline-кнопки «Обработать/Отмена»).
 	case "upload_process":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "upload_process")
-		upload.StartAnalysis(ctx, b, r.stateManager, r.analysisService, r.reportRenderer, r.pdfConverter, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo)
+		upload.StartAnalysis(ctx, b, r.stateManager, r.analysisService, r.reportRenderer, r.pdfConverter, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo, r.webAppURL)
 	case "upload_cancel":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "upload_cancel")
 		upload.CancelUpload(ctx, b, r.stateManager, chatID)
@@ -404,7 +404,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// Подтверждение/перезапуск Bioscan (inline-кнопки на экране фото).
 	case "bioscan_confirm":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "bioscan_confirm")
-		bioscan.ProcessBioscanWithPhotos(ctx, b, r.stateManager, r.analysisService, r.pdfConverter, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo)
+		bioscan.ProcessBioscanWithPhotos(ctx, b, r.stateManager, r.analysisService, r.pdfConverter, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo, r.webAppURL)
 	case "bioscan_restart":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "bioscan_restart")
 		bioscan.StartBioscanFlow(ctx, b, r.stateManager, chatID)

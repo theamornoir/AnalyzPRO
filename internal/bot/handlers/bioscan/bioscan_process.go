@@ -36,6 +36,7 @@ func ProcessBioscanWithPhotos(
 	chatID int64,
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
+	webAppURL string,
 ) {
 	// Собираем все данные
 	name := sm.GetUserData(chatID, "bioscan_name")
@@ -227,6 +228,10 @@ func ProcessBioscanWithPhotos(
 			ReplyMarkup: keyboards.MainMenu(),
 		})
 	}
+
+	// Сообщаем, что результат сохранён в «Сводку здоровья», и даём
+	// кнопку для мгновенного открытия (все типы биосканов хранятся там).
+	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
 }
 
 // bioscanReportNote собирает текст доп. блока для выдачи Bioscan PRO:

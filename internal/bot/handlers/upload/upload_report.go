@@ -12,6 +12,7 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/analytics"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -37,6 +38,7 @@ func renderAndSendReport(
 	jsonResult string,
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
+	webAppURL string,
 ) {
 	cleanedJSON := cleanJSONReport(jsonResult)
 
@@ -143,6 +145,10 @@ func renderAndSendReport(
 	})
 
 	sendAnalysisCompleteNote(ctx, b, stateManager, chatID, buildReportNote(jsonResult))
+
+	// Сообщаем, что результат сохранён в «Сводку здоровья», и даём
+	// кнопку для мгновенного открытия (все типы анализов хранятся там).
+	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
 }
 
 // cleanJSONReport - очищает текст JSON от markdown-обёртки.
@@ -170,6 +176,7 @@ func renderAndSendDossier(
 	jsonResult string,
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
+	webAppURL string,
 ) {
 	cleanedJSON := cleanJSONReport(jsonResult)
 
@@ -276,4 +283,8 @@ func renderAndSendDossier(
 	})
 
 	sendAnalysisCompleteNote(ctx, b, stateManager, chatID, buildReportNote(jsonResult))
+
+	// Сообщаем, что результат сохранён в «Сводку здоровья», и даём
+	// кнопку для мгновенного открытия (все типы анализов хранятся там).
+	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
 }

@@ -18,24 +18,10 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// WebAppAssetsVersion - версия статических активов Mini App (Сводка здоровья
-// и Мониторинг). Увеличивайте при изменении index.html/app.js/style.css,
-// чтобы Telegram WebView перезапросил свежие файлы (иначе отдаёт
-// закэшированную старую версию - отсюда «пустой/старый» дашборд после правок).
-// Должна совпадать с ?v= в ссылках на активы в webapp_files/index.html.
-const WebAppAssetsVersion = "v21"
-
-// WithWebAppVersion добавляет ?v=<version> к URL Mini App, сбрасывая кэш
-// Telegram WebView при обновлении активов. Пустой URL не трогает.
-func WithWebAppVersion(u string) string {
-	if u == "" {
-		return u
-	}
-	if strings.Contains(u, "?") {
-		return u + "&v=" + WebAppAssetsVersion
-	}
-	return u + "?v=" + WebAppAssetsVersion
-}
+// WebAppAssetsVersion и WithWebAppVersion вынесены в пакет keyboards
+// (keyboards.WebAppAssetsVersion / keyboards.WithWebAppVersion), чтобы их
+// могли переиспользовать и другие пакеты (например, кнопка «Открыть Сводку
+// здоровья» после выдачи отчёта). Здесь оставлен только комментарий-якорь.
 
 // hubMessageKey - ключ в user-data, в котором хранится message_id текущего
 // «блока-хаба» (раздел Анализы/Здоровье/Сервис). Блок редактируется на месте
@@ -516,9 +502,9 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 	isPremium := r.paymentService.IsUserPremium(chatID)
 	log.Printf(locales.LogDashboardPremiumCheck, chatID, isPremium)
 
-	// Версия в URL сбрасывает кэш Telegram WebView (см. WebAppAssetsVersion).
+	// Версия в URL сбрасывает кэш Telegram WebView (см. keyboards.WebAppAssetsVersion).
 	// При demo добавляем ?demo=1 - бэкенд отдаст синтетические метрики.
-	webAppTarget := WithWebAppVersion(r.webAppURL)
+	webAppTarget := keyboards.WithWebAppVersion(r.webAppURL)
 	if demo {
 		if strings.Contains(webAppTarget, "?") {
 			webAppTarget += "&demo=1"
@@ -607,8 +593,8 @@ func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int6
 		}
 	}
 
-	// Версия в URL сбрасывает кэш Telegram WebView (см. WebAppAssetsVersion).
-	webAppTarget := WithWebAppVersion(monitoringWebAppURL(r.webAppURL))
+	// Версия в URL сбрасывает кэш Telegram WebView (см. keyboards.WebAppAssetsVersion).
+	webAppTarget := keyboards.WithWebAppVersion(monitoringWebAppURL(r.webAppURL))
 	if demo {
 		if strings.Contains(webAppTarget, "?") {
 			webAppTarget += "&demo=1"

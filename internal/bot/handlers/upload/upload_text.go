@@ -31,6 +31,7 @@ func handleTextUpload(
 	text string,
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
+	webAppURL string,
 ) {
 	payload := strings.TrimSpace(text)
 	if payload == "" {
@@ -61,7 +62,7 @@ func handleTextUpload(
 
 		jsonResult, err := analysisService.HandleAnalysisJSON(ctx, analysisPayload)
 		if err == nil && jsonResult != "" {
-			renderAndSendReport(ctx, b, stateManager, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, jsonResult, appStorage, saver)
+			renderAndSendReport(ctx, b, stateManager, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, jsonResult, appStorage, saver, webAppURL)
 			return
 		}
 	}
@@ -80,5 +81,11 @@ func handleTextUpload(
 		Text:   result,
 	})
 
+	// Сохраняем ОБЫЧНЫЙ анализ (текстом) в «Сводку здоровья».
+	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, result)
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
+
+	// Сообщаем, что результат сохранён в «Сводку здоровья», и даём
+	// кнопку для мгновенного открытия.
+	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
 }

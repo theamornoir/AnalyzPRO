@@ -19,6 +19,7 @@ import (
 // UploadHandler - главный обработчик загрузки файлов и запуска анализа.
 // saver сохраняет готовый результат в историю пользователя (для Мониторинга).
 // appStorage персистит результат анализа как Diagnosis (Storage).
+// webAppURL используется для кнопки «Открыть Сводку здоровья» после отчёта.
 func UploadHandler(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
@@ -28,6 +29,7 @@ func UploadHandler(
 	stickerID string,
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
+	webAppURL string,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
 
 	return func(
@@ -49,7 +51,7 @@ func UploadHandler(
 
 		if state == states.StateWaitingUploadConfirm {
 			log.Printf(locales.LogUploadWaitingConfirm)
-			handleUploadConfirm(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, update.Message, appStorage, saver)
+			handleUploadConfirm(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, update.Message, appStorage, saver, webAppURL)
 			return
 		}
 
@@ -76,7 +78,7 @@ func UploadHandler(
 
 		if update.Message.Text != "" {
 			log.Printf(locales.LogProcessingUploadText, update.Message.Text)
-			handleTextUpload(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, update.Message.Text, appStorage, saver)
+			handleTextUpload(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, update.Message.Text, appStorage, saver, webAppURL)
 			return
 		}
 

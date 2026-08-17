@@ -112,6 +112,9 @@ const (
 	MsgBioscanBasicPhotoPrompt = "📤 Отправьте ваше фото:"
 	MsgBioscanBasicDone        = "✅ Базовый Bioscan готов! Хотите детальный отчёт с графиками и программой тренировок? Попробуйте ✨ Bioscan PRO (Premium) в меню «📋 Анализы»."
 	MsgBioscanBasicResult      = "🌐 Результат базового Bioscan\n\n"
+	// MsgBioscanBasicTitle - заголовок записи базового Bioscan в истории
+	// пользователя (отображается в «Сводке здоровья» как название отчёта).
+	MsgBioscanBasicTitle = "Базовый биоскан"
 
 	// Расширенный (Premium) Bioscan PRO: 4 фото -> детальный PDF-отчёт.
 	MsgBioscanExtendedPremiumRequired = "🔒 Bioscan PRO - функция Premium\n\n" +

@@ -3,7 +3,9 @@ package upload
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
+	"time"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -18,6 +20,28 @@ import (
 	"github.com/theamornoir/analyzpro/internal/service"
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
+
+// savePlainResult сохраняет «неструктурированный» результат (обычный анализ
+// текстом или базовый Bioscan) в историю пользователя как запись типа
+// entryType, чтобы он появился в «Сводке здоровья» вместе с прочими
+// результатами. Формирует аккуратный HTML-документ (ReportHTML), чтобы
+// кнопка «📄 PDF» в Сводке открывала именно этот результат без ошибки рендера.
+func savePlainResult(ctx context.Context, saver monitoring.Repository, chatID int64, entryType, title, note string) {
+	if saver == nil || strings.TrimSpace(note) == "" {
+		return
+	}
+	entry := &monitoring.HistoryEntry{
+		TelegramID: chatID,
+		Type:       entryType,
+		Title:      title,
+		Date:       time.Now(),
+		JsonData:   fmt.Sprintf(`{"title":%q,"note":%q}`, title, note),
+		ReportHTML: helpers.PlainResultHTML(title, note),
+	}
+	if err := saver.SaveResult(ctx, entry); err != nil {
+		log.Printf("[UPLOAD] не удалось сохранить %s chatID=%d: %v", entryType, chatID, err)
+	}
+}
 
 // processSingleFile - обрабатывает один файл.
 func processSingleFile(
@@ -35,6 +59,7 @@ func processSingleFile(
 	contextInfo string,
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
+	webAppURL string,
 ) {
 	fileData, err := file.readData()
 	if err != nil {
@@ -65,7 +90,7 @@ func processSingleFile(
 			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
 			return
 		}
-		renderAndSendDossier(ctx, b, stateManager, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, dossierJSON, appStorage, saver)
+		renderAndSendDossier(ctx, b, stateManager, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, dossierJSON, appStorage, saver, webAppURL)
 		return
 	}
 
@@ -88,7 +113,14 @@ func processSingleFile(
 		Text:   result,
 	})
 
+	// Сохраняем ОБЫЧНЫЙ анализ в «Сводку здоровья» (история пользователя),
+	// чтобы он был доступен там вместе с прочими результатами.
+	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, result)
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
+
+	// Сообщаем, что результат сохранён в «Сводку здоровья», и даём
+	// кнопку для мгновенного открытия.
+	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
 }
 
 // processMultipleFiles - обрабатывает несколько файлов.
@@ -107,6 +139,7 @@ func processMultipleFiles(
 	contextInfo string,
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
+	webAppURL string,
 ) {
 	var collectedTexts []string
 
@@ -152,7 +185,7 @@ func processMultipleFiles(
 			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
 			return
 		}
-		renderAndSendDossier(ctx, b, stateManager, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, dossierJSON, appStorage, saver)
+		renderAndSendDossier(ctx, b, stateManager, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, dossierJSON, appStorage, saver, webAppURL)
 		return
 	}
 
@@ -165,7 +198,13 @@ func processMultipleFiles(
 		ParseMode: "HTML",
 	})
 
+	// Сохраняем ОБЫЧНЫЙ анализ (несколько файлов) в «Сводку здоровья».
+	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, finalResult)
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
+
+	// Сообщаем, что результат сохранён в «Сводку здоровья», и даём
+	// кнопку для мгновенного открытия.
+	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
 }
 
 // deleteLoadingMessages - удаляет сообщения о загрузке.

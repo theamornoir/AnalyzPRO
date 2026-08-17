@@ -50,6 +50,7 @@ func handleUploadConfirm(
 	message *models.Message,
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
+	webAppURL string,
 ) {
 	text := strings.TrimSpace(strings.ToLower(message.Text))
 
@@ -67,7 +68,7 @@ func handleUploadConfirm(
 
 	if text == locales.BtnProcessAnalysisLower || text == locales.BtnProcessAnalysisLowerShort {
 		log.Printf(locales.LogUploadStartAnalysis)
-		startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, appStorage, saver)
+		startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, appStorage, saver, webAppURL)
 		return
 	}
 

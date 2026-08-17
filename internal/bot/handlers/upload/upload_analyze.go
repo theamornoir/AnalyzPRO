@@ -31,13 +31,15 @@ func StartAnalysis(
 	chatID int64,
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
+	webAppURL string,
 ) {
-	startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, appStorage, saver)
+	startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, appStorage, saver, webAppURL)
 }
 
 // startAnalysis - запускает анализ всех накопленных файлов.
 // saver сохраняет результат в историю (для Мониторинга).
 // appStorage персистит результат как Diagnosis.
+// webAppURL используется для кнопки «Открыть Сводку здоровья» после отчёта.
 func startAnalysis(
 	ctx context.Context,
 	b *tgbot.Bot,
@@ -50,6 +52,7 @@ func startAnalysis(
 	chatID int64,
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
+	webAppURL string,
 ) {
 	filesJSON := stateManager.GetUserData(chatID, "uploaded_files")
 	if filesJSON == "" {
@@ -92,9 +95,9 @@ func startAnalysis(
 
 	if len(uploadedFiles) == 1 {
 		file := uploadedFiles[0]
-		processSingleFile(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, file, isExtended, contextInfo, appStorage, saver)
+		processSingleFile(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, file, isExtended, contextInfo, appStorage, saver, webAppURL)
 	} else {
-		processMultipleFiles(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, uploadedFiles, isExtended, contextInfo, appStorage, saver)
+		processMultipleFiles(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, uploadedFiles, isExtended, contextInfo, appStorage, saver, webAppURL)
 	}
 }
 
