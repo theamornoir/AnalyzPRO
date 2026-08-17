@@ -41,19 +41,24 @@ func processSingleFile(
 	}
 
 	if isExtended {
-		jsonResult, err := analysisService.HandleAnalysisFromFileJSON(
+		// Расширенный анализ -> универсальное отчёт-досье здоровья.
+		fileText, ferr := analysisService.HandleAnalysisFromFileWithContext(
 			ctx,
 			fileData,
 			file.MimeType,
 			contextInfo,
 		)
-
-		if err == nil && jsonResult != "" {
-			renderAndSendReport(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, jsonResult, appStorage, saver)
+		if ferr != nil || fileText == "" {
+			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
 			return
 		}
-
-		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+		combined := fileText + "\n\nДанные пациента и опросника об образе жизни:\n" + contextInfo
+		dossierJSON, derr := analysisService.HandleExtendedDossierJSON(ctx, combined)
+		if derr != nil || dossierJSON == "" {
+			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+			return
+		}
+		renderAndSendDossier(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, dossierJSON, appStorage, saver)
 		return
 	}
 
@@ -122,13 +127,19 @@ func processMultipleFiles(
 	combinedPayload := strings.Join(collectedTexts, "\n\n")
 
 	if isExtended {
-		jsonResult, err := analysisService.HandleAnalysisJSON(ctx, combinedPayload)
-		if err == nil && jsonResult != "" {
-			renderAndSendReport(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, jsonResult, appStorage, saver)
+		// Расширенный анализ (несколько файлов) -> универсальное отчёт-досье.
+		combined := strings.Join(collectedTexts, "\n\n")
+		if combined == "" {
+			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
 			return
 		}
-
-		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+		combined += "\n\nДанные пациента и опросника об образе жизни:\n" + contextInfo
+		dossierJSON, derr := analysisService.HandleExtendedDossierJSON(ctx, combined)
+		if derr != nil || dossierJSON == "" {
+			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+			return
+		}
+		renderAndSendDossier(ctx, b, stateManager, reportRenderer, chatID, loadingMsg, textMsg, dossierJSON, appStorage, saver)
 		return
 	}
 

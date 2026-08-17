@@ -19,9 +19,20 @@ type AnalysisService interface {
 	HandleAnalysisWithContext(ctx context.Context, text string, contextInfo string) (string, error)
 	HandleAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error)
 	HandleBioscan(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error)
+	// HandleBioscanText — базовый (бесплатный) Bioscan: 1 фото -> plain-text
+	// отчёт (без markdown) для вывода обычным сообщением в чат.
+	HandleBioscanText(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error)
+	// HandleBioscanPDF — расширенный (Premium) Bioscan: 4 фото -> PDF-отчёт
+	// (для пользователя) + HTML (для сохранения в историю/профиль). Один
+	// вызов ИИ: JSON -> models.Report -> PDF + HTML.
+	HandleBioscanPDF(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (pdf []byte, filename string, htmlReport string, err error)
 	// Методы для работы с JSON
 	HandleAnalysisJSON(ctx context.Context, text string) (string, error)
 	HandleAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error)
+	// HandleExtendedDossierJSON — строит JSON универсального отчёта-досье
+	// здоровья (анализы пользователя + 20-вопросный опросник) и возвращает
+	// сырой JSON для последующего рендера в HTML (report.Renderer.RenderDossier).
+	HandleExtendedDossierJSON(ctx context.Context, combinedText string) (string, error)
 }
 
 // analysisService - реализация AnalysisService
@@ -85,6 +96,80 @@ func (s *analysisService) HandleBioscan(
 	return s.renderReportFromJSON(jsonText, true)
 }
 
+// bioscanReportFromJSON анмаршалит JSON от ИИ в models.Report, проставляя
+// флаг IsBioscan и рассчитывая углы диаграмм.
+func (s *analysisService) bioscanReportFromJSON(jsonText string) (models.Report, error) {
+	if strings.TrimSpace(jsonText) == "" {
+		return models.Report{}, fmt.Errorf(locales.ErrEmptyJSONFromAI)
+	}
+
+	var rep models.Report
+	if err := json.Unmarshal([]byte(jsonText), &rep); err != nil {
+		return models.Report{}, fmt.Errorf(locales.ErrParseAnalysisJSON, err)
+	}
+
+	rep.IsBioscan = true
+	// Расчёт углов для круговых диаграмм Bioscan
+	rep.Profile.CompositionAngle = rep.Profile.Composition * 360 / 100
+	rep.Profile.MuscleAngle = rep.Profile.MuscleDevelopment * 360 / 100
+	rep.Profile.BalanceAngle = rep.Profile.Balance * 360 / 100
+	rep.Profile.PotentialAngle = rep.Profile.Potential * 360 / 100
+
+	return rep, nil
+}
+
+// HandleBioscanText — базовый (бесплатный) Bioscan: 1 фото -> plain-text
+// отчёт без markdown (для вывода обычным сообщением в чат).
+func (s *analysisService) HandleBioscanText(
+	ctx context.Context,
+	photosData [][]byte,
+	mimeType string,
+	contextInfo string,
+) (string, error) {
+	jsonText, err := s.aiClient.GenerateBioscanJSON(ctx, photosData, mimeType, contextInfo)
+	if err != nil {
+		return "", fmt.Errorf(locales.ErrGenerateBioscanJSON, err)
+	}
+
+	rep, err := s.bioscanReportFromJSON(jsonText)
+	if err != nil {
+		return "", err
+	}
+
+	return report.RenderBioscanPlainText(rep), nil
+}
+
+// HandleBioscanPDF — расширенный (Premium) Bioscan: 4 фото -> PDF-отчёт
+// (для пользователя) + HTML (для сохранения в историю/профиль). Один вызов ИИ.
+func (s *analysisService) HandleBioscanPDF(
+	ctx context.Context,
+	photosData [][]byte,
+	mimeType string,
+	contextInfo string,
+) (pdf []byte, filename string, htmlReport string, err error) {
+	jsonText, err := s.aiClient.GenerateBioscanJSON(ctx, photosData, mimeType, contextInfo)
+	if err != nil {
+		return nil, "", "", fmt.Errorf(locales.ErrGenerateBioscanJSON, err)
+	}
+
+	rep, jerr := s.bioscanReportFromJSON(jsonText)
+	if jerr != nil {
+		return nil, "", "", jerr
+	}
+
+	htmlReport, rerr := s.renderer.Render(rep)
+	if rerr != nil {
+		return nil, "", "", fmt.Errorf(locales.ErrRenderReportHTML, rerr)
+	}
+
+	pdfBytes, perr := report.RenderBioscanPDF(rep)
+	if perr != nil {
+		return nil, "", "", fmt.Errorf(locales.ErrRenderReportPDF, perr)
+	}
+
+	return pdfBytes, "Bioscan_report.pdf", htmlReport, nil
+}
+
 // formatTextWithContext объединяет базовый текст с дополнительным контекстом
 func (s *analysisService) formatTextWithContext(baseText, contextInfo string) string {
 	contextInfo = strings.TrimSpace(contextInfo)
@@ -140,6 +225,16 @@ func (s *analysisService) HandleAnalysisFromFileJSON(
 ) (string, error) {
 	textPrompt := s.formatTextWithContext(locales.MsgDocumentContent, contextInfo)
 	return s.aiClient.GenerateAnalysisFromFileJSON(ctx, data, mimeType, textPrompt)
+}
+
+// HandleExtendedDossierJSON — строит универсальное отчёт-досье здоровья.
+// combinedText содержит текст присланных анализов (файлы→текст) и ответы
+// 20-вопросного опросника об образе жизни. Возвращает сырой JSON-досье.
+func (s *analysisService) HandleExtendedDossierJSON(
+	ctx context.Context,
+	combinedText string,
+) (string, error) {
+	return s.aiClient.GenerateDossierJSON(ctx, combinedText)
 }
 
 // HandleAdaptiveAnalysis — возвращает адаптивный HTML-отчёт по тексту

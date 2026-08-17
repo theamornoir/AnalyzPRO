@@ -174,6 +174,13 @@ func (p *OpenRouterProvider) GenerateAnalysisFromFileJSON(ctx context.Context, d
 // complete — универсальный вызов chat-completions с перебором моделей по
 // цепочке фоллбэков. userText — текстовая инструкция/контекст, images — опциональные
 // изображения для vision. jsonMode добавляет требование «только JSON» в системный промпт.
+// GenerateDossierJSON generates the JSON of the universal health-dossier report.
+func (p *OpenRouterProvider) GenerateDossierJSON(ctx context.Context, userInput string) (string, error) {
+	return p.complete(ctx,
+		"\u0422\u044b - \u043e\u043f\u044b\u0442\u043d\u044b\u0439 \u0432\u0440\u0430\u0447-\u0434\u0438\u0430\u0433\u043d\u043e\u0441\u0442. \u0412\u0435\u0440\u043d\u0438 \u043e\u0442\u0432\u0435\u0442 \u0441\u0442\u0440\u043e\u0433\u043e \u0432 \u0444\u043e\u0440\u043c\u0430\u0442\u0435 JSON, \u0431\u0435\u0437 markdown.",
+		locales.PromptForDossierJSON(userInput), nil, true, 8000)
+}
+
 func (p *OpenRouterProvider) complete(ctx context.Context, systemPrompt, userText string, images []visionImage, jsonMode bool, maxTokens int) (string, error) {
 	if jsonMode {
 		systemPrompt += "\nВерни ответ строго в формате JSON, без markdown-разметки и комментариев."

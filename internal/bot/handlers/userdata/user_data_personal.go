@@ -123,11 +123,11 @@ func (c *UserDataCollector) HandleWeight(ctx context.Context, b *tgbot.Bot, chat
 	}
 
 	c.stateManager.SetUserData(chatID, "weight", fmt.Sprintf("%d", weight))
-	c.stateManager.SetState(chatID, states.StateWaitingChronicDiseases)
+	c.stateManager.SetState(chatID, states.StateWaitingSleep)
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
-		Text:        locales.MsgUserChronicDiseases,
+		Text:        locales.MsgUserSleep,
 		ReplyMarkup: keyboards.BackMenu(),
 		ParseMode:   "Markdown",
 	})

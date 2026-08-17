@@ -253,15 +253,36 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	case "section_diag_extended":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_extended")
 		r.handleExtendedAnalysis(ctx, b, chatID)
-	case "section_bioscan":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan")
-		r.handleBioscanStart(ctx, b, chatID)
+	case "section_bioscan_basic":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan_basic")
+		r.handleBioscanBasicStart(ctx, b, chatID)
+	case "section_bioscan_extended":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan_extended")
+		r.handleBioscanExtendedStart(ctx, b, chatID)
+	case "section_diag_regular_demo":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_regular_demo")
+		r.handleRegularAnalysisDemo(ctx, b, chatID)
+	case "section_diag_extended_demo":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_extended_demo")
+		r.handleExtendedAnalysisDemo(ctx, b, chatID)
+	case "section_bioscan_basic_demo":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan_basic_demo")
+		r.handleBioscanBasicDemo(ctx, b, chatID)
+	case "section_bioscan_extended_demo":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan_extended_demo")
+		r.handleBioscanExtendedDemo(ctx, b, chatID)
 	case "section_health_summary":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_summary")
-		r.handleDashboard(ctx, b, chatID)
+		r.handleDashboard(ctx, b, chatID, false)
+	case "section_health_summary_demo":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_summary_demo")
+		r.handleDashboard(ctx, b, chatID, true)
 	case "section_health_monitoring":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_monitoring")
-		r.handleMonitoring(ctx, b, chatID)
+		r.handleMonitoring(ctx, b, chatID, false)
+	case "section_health_monitoring_demo":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_monitoring_demo")
+		r.handleMonitoring(ctx, b, chatID, true)
 	case "section_consult_start":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_consult_start")
 		r.handleConsultationStart(ctx, b, chatID)

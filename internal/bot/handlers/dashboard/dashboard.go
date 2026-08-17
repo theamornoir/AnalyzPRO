@@ -128,6 +128,16 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 
+	// Демо-режим: возвращаем синтетические «полностью заполненные» метрики,
+	// чтобы можно было посмотреть графики Сводки здоровья без реальных
+	// анализов и без Premium. Работает и без валидного initData (удобно для
+	// локальной отладки в браузере). Премиум-гейт не применяется.
+	if r.URL.Query().Get("demo") == "1" {
+		log.Printf("[DASHBOARD] /api/metrics (DEMO) отданы синтетические метрики")
+		_ = json.NewEncoder(w).Encode(h.buildDemoMetrics())
+		return
+	}
+
 	initData := r.URL.Query().Get("initData")
 	if initData == "" {
 		initData = r.Header.Get("X-Telegram-Init-Data")
@@ -347,6 +357,38 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64) MetricsRes
 	resp.Trend = TrendData{Labels: labels, Values: values}
 
 	return resp
+}
+
+// buildDemoMetrics возвращает синтетические «полностью заполненные» метрики
+// для демо-режима (?demo=1). Позволяет посмотреть графики Сводки здоровья
+// (индекс, энергия, показатели крови, динамика) без реальных анализов и
+// без Premium. Данные детерминированные, чтобы график был стабильным.
+func (h *Handler) buildDemoMetrics() MetricsResponse {
+	return MetricsResponse{
+		UserName:        "Демо Пользователь",
+		UserAge:         34,
+		NoData:          false,
+		PremiumRequired: false,
+		HealthIndex:     82,
+		EnergyLevel:     "Высокий",
+		AnalysisDate:    time.Now().Format("2006-01-02"),
+		Blood: BloodData{
+			Hemoglobin: 145,
+			Leukocytes: 6.2,
+			Platelets:  250,
+		},
+		Nutrition: NutData{Protein: 92, Carbs: 210, Fat: 65},
+		Activity:  ActData{Steps: 8200, Calories: 2400, Water: 2.1},
+		Trend: TrendData{
+			Labels: []string{"01.03", "08.03", "15.03", "22.03", "29.03", "05.04"},
+			Values: []int{60, 64, 63, 70, 75, 82},
+		},
+		Recommendations: []string{
+			"Поддерживайте водный баланс (≈2 л воды в день).",
+			"Активность выросла — отличный прогресс за месяц (индекс 60 → 82).",
+			"Контролируйте уровень гемоглобина раз в 3–4 недели.",
+		},
+	}
 }
 
 // healthIndex — детерминированный индекс здоровья (0-100), производный от

@@ -12,6 +12,10 @@ const (
 	BtnAnalysisHub = "📋 Анализы"
 	BtnDiagnostics = "🏥 Диагностика анализов"
 	BtnBioscan     = "📸 Bioscan"
+	// Базовый (бесплатный) Bioscan: 1 фото -> текстовый результат в чат.
+	BtnBioscanBasic = "🌐 Bioscan"
+	// Расширенный (Premium) Bioscan PRO: 4 фото -> детальный PDF-отчёт.
+	BtnBioscanExtended = "✨ Bioscan PRO"
 	// BtnHealthHub — верхняя кнопка-хаб «Здоровье»: отслеживание состояния
 	// (Сводка / Мониторинг) + консультация с ИИ.
 	BtnHealthHub = "📊 Здоровье"
@@ -23,6 +27,10 @@ const (
 	// снимок состояния здоровья прямо сейчас.
 	BtnHealthSummary = "💡 Сводка здоровья"
 	BtnMonitoring    = "📊 Мониторинг"
+	// 🧪 Демо-кнопки — открывают веб-аппы с ?demo=1, чтобы посмотреть
+	// графики «как заполнено», без реальных анализов и без Premium.
+	BtnHealthSummaryDemo = "🧪 Демо-Сводка"
+	BtnMonitoringDemo    = "🧪 Демо-Мониторинг"
 	// BtnHealthDynamics — новый раздел-хаб, объединяющий «Сводка здоровья»
 	// и «Мониторинг» (отслеживание показателей в динамике).
 	BtnHealthDynamics = "📈 Здоровье в динамике"
@@ -36,9 +44,15 @@ const (
 	BtnPremiumChange    = "🔄 Сменить тариф"
 	BtnRegularAnalysis  = "📊 Обычный анализ"
 	BtnExtendedAnalysis = "🔬 Расширенный анализ"
-	BtnAcceptAgreement  = "✅ Принять соглашение"
-	BtnBioscanConfirm   = "✅ Подтвердить и проанализировать"
-	BtnBioscanRestart   = "🔄 Начать заново"
+	// 🧪 Демо-кнопки для предпросмотра результатов «как заполнено»,
+	// без реальных файлов и без вызовов ИИ. Работают всем (и без Premium).
+	BtnRegularAnalysisDemo  = "🧪 Демо: Обычный"
+	BtnExtendedAnalysisDemo = "🧪 Демо: Расширенный"
+	BtnBioscanBasicDemo     = "🧪 Демо: Bioscan"
+	BtnBioscanExtendedDemo  = "🧪 Демо: Bioscan PRO"
+	BtnAcceptAgreement      = "✅ Принять соглашение"
+	BtnBioscanConfirm       = "✅ Подтвердить и проанализировать"
+	BtnBioscanRestart       = "🔄 Начать заново"
 )
 
 // Lowercase button texts (for case-insensitive matching)

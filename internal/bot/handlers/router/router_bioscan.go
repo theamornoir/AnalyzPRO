@@ -24,6 +24,21 @@ func (r *router) handleBioscanStates(ctx context.Context, b *tgbot.Bot, chatID i
 	}
 
 	switch state {
+	case states.StateWaitingBioscanBasicPhoto:
+		log.Printf("[BIOSCAN] базовый: фото от chatID=%d", chatID)
+		if len(update.Message.Photo) > 0 {
+			bioscan.HandleBioscanBasicPhoto(
+				ctx, b, r.stateManager, r.analysisService,
+				r.uploadDir, r.stickerID, chatID, update.Message.Photo,
+			)
+		} else {
+			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+				ChatID: chatID,
+				Text:   locales.MsgBioscanBasicPhotoPrompt,
+			})
+		}
+		return true
+
 	case states.StateWaitingBioscanName:
 		log.Printf(locales.LogProcessingBioscanName, chatID)
 		bioscan.HandleBioscanName(ctx, b, r.stateManager, chatID, text)

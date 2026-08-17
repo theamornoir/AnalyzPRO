@@ -52,3 +52,8 @@ func (p *GeminiProvider) GenerateBioscanJSON(ctx context.Context, photosData [][
 func (p *GeminiProvider) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	return p.client.GenerateAnalysisFromFileJSON(ctx, data, mimeType, contextText)
 }
+
+// GenerateDossierJSON — генерирует JSON универсального отчёта-досье здоровья.
+func (p *GeminiProvider) GenerateDossierJSON(ctx context.Context, userInput string) (string, error) {
+	return p.client.GenerateDossierJSON(ctx, userInput)
+}

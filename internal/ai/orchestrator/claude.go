@@ -157,6 +157,22 @@ func (p *ClaudeProvider) GenerateAnalysisFromFileJSON(ctx context.Context, data 
 		8000)
 }
 
+// GenerateDossierJSON — генерирует JSON универсального отчёта-досье здоровья.
+func (p *ClaudeProvider) GenerateDossierJSON(ctx context.Context, userInput string) (string, error) {
+	if p.llm == nil {
+		return "", fmt.Errorf("claude client not initialized")
+	}
+	result, err := p.llm.Call(ctx,
+		"Ты — опытный врач-диагност и аналитик здоровья. Верни ответ строго в формате JSON, без markdown и комментариев.\n\n"+userInput,
+		llms.WithMaxTokens(8000),
+		llms.WithTemperature(0.1),
+	)
+	if err != nil {
+		return "", err
+	}
+	return result, nil
+}
+
 // callClaudeMessages — выполняет мультимодальный запрос к Anthropic Messages API
 // напрямую (обходит langchaingo, который не умеет отдавать PDF-документы).
 // Поддерживает одновременно изображения (image-блок) и PDF (document-блок).

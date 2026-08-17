@@ -12,21 +12,26 @@ type State string
 const (
 	StateIdle                State = "idle"
 	StateWaitingAnalysisFile State = "waiting_analysis_file"
-	StateWaitingCourseInfo   State = "waiting_course_info" // Вопрос про препараты
-	StateWaitingCourseTime   State = "waiting_course_time" // Какие препараты
 
 	StateWaitingName               State = "waiting_name"
 	StateWaitingGender             State = "waiting_gender"
 	StateWaitingAge                State = "waiting_age"
 	StateWaitingHeight             State = "waiting_height"
 	StateWaitingWeight             State = "waiting_weight"
+	StateWaitingSleep              State = "waiting_sleep"               // Образ жизни: сон
+	StateWaitingStress             State = "waiting_stress"              // Образ жизни: стресс
+	StateWaitingNutritionVeg       State = "waiting_nutrition_veg"       // Овощи/фрукты
+	StateWaitingNutritionProcessed State = "waiting_nutrition_processed" // Ультраобработанные
+	StateWaitingWater              State = "waiting_water"               // Питьевой режим
+	StateWaitingActivity           State = "waiting_activity"            // Физ. активность
 	StateWaitingChronicDiseases    State = "waiting_chronic_diseases"
 	StateWaitingAllergies          State = "waiting_allergies"
 	StateWaitingMedications        State = "waiting_medications"
 	StateWaitingSmoking            State = "waiting_smoking"
 	StateWaitingAlcohol            State = "waiting_alcohol"
+	StateWaitingFamilyHistory      State = "waiting_family_history" // Семейный анамнез
+	StateWaitingDigestion          State = "waiting_digestion"      // ЖКТ / пищеварение
 	StateWaitingSportType          State = "waiting_sport_type"
-	StateWaitingTrainingExperience State = "waiting_training_experience"
 	StateWaitingGoal               State = "waiting_goal"
 
 	StateWaitingBioscanName    State = "waiting_bioscan_name"
@@ -39,6 +44,10 @@ const (
 	StateWaitingBioscanPhoto3  State = "waiting_bioscan_photo3"
 	StateWaitingBioscanPhoto4  State = "waiting_bioscan_photo4"
 	StateWaitingBioscanConfirm State = "waiting_bioscan_confirm"
+
+	// StateWaitingBioscanBasicPhoto — базовый (бесплатный) Bioscan: ожидание
+	// одного фото пользователя (без вопросника и без PDF).
+	StateWaitingBioscanBasicPhoto State = "waiting_bioscan_basic_photo"
 
 	StateWaitingUploadConfirm State = "waiting_upload_confirm"
 

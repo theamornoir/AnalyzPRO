@@ -27,7 +27,9 @@ func (r *router) isMainMenuButton(text string) bool {
 		// анализ текста/ИИ, ловим их до состояний потока.
 		locales.BtnRegularAnalysis,
 		locales.BtnExtendedAnalysis,
-		locales.BtnBioscan:
+		locales.BtnBioscan,
+		locales.BtnBioscanBasic,
+		locales.BtnBioscanExtended:
 		return true
 	}
 	return false
@@ -66,7 +68,13 @@ func (r *router) handleMenuButtons(ctx context.Context, b *tgbot.Bot, chatID int
 	case locales.BtnExtendedAnalysis:
 		return r.handleExtendedAnalysis(ctx, b, chatID)
 	case locales.BtnBioscan:
-		return r.handleBioscanStart(ctx, b, chatID)
+		// Устаревшая текстовая кнопка «📸 Bioscan» (из старой клавиатуры) —
+		// безопасно направляем в бесплатный базовый режим.
+		return r.handleBioscanBasicStart(ctx, b, chatID)
+	case locales.BtnBioscanBasic:
+		return r.handleBioscanBasicStart(ctx, b, chatID)
+	case locales.BtnBioscanExtended:
+		return r.handleBioscanExtendedStart(ctx, b, chatID)
 	}
 
 	return false

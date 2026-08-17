@@ -42,6 +42,36 @@ func (r *router) handleQuestionnaireStates(ctx context.Context, b *tgbot.Bot, ch
 		collector.HandleWeight(ctx, b, chatID, text)
 		return true
 
+	case states.StateWaitingSleep:
+		log.Printf(locales.LogProcessingSleep, chatID)
+		collector.HandleSleep(ctx, b, chatID, text)
+		return true
+
+	case states.StateWaitingStress:
+		log.Printf(locales.LogProcessingStress, chatID)
+		collector.HandleStress(ctx, b, chatID, text)
+		return true
+
+	case states.StateWaitingNutritionVeg:
+		log.Printf(locales.LogProcessingNutritionVeg, chatID)
+		collector.HandleNutritionVeg(ctx, b, chatID, text)
+		return true
+
+	case states.StateWaitingNutritionProcessed:
+		log.Printf(locales.LogProcessingNutritionProcessed, chatID)
+		collector.HandleNutritionProcessed(ctx, b, chatID, text)
+		return true
+
+	case states.StateWaitingWater:
+		log.Printf(locales.LogProcessingWater, chatID)
+		collector.HandleWater(ctx, b, chatID, text)
+		return true
+
+	case states.StateWaitingActivity:
+		log.Printf(locales.LogProcessingActivity, chatID)
+		collector.HandleActivity(ctx, b, chatID, text)
+		return true
+
 	case states.StateWaitingChronicDiseases:
 		log.Printf(locales.LogProcessingChronicDiseases, chatID)
 		collector.HandleChronicDiseases(ctx, b, chatID, text)
@@ -67,29 +97,24 @@ func (r *router) handleQuestionnaireStates(ctx context.Context, b *tgbot.Bot, ch
 		collector.HandleAlcohol(ctx, b, chatID, text)
 		return true
 
+	case states.StateWaitingFamilyHistory:
+		log.Printf(locales.LogProcessingFamilyHistory, chatID)
+		collector.HandleFamilyHistory(ctx, b, chatID, text)
+		return true
+
+	case states.StateWaitingDigestion:
+		log.Printf(locales.LogProcessingDigestion, chatID)
+		collector.HandleDigestion(ctx, b, chatID, text)
+		return true
+
 	case states.StateWaitingSportType:
 		log.Printf(locales.LogProcessingSportType, chatID)
 		collector.HandleSportType(ctx, b, chatID, text)
 		return true
 
-	case states.StateWaitingTrainingExperience:
-		log.Printf(locales.LogProcessingTrainingExp, chatID)
-		collector.HandleTrainingExperience(ctx, b, chatID, text)
-		return true
-
 	case states.StateWaitingGoal:
 		log.Printf(locales.LogProcessingGoal, chatID)
 		collector.HandleGoal(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingCourseInfo:
-		log.Printf(locales.LogProcessingCourseInfo, chatID)
-		collector.HandleCourseInfo(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingCourseTime:
-		log.Printf(locales.LogProcessingCourseTime, chatID)
-		collector.HandleCourseTime(ctx, b, chatID, text)
 		return true
 	}
 
@@ -108,7 +133,8 @@ func isBioscanState(state states.State) bool {
 		states.StateWaitingBioscanPhoto2,
 		states.StateWaitingBioscanPhoto3,
 		states.StateWaitingBioscanPhoto4,
-		states.StateWaitingBioscanConfirm:
+		states.StateWaitingBioscanConfirm,
+		states.StateWaitingBioscanBasicPhoto:
 		return true
 	}
 	return false
@@ -122,16 +148,21 @@ func isQuestionnaireState(state states.State) bool {
 		states.StateWaitingAge,
 		states.StateWaitingHeight,
 		states.StateWaitingWeight,
+		states.StateWaitingSleep,
+		states.StateWaitingStress,
+		states.StateWaitingNutritionVeg,
+		states.StateWaitingNutritionProcessed,
+		states.StateWaitingWater,
+		states.StateWaitingActivity,
 		states.StateWaitingChronicDiseases,
 		states.StateWaitingAllergies,
 		states.StateWaitingMedications,
 		states.StateWaitingSmoking,
 		states.StateWaitingAlcohol,
+		states.StateWaitingFamilyHistory,
+		states.StateWaitingDigestion,
 		states.StateWaitingSportType,
-		states.StateWaitingTrainingExperience,
-		states.StateWaitingGoal,
-		states.StateWaitingCourseInfo,
-		states.StateWaitingCourseTime:
+		states.StateWaitingGoal:
 		return true
 	}
 	return false

@@ -62,6 +62,24 @@ func (c *GeminiClient) buildAnalysisJSONPrompt(text string) string {
 	return locales.PromptForAnalysisJSON(text)
 }
 
+// GenerateDossierJSON - генерирует JSON универсального отчёта-досье здоровья.
+func (c *GeminiClient) GenerateDossierJSON(ctx context.Context, userInput string) (string, error) {
+	if c.isMock() {
+		log.Printf(locales.LogGeminiMockDossier)
+		return locales.MockDossierJSON, nil
+	}
+
+	prompt := locales.PromptForDossierJSON(userInput)
+	parts := []geminiPart{{Text: prompt}}
+
+	result, err := c.generateRaw(ctx, parts)
+	if err != nil {
+		return "", err
+	}
+
+	return normalizeJSONResponse(result), nil
+}
+
 // getMockAnalysisJSON - мок-ответ для JSON-анализа.
 func getMockAnalysisJSON(_ string) string {
 	return locales.MockAnalysisJSON

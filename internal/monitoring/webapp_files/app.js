@@ -49,6 +49,91 @@ const state = {
 };
 
 // ------------------------------------------------------------
+// Демо-режим (?demo=1) — синтетические проекты/записи для предпросмотра
+// графиков без реальных анализов и без Premium. Всё работает на клиенте,
+// бэкенд не вызывается. Данные детерминированные (стабильные графики).
+// ------------------------------------------------------------
+function isDemo() {
+    return new URLSearchParams(location.search).get('demo') === '1';
+}
+
+// Список проектов для демо (форма совпадает с MonitoringProject из backend).
+const DEMO_PROJECTS = [
+    {
+        id: 901, telegram_id: 0, name: '💉 Курс Омеги-3', type: 'course',
+        start_date: '2026-03-02', end_date: '', status: 'active',
+        created_at: '2026-03-02', entry_ids: [9001, 9002, 9003, 9004, 9005],
+    },
+    {
+        id: 902, telegram_id: 0, name: '🩸 Диабет — сахар', type: 'diabetes',
+        start_date: '2026-03-03', end_date: '2026-04-01', status: 'completed',
+        created_at: '2026-03-03', entry_ids: [9101, 9102, 9103, 9104],
+    },
+    {
+        id: 903, telegram_id: 0, name: '⚖️ Похудение весна 2026', type: 'weight',
+        start_date: '2026-03-05', end_date: '', status: 'active',
+        created_at: '2026-03-05', entry_ids: [9201, 9202, 9203, 9204, 9205],
+    },
+];
+
+// Детали проектов для демо (форма совпадает с ProjectDetail из backend).
+// Записи отсортированы по дате (старые → новые), как делает бэкенд.
+const DEMO_DETAILS = {
+    901: {
+        project: DEMO_PROJECTS[0],
+        entries: [
+            { id: 9001, type: 'analysis', title: 'Липидограмма #1', date: '2026-03-02', metrics: { 'Холестерин': 6.4, 'Триглицериды': 2.3, 'Лейкоциты': 7.1 } },
+            { id: 9002, type: 'analysis', title: 'Липидограмма #2', date: '2026-03-09', metrics: { 'Холестерин': 6.0, 'Триглицериды': 2.0, 'Лейкоциты': 6.8 } },
+            { id: 9003, type: 'analysis', title: 'Липидограмма #3', date: '2026-03-16', metrics: { 'Холестерин': 5.5, 'Триглицериды': 1.8, 'Лейкоциты': 6.5 } },
+            { id: 9004, type: 'analysis', title: 'Липидограмма #4', date: '2026-03-23', metrics: { 'Холестерин': 5.1, 'Триглицериды': 1.5, 'Лейкоциты': 6.2 } },
+            { id: 9005, type: 'analysis', title: 'Липидограмма #5', date: '2026-03-30', metrics: { 'Холестерин': 4.8, 'Триглицериды': 1.3, 'Лейкоциты': 5.9 } },
+        ],
+        available_metrics: ['Холестерин', 'Триглицериды', 'Лейкоциты'],
+    },
+    902: {
+        project: DEMO_PROJECTS[1],
+        entries: [
+            { id: 9101, type: 'analysis', title: 'Глюкоза натощак #1', date: '2026-03-03', metrics: { 'Глюкоза': 7.8, 'Гемоглобин': 152 } },
+            { id: 9102, type: 'analysis', title: 'Глюкоза натощак #2', date: '2026-03-12', metrics: { 'Глюкоза': 7.1, 'Гемоглобин': 148 } },
+            { id: 9103, type: 'analysis', title: 'Глюкоза натощак #3', date: '2026-03-22', metrics: { 'Глюкоза': 6.4, 'Гемоглобин': 143 } },
+            { id: 9104, type: 'analysis', title: 'Глюкоза натощак #4', date: '2026-04-01', metrics: { 'Глюкоза': 5.9, 'Гемоглобин': 138 } },
+        ],
+        available_metrics: ['Глюкоза', 'Гемоглобин'],
+    },
+    903: {
+        project: DEMO_PROJECTS[2],
+        entries: [
+            { id: 9201, type: 'bioscan', title: 'Биоскан #1', date: '2026-03-05', metrics: { 'Вес': 84.5, 'Жир': 28.0, 'Шаги': 5200 } },
+            { id: 9202, type: 'bioscan', title: 'Биоскан #2', date: '2026-03-15', metrics: { 'Вес': 82.9, 'Жир': 26.5, 'Шаги': 6800 } },
+            { id: 9203, type: 'bioscan', title: 'Биоскан #3', date: '2026-03-25', metrics: { 'Вес': 81.4, 'Жир': 25.1, 'Шаги': 7400 } },
+            { id: 9204, type: 'bioscan', title: 'Биоскан #4', date: '2026-03-31', metrics: { 'Вес': 80.2, 'Жир': 24.3, 'Шаги': 8100 } },
+            { id: 9205, type: 'bioscan', title: 'Биоскан #5', date: '2026-04-08', metrics: { 'Вес': 79.0, 'Жир': 23.2, 'Шаги': 8600 } },
+        ],
+        available_metrics: ['Вес', 'Жир', 'Шаги'],
+    },
+};
+
+function loadDemoProjects() {
+    state.projects = DEMO_PROJECTS;
+    state.selectedMetrics = new Set();
+    renderProjects();
+    setHeader('Мои проекты (демо)', '🧪 Демо-данные — предпросмотр графиков');
+    showView('view-projects');
+}
+
+function openDemoProject(id) {
+    const d = DEMO_DETAILS[id];
+    if (!d) { showToast('Демо-проект не найден'); return; }
+    state.currentProjectId = id;
+    state.detail = d;
+    state.selectedMetrics = new Set();
+    renderProjectDetail();
+    setHeader(d.project.name, TYPE_LABELS[d.project.type] || d.project.type);
+    showView('view-project');
+    switchTab('info');
+}
+
+// ------------------------------------------------------------
 // Утилиты
 // ------------------------------------------------------------
 function api(path, opts = {}) {
@@ -111,6 +196,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function loadProjects() {
     showLoading(true);
+    if (isDemo()) {
+        // Демо-режим: рисуем синтетические проекты без обращения к бэкенду.
+        loadDemoProjects();
+        showLoading(false);
+        return;
+    }
     api('/api/monitoring/projects')
         .then(({ ok, body }) => {
             if (!ok) throw new Error(body.error || 'Ошибка загрузки');
@@ -204,6 +295,11 @@ function submitCreate() {
 // Деталь проекта
 // ------------------------------------------------------------
 function openProject(id) {
+    if (isDemo()) {
+        // Демо-режим: открываем синтетическую деталь проекта.
+        openDemoProject(id);
+        return;
+    }
     state.currentProjectId = id;
     showLoading(true);
     api('/api/monitoring/projects/' + id)
@@ -288,6 +384,7 @@ function renderEntries() {
 }
 
 function unbindEntry(entryID) {
+    if (isDemo()) { showToast('🧪 Демо-режим: действие недоступно'); return; }
     showLoading(true);
     api(`/api/monitoring/projects/${state.currentProjectId}/entries/${entryID}`, { method: 'DELETE' })
         .then(({ ok, body }) => {
@@ -300,6 +397,7 @@ function unbindEntry(entryID) {
 }
 
 function completeProject(id) {
+    if (isDemo()) { showToast('🧪 Демо-режим: действие недоступно'); return; }
     showLoading(true);
     api(`/api/monitoring/projects/${id}/complete`, { method: 'POST' })
         .then(({ ok, body }) => {
@@ -535,6 +633,7 @@ function renderHistory(resp) {
 }
 
 function bindEntry(entryID) {
+    if (isDemo()) { showToast('🧪 Демо-режим: действие недоступно'); return; }
     showLoading(true);
     api(`/api/monitoring/projects/${state.currentProjectId}/entries`, {
         method: 'POST',

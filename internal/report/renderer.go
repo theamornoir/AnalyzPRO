@@ -14,6 +14,13 @@ import (
 //go:embed templates/bioscan.html
 var bioscanTemplateFiles embed.FS
 
+// healthDossierTemplateFiles — шаблон универсального отчёта-досье здоровья
+// (расширенный анализ). Построен на основе присланных анализов и
+// 20-вопросного опросника об образе жизни.
+//
+//go:embed templates/health_dossier.html
+var healthDossierTemplateFiles embed.FS
+
 // analysisHTMLTemplate - HTML-шаблон для стандартных анализов (не bioscan)
 const analysisHTMLTemplate = `<!DOCTYPE html>
 <html lang="ru">
@@ -63,6 +70,7 @@ h2 { color: #34495e; margin-top: 30px; }
 type Renderer struct {
 	analysisTmpl *template.Template
 	bioscanTmpl  *template.Template
+	dossierTmpl  *template.Template
 }
 
 func NewRenderer() (*Renderer, error) {
@@ -127,6 +135,45 @@ func NewRenderer() (*Renderer, error) {
 			}
 			return "#f44336"
 		},
+		// donutColor — цвет дуги доната по статусу (lifestyle/лаб).
+		"donutColor": func(status string) string {
+			switch status {
+			case "good", "normal":
+				return "#45D0B0"
+			case "warning":
+				return "#E8836B"
+			case "risk", "critical":
+				return "#D97070"
+			default:
+				return "#45D0B0"
+			}
+		},
+		// pillClass — CSS-класс пилюли статуса (normal/warning/critical).
+		"pillClass": func(status string) string {
+			switch status {
+			case "normal", "good":
+				return "normal"
+			case "warning":
+				return "warning"
+			case "critical", "risk":
+				return "critical"
+			default:
+				return "normal"
+			}
+		},
+		// statusLabel — человекочитаемая метка статуса.
+		"statusLabel": func(status string) string {
+			switch status {
+			case "normal", "good":
+				return "норма"
+			case "warning":
+				return "внимание"
+			case "critical", "risk":
+				return "риск"
+			default:
+				return status
+			}
+		},
 		"categoryIcon": func(name string) string {
 			if icon, ok := locales.CategoryIcons[name]; ok {
 				return icon
@@ -159,9 +206,18 @@ func NewRenderer() (*Renderer, error) {
 		return nil, fmt.Errorf("parse bioscan template: %w", err)
 	}
 
+	dossierTmpl, err := template.New("health_dossier.html").Funcs(funcMap).ParseFS(
+		healthDossierTemplateFiles,
+		"templates/health_dossier.html",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("parse health dossier template: %w", err)
+	}
+
 	return &Renderer{
 		analysisTmpl: analysisTmpl,
 		bioscanTmpl:  bioscanTmpl,
+		dossierTmpl:  dossierTmpl,
 	}, nil
 }
 
@@ -176,6 +232,16 @@ func (r *Renderer) Render(report models.Report) (string, error) {
 	}
 
 	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// RenderDossier рендерит универсальный отчёт-досье здоровья (расширенный
+// анализ) из структуры models.HealthDossier в богатый print-ready HTML.
+func (r *Renderer) RenderDossier(dossier models.HealthDossier) (string, error) {
+	var buf bytes.Buffer
+	if err := r.dossierTmpl.Execute(&buf, dossier); err != nil {
 		return "", err
 	}
 	return buf.String(), nil

@@ -20,6 +20,9 @@ type AIProvider interface {
 	GenerateBioscanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error)
 	// GenerateAnalysisFromFileJSON генерирует JSON-анализ из файла.
 	GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error)
+	// GenerateDossierJSON генерирует JSON универсального отчёта-досье
+	// здоровья (на основе анализов + опросника об образе жизни).
+	GenerateDossierJSON(ctx context.Context, userInput string) (string, error)
 }
 
 // Orchestrator — оркестратор AI-провайдеров с приоритетами.
@@ -130,6 +133,13 @@ func (o *Orchestrator) GenerateBioscanJSON(ctx context.Context, photosData [][]b
 func (o *Orchestrator) GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error) {
 	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
 		return p.GenerateAnalysisFromFileJSON(ctx, data, mimeType, contextText)
+	})
+}
+
+// GenerateDossierJSON — генерирует JSON универсального отчёта-досье здоровья.
+func (o *Orchestrator) GenerateDossierJSON(ctx context.Context, userInput string) (string, error) {
+	return o.tryProvider(ctx, func(p AIProvider) (string, error) {
+		return p.GenerateDossierJSON(ctx, userInput)
 	})
 }
 

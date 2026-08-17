@@ -64,9 +64,22 @@ func MainMenu() models.ReplyKeyboardMarkup {
 func AnalysisHubMenu() models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{{Text: locales.BtnRegularAnalysis, CallbackData: "section_diag_regular"}},
-			{{Text: locales.BtnExtendedAnalysis, CallbackData: "section_diag_extended"}},
-			{{Text: locales.BtnBioscan, CallbackData: "section_bioscan"}},
+			{
+				{Text: locales.BtnRegularAnalysis, CallbackData: "section_diag_regular"},
+				{Text: locales.BtnRegularAnalysisDemo, CallbackData: "section_diag_regular_demo"},
+			},
+			{
+				{Text: locales.BtnExtendedAnalysis, CallbackData: "section_diag_extended"},
+				{Text: locales.BtnExtendedAnalysisDemo, CallbackData: "section_diag_extended_demo"},
+			},
+			{
+				{Text: locales.BtnBioscanBasic, CallbackData: "section_bioscan_basic"},
+				{Text: locales.BtnBioscanBasicDemo, CallbackData: "section_bioscan_basic_demo"},
+			},
+			{
+				{Text: locales.BtnBioscanExtended, CallbackData: "section_bioscan_extended"},
+				{Text: locales.BtnBioscanExtendedDemo, CallbackData: "section_bioscan_extended_demo"},
+			},
 		},
 	}
 }
@@ -80,6 +93,8 @@ func HealthHubMenu() models.InlineKeyboardMarkup {
 			{{Text: locales.BtnHealthSummary, CallbackData: "section_health_summary"}},
 			{{Text: locales.BtnMonitoring, CallbackData: "section_health_monitoring"}},
 			{{Text: locales.BtnConsultation, CallbackData: "section_consult_start"}},
+			{{Text: locales.BtnHealthSummaryDemo, CallbackData: "section_health_summary_demo"}},
+			{{Text: locales.BtnMonitoringDemo, CallbackData: "section_health_monitoring_demo"}},
 		},
 	}
 }

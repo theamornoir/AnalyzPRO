@@ -249,6 +249,18 @@ func (p *YandexGPTProvider) GenerateAnalysisFromFileJSON(ctx context.Context, da
 	return yandexStripJSON(text), nil
 }
 
+// GenerateDossierJSON — генерирует JSON универсального отчёта-досье здоровья.
+func (p *YandexGPTProvider) GenerateDossierJSON(ctx context.Context, userInput string) (string, error) {
+	text, err := p.complete(ctx, p.textModel, []yandexMessage{
+		{Role: "system", Text: "Ты — опытный врач-диагност и аналитик здоровья. Верни ответ строго в формате JSON, без markdown-разметки и пояснений."},
+		{Role: "user", Text: userInput},
+	}, 8000, 0.1)
+	if err != nil {
+		return "", err
+	}
+	return yandexStripJSON(text), nil
+}
+
 // yandexStripJSON — убирает markdown-обёртку ```json ... ```, которую модель
 // иногда добавляет вокруг JSON. Нужно, т.к. bioscan-парсер ожидает чистый JSON.
 func yandexStripJSON(s string) string {

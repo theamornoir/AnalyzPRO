@@ -2,6 +2,7 @@ package models
 
 // Report - основная структура отчёта анализа
 type Report struct {
+	Title           string     `json:"title"`
 	Profile         Profile    `json:"profile"`
 	Categories      []Category `json:"categories"`
 	Summary         string     `json:"summary"`

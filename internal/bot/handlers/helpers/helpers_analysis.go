@@ -71,6 +71,32 @@ func BuildAnalysisText(userData map[string]string) string {
 		parts = append(parts, fmt.Sprintf("• Цель: %s", goal))
 	}
 
+	// --- Блок образа жизни (20-вопросный опросник) ---
+	if sleep := userData["sleep"]; sleep != "" {
+		parts = append(parts, fmt.Sprintf("• Сон: %s", sleep))
+	}
+	if stress := userData["stress"]; stress != "" {
+		parts = append(parts, fmt.Sprintf("• Уровень стресса: %s", stress))
+	}
+	if veg := userData["nutrition_veg"]; veg != "" {
+		parts = append(parts, fmt.Sprintf("• Овощи/фрукты: %s", veg))
+	}
+	if proc := userData["nutrition_processed"]; proc != "" {
+		parts = append(parts, fmt.Sprintf("• Ультраобработанные продукты: %s", proc))
+	}
+	if water := userData["water"]; water != "" {
+		parts = append(parts, fmt.Sprintf("• Питьевой режим: %s", water))
+	}
+	if activity := userData["activity"]; activity != "" {
+		parts = append(parts, fmt.Sprintf("• Физическая активность: %s", activity))
+	}
+	if family := userData["family_history"]; family != "" && strings.ToLower(family) != "нет" {
+		parts = append(parts, fmt.Sprintf("• Семейный анамнез: %s", family))
+	}
+	if digestion := userData["digestion"]; digestion != "" && strings.ToLower(digestion) != "нет" {
+		parts = append(parts, fmt.Sprintf("• ЖКТ / пищеварение: %s", digestion))
+	}
+
 	onCourse := userData["on_course"]
 	if onCourse == "yes" {
 		courseInfo := userData["course_info"]

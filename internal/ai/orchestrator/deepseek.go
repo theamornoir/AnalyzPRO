@@ -119,6 +119,35 @@ func (p *DeepSeekProvider) GenerateAnalysisFromFileJSON(ctx context.Context, dat
 	return p.analyzeImagesVision(ctx, []visionImage{{data: data, mimeType: mimeType}}, locales.PromptForAnalysisJSON(contextText), true, 8000)
 }
 
+// GenerateDossierJSON — генерирует JSON универсального отчёта-досье здоровья.
+func (p *DeepSeekProvider) GenerateDossierJSON(ctx context.Context, userInput string) (string, error) {
+	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
+		Model: "deepseek-chat",
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage("Ты — опытный врач-диагност и аналитик здоровья. Верни ответ строго в формате JSON, без markdown и комментариев."),
+			openai.UserMessage(userInput),
+		},
+		Temperature: openai.Float(0.1),
+		MaxTokens:   openai.Int(8000),
+	})
+
+	var fullText string
+	for stream.Next() {
+		chunk := stream.Current()
+		if len(chunk.Choices) > 0 {
+			fullText += chunk.Choices[0].Delta.Content
+		}
+	}
+
+	if err := stream.Err(); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(fullText) == "" {
+		return "", fmt.Errorf("deepseek returned empty response")
+	}
+	return fullText, nil
+}
+
 // analyzeImagesVision — мультимодальный анализ изображений через deepseek-chat.
 // prompt — текстовая инструкция; jsonMode включает системную роль «верни только JSON».
 func (p *DeepSeekProvider) analyzeImagesVision(ctx context.Context, images []visionImage, prompt string, jsonMode bool, maxTokens int) (string, error) {

@@ -35,6 +35,7 @@ const (
 	LogGeminiMockAnalysis         = "🧪 Using mock response for analysis"
 	LogGeminiMockAnalysisJSON     = "🧪 Using mock analysis JSON response"
 	LogGeminiMockAnalysisFileJSON = "🧪 Using mock analysis JSON response from file"
+	LogGeminiMockDossier          = "🧪 Using mock health dossier JSON response"
 	LogGeminiMockBioscanJSON      = "🧪 Using mock bioscan JSON response"
 	LogGeminiMockFileWithContext  = "🧪 Using mock response for file analysis with context"
 

@@ -92,7 +92,7 @@ func ProcessBioscanWithPhotos(
 		return
 	}
 
-	htmlReport, err := analysisService.HandleBioscan(
+	pdfBytes, filename, htmlReport, err := analysisService.HandleBioscanPDF(
 		ctx,
 		photosData,
 		"image/jpeg",
@@ -114,21 +114,24 @@ func ProcessBioscanWithPhotos(
 	helpers.DeleteMessage(ctx, b, chatID, loadingMsg.ID)
 	helpers.DeleteMessage(ctx, b, chatID, textMsg.ID)
 
-	_, err = b.SendDocument(
-		ctx,
-		&tgbot.SendDocumentParams{
-			ChatID: chatID,
-			Document: &models.InputFileUpload{
-				Filename: "Bioscan_report.html",
-				Data:     bytes.NewReader([]byte(htmlReport)),
+	// Расширенный (Premium) Bioscan -> детальный PDF-отчёт.
+	if len(pdfBytes) > 0 {
+		_, err = b.SendDocument(
+			ctx,
+			&tgbot.SendDocumentParams{
+				ChatID: chatID,
+				Document: &models.InputFileUpload{
+					Filename: filename,
+					Data:     bytes.NewReader(pdfBytes),
+				},
+				Caption:   fmt.Sprintf(locales.MsgBioscanReportCaption, name, age, height, weight, goal),
+				ParseMode: "Markdown",
 			},
-			Caption:   fmt.Sprintf(locales.MsgBioscanReportCaption, name, age, height, weight, goal),
-			ParseMode: "Markdown",
-		},
-	)
+		)
 
-	if err != nil {
-		log.Printf(locales.LogBioscanSendDocError, err)
+		if err != nil {
+			log.Printf(locales.LogBioscanSendDocError, err)
+		}
 	}
 
 	// Авто-сохранение результата биоскана в историю (для Мониторинга).

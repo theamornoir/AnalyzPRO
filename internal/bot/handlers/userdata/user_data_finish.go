@@ -90,8 +90,29 @@ func formatUserData(data map[string]string) string {
 	if goal := data["goal"]; goal != "" {
 		parts = append(parts, fmt.Sprintf("• **Цель:** %s", goal))
 	}
-	if course := data["course_info"]; course != "" {
-		parts = append(parts, fmt.Sprintf("• **Препараты:** %s", course))
+	if sleep := data["sleep"]; sleep != "" {
+		parts = append(parts, fmt.Sprintf("• **Сон:** %s", sleep))
+	}
+	if stress := data["stress"]; stress != "" {
+		parts = append(parts, fmt.Sprintf("• **Уровень стресса:** %s", stress))
+	}
+	if veg := data["nutrition_veg"]; veg != "" {
+		parts = append(parts, fmt.Sprintf("• **Овощи/фрукты:** %s", veg))
+	}
+	if proc := data["nutrition_processed"]; proc != "" {
+		parts = append(parts, fmt.Sprintf("• **Ультраобработанные:** %s", proc))
+	}
+	if water := data["water"]; water != "" {
+		parts = append(parts, fmt.Sprintf("• **Питьевой режим:** %s", water))
+	}
+	if activity := data["activity"]; activity != "" {
+		parts = append(parts, fmt.Sprintf("• **Физ. активность:** %s", activity))
+	}
+	if family := data["family_history"]; family != "" && strings.ToLower(family) != "нет" {
+		parts = append(parts, fmt.Sprintf("• **Семейный анамнез:** %s", family))
+	}
+	if digestion := data["digestion"]; digestion != "" && strings.ToLower(digestion) != "нет" {
+		parts = append(parts, fmt.Sprintf("• **ЖКТ / пищеварение:** %s", digestion))
 	}
 
 	return strings.Join(parts, "\n")

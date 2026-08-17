@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prisma — Персональный профиль здоровья</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background: #c8d4d0;
+            font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+            font-size: 8.2pt;
+            line-height: 1.65;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color: #1a3b3a;
+        }
+
+        .page {
+            position: relative;
+            width: 210mm;
+            min-height: 297mm;
+            height: 297mm;
+            margin: 0 auto 8mm;
+            padding: 9mm 11mm 7mm;
+            background: #e9efed;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            page-break-after: always;
+            break-after: page;
+            overflow: hidden;
+        }
+        .page:last-child {
+            page-break-after: auto;
+            break-after: auto;
+        }
+
+        @media print {
+            html,
+            body {
+                background: #fff;
+            }
+            .page {
+                margin: 0;
+                box-shadow: none;
+                page-break-after: always;
+                break-after: page;
+            }
+        }
+
+        :root {
+            --navy: #173B42;
+            --teal: #1D7A7A;
+            --mint: #45D0B0;
+            --mint-dark: #2BA88C;
+            --mint-light: #E6F9F4;
+            --bg: #e9efed;
+            --card: #FFFFFF;
+            --text-primary: #1e3d3c;
+            --text-secondary: #6f8580;
+            --border: #d2e1dc;
+            --shadow: rgba(23, 59, 66, 0.05);
+            --rose: #D97070;
+            --rose-light: #F8EAEA;
+            --slate: #5A8A92;
+            --slate-light: #E8F0F2;
+            --coral: #E8836B;
+            --coral-light: #F8EEEA;
+            --sage: #8AA88A;
+            --sage-light: #EEF5EE;
+            --berry: #B8708A;
+            --berry-light: #F5E8EE;
+        }
+
+        .eyebrow {
+            font-size: 6.5pt;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: var(--mint);
+            margin-bottom: 3px;
+        }
+        h1 {
+            font-size: 22pt;
+            line-height: 1.08;
+            letter-spacing: -0.02em;
+            color: var(--navy);
+            margin: 0 0 4px;
+            font-weight: 700;
+        }
+        h2 {
+            font-size: 14pt;
+            line-height: 1.15;
+            color: var(--navy);
+            margin: 0 0 4px;
+            font-weight: 600;
+        }
+        h3 {
+            font-size: 8.5pt;
+            color: var(--navy);
+            margin: 0 0 3px;
+            font-weight: 600;
+        }
+        .lead {
+            font-size: 8.5pt;
+            line-height: 1.6;
+            color: #4d6b67;
+            max-width: 140mm;
+        }
+        .muted { color: var(--text-secondary); }
+        .small { font-size: 6.2pt; color: var(--text-secondary); line-height: 1.5; }
+        .note { font-size: 6.8pt; color: #5d7a76; line-height: 1.6; }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 10px;
+            break-inside: avoid;
+            box-shadow: 0 1px 4px var(--shadow);
+        }
+        .card-soft { background: var(--mint-light); border-color: #c5e3db; }
+        .card-warning { background: var(--sage-light); border-color: #d5e5d5; }
+        .card-danger { background: var(--rose-light); border-color: #ecc4c4; }
+        .card-insight { background: var(--slate-light); border-color: #bccfd9; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+
+        .flex-between { display: flex; justify-content: space-between; align-items: center; }
+        .flex-center { display: flex; align-items: center; gap: 7px; }
+
+        .section { margin-top: 6px; }
+        .section:first-of-type { margin-top: 2px; }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 4px;
+        }
+        .brand {
+            font-size: 7pt;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            font-weight: 800;
+            color: var(--teal);
+        }
+        .page-num { font-size: 6pt; color: var(--text-secondary); font-weight: 500; }
+
+        .page-footer {
+            margin-top: auto;
+            padding-top: 4px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            font-size: 5.5pt;
+            color: var(--text-secondary);
+        }
+
+        .metric-card {
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            background: #fff;
+            padding: 7px 9px;
+            break-inside: avoid;
+        }
+        .metric-name { font-weight: 700; font-size: 8pt; color: var(--navy); }
+        .metric-value { font-size: 13pt; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+        .metric-unit { font-size: 5.8pt; color: var(--text-secondary); margin-left: 2px; }
+        .ref-range { font-size: 5.5pt; color: var(--text-secondary); margin-top: 1px; }
+        .pill {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 30px;
+            font-size: 5pt;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .pill.normal { background: #dff0e9; color: #1f7a5f; }
+        .pill.warning { background: var(--coral-light); color: #b5603f; }
+        .pill.critical { background: var(--rose-light); color: #b14a4a; }
+
+        .system-row { display: flex; align-items: center; gap: 7px; margin: 3px 0; }
+        .system-row .label { font-size: 6.8pt; font-weight: 600; color: var(--navy); min-width: 30mm; }
+        .system-row .bar-wrap { flex: 1; min-width: 0; }
+        .system-row .score { font-size: 6.8pt; font-weight: 700; color: var(--navy); min-width: 10mm; text-align: right; font-variant-numeric: tabular-nums; }
+
+        .progress-bar-thick {
+            height: 10px;
+            background: #e8f0ed;
+            border-radius: 20px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .progress-bar-thick .fill { display: block; height: 100%; border-radius: 20px; }
+        .fill-mint { background: #45D0B0; }
+        .fill-teal { background: #1D7A7A; }
+        .fill-rose { background: #D97070; }
+        .fill-slate { background: #5A8A92; }
+        .fill-navy { background: #173B42; }
+        .fill-coral { background: #E8836B; }
+        .fill-sage { background: #8AA88A; }
+
+        .donut-large { width: 88px; height: 88px; position: relative; flex: 0 0 auto; }
+        .donut-large svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        .donut-large circle { fill: none; stroke-width: 11; }
+        .donut-large .bg { stroke: #dcebe7; }
+        .donut-large .fg { stroke-linecap: round; }
+        .donut-large .center {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            font-size: 17pt; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums;
+        }
+
+        .donut-medium { width: 68px; height: 68px; position: relative; flex: 0 0 auto; }
+        .donut-medium svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        .donut-medium circle { fill: none; stroke-width: 9; }
+        .donut-medium .bg { stroke: #dcebe7; }
+        .donut-medium .fg { stroke-linecap: round; }
+        .donut-medium .center {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            font-size: 13pt; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums;
+        }
+
+        .donut-stat { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 3px; }
+        .donut-stat .label { font-size: 6.2pt; font-weight: 600; color: var(--navy); }
+        .donut-stat .sub { font-size: 5.5pt; color: var(--text-secondary); }
+        .donut-stat .value-label { font-size: 5.5pt; font-weight: 500; color: var(--text-secondary); }
+
+        .activity-item { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
+        .activity-item .alabel { font-size: 6.8pt; font-weight: 500; color: var(--navy); min-width: 32mm; }
+        .activity-item .abar-wrap { flex: 1; min-width: 0; }
+        .activity-item .ascore { font-size: 6.8pt; font-weight: 600; color: var(--navy); min-width: 10mm; text-align: right; font-variant-numeric: tabular-nums; }
+
+        .callout {
+            border-left: 3px solid var(--mint);
+            background: var(--mint-light);
+            padding: 4px 8px;
+            border-radius: 0 7px 7px 0;
+            color: #1f4b47;
+            font-size: 6.8pt;
+            line-height: 1.6;
+        }
+
+        .text-block { font-size: 6.8pt; line-height: 1.7; color: #3d5d59; }
+        .text-block p { margin: 0 0 3px 0; }
+
+        .recommend-item { padding: 3px 0 3px 10px; border-left: 2px solid var(--mint); margin-bottom: 3px; }
+        .recommend-item .title { font-weight: 600; font-size: 7pt; color: var(--navy); }
+        .recommend-item .desc { font-size: 6.5pt; color: #3d5d59; line-height: 1.6; }
+
+        .insight-box { background: var(--slate-light); border-radius: 8px; padding: 5px 8px; border: 1px solid #bccfd9; margin: 3px 0; }
+        .insight-box .label { font-weight: 700; color: #1d4a5a; font-size: 6.5pt; }
+        .insight-box .text { font-size: 6.5pt; color: #2a4d5a; line-height: 1.6; }
+
+        .source-item { padding: 3px 0; border-bottom: 1px solid var(--border); }
+        .source-item:last-child { border-bottom: 0; }
+        .source-item .ref { font-size: 5.8pt; color: var(--text-secondary); }
+
+        .stat-pill { background: #fff; border: 1px solid var(--border); border-radius: 7px; padding: 3px 9px; text-align: center; min-width: 38px; }
+        .stat-pill .num { font-size: 10pt; font-weight: 700; color: var(--navy); }
+        .stat-pill .lbl { font-size: 5pt; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; }
+
+        .answer-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 7px; font-size: 6.5pt; color: #3d5d59; }
+        .answer-grid .q { font-weight: 600; color: var(--navy); }
+        .answer-grid .a { color: var(--text-secondary); }
+
+        .patient-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 6px 0 5px; }
+        .patient-item { background: #fff; border: 1px solid var(--border); border-radius: 7px; padding: 4px 6px; }
+        .patient-item .label { font-size: 5pt; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); }
+        .patient-item .value { font-weight: 600; color: var(--navy); font-size: 7.5pt; }
+
+        .combined-chart { background: #ffffff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 4px 0 6px; box-shadow: 0 1px 4px var(--shadow); }
+        .combined-chart .chart-title { font-size: 7pt; font-weight: 600; color: var(--teal); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+
+        .lifestyle-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: #fff; border: 1px solid var(--border); border-radius: 9px; padding: 10px 8px; margin-top: 4px; }
+
+        .indicator-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 4px 0; }
+        .indicator-card { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 5px 6px; }
+        .indicator-card .iname { font-size: 5.6pt; font-weight: 600; color: var(--navy); line-height: 1.2; }
+        .indicator-card .ivalue { font-size: 10pt; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+        .indicator-card .iunit { font-size: 5.4pt; color: var(--text-secondary); }
+        .indicator-card .inormal { font-size: 5.2pt; color: var(--text-secondary); margin-top: 1px; }
+
+        .mt-1 { margin-top: 4px; }
+        .mt-2 { margin-top: 7px; }
+
+        @media print {
+            .card, .metric-card, .insight-box, .patient-item, .source-item, .indicator-card { break-inside: avoid; page-break-inside: avoid; }
+            .system-row { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+{{$p := 0}}
+
+<!-- ===================== COVER ===================== -->
+<section class="page" style="background:#e9efed;">
+    {{$p = add $p 1}}
+    <div class="page-header">
+        <span class="brand">PRISMA · Premium Health Report</span>
+        <span class="page-num">{{printf "%02d" $p}}</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;flex:1;gap:3px;">
+        <div class="eyebrow">Персональный профиль здоровья</div>
+        <h1>Состояние здоровья<br>и потенциал</h1>
+        <p class="lead" style="max-width:135mm;font-size:8.5pt;margin-bottom:3px;">
+            Интегральная оценка на основе присланных анализов и 20-вопросного опросника об образе жизни.
+        </p>
+
+        <div class="patient-grid">
+            <div class="patient-item"><div class="label">Пациент</div><div class="value">{{.Patient.Name}}</div></div>
+            <div class="patient-item"><div class="label">Возраст</div><div class="value">{{.Patient.Age}}</div></div>
+            <div class="patient-item"><div class="label">Пол</div><div class="value">{{.Patient.Gender}}</div></div>
+            <div class="patient-item"><div class="label">Дата отчёта</div><div class="value">{{.Patient.Date}}</div></div>
+        </div>
+
+        <div class="flex-wrap" style="margin:2px 0 3px;">
+            <div class="stat-pill"><div class="num">{{len .Survey}}</div><div class="lbl">Вопросов</div></div>
+            <div class="stat-pill"><div class="num">{{len .LabSystems}}</div><div class="lbl">Систем</div></div>
+            <div class="stat-pill"><div class="num">{{len .References}}</div><div class="lbl">Источников</div></div>
+        </div>
+
+        <div class="combined-chart">
+            <div class="chart-title">Интегральный профиль здоровья</div>
+            <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+                <div style="display:flex; gap:20px; align-items:center;">
+                    <div class="flex-center">
+                        <div class="donut-large">
+                            <svg viewBox="0 0 100 100">
+                                <circle class="bg" cx="50" cy="50" r="40" pathLength="100"/>
+                                <circle class="fg" cx="50" cy="50" r="40" pathLength="100" stroke-dasharray="{{.Scores.Health}} 100" style="stroke:#45D0B0;"/>
+                            </svg>
+                            <div class="center">{{.Scores.Health}}</div>
+                        </div>
+                        <div><div class="small" style="font-weight:600;color:var(--navy);">Состояние здоровья</div><div class="small muted">на основе данных</div></div>
+                    </div>
+                    <div class="flex-center">
+                        <div class="donut-large">
+                            <svg viewBox="0 0 100 100">
+                                <circle class="bg" cx="50" cy="50" r="40" pathLength="100"/>
+                                <circle class="fg" cx="50" cy="50" r="40" pathLength="100" stroke-dasharray="{{.Scores.Potential}} 100" style="stroke:#1D7A7A;"/>
+                            </svg>
+                            <div class="center">{{.Scores.Potential}}</div>
+                        </div>
+                        <div><div class="small" style="font-weight:600;color:var(--navy);">Потенциал здоровья</div><div class="small muted">резерв улучшения</div></div>
+                    </div>
+                </div>
+                <div style="flex:1; min-width:0;">
+                    <div style="font-size:6.2pt;font-weight:600;color:var(--teal);margin-bottom:2px;">Оценка по образу жизни</div>
+                    <div class="system-row"><span class="label" style="min-width:22mm;font-size:6.2pt;">Самочувствие</span><div class="bar-wrap"><div class="progress-bar-thick"><span class="fill fill-mint" style="width:{{.Scores.Wellbeing}}%;"></span></div></div><span class="score" style="font-size:6.2pt;">{{.Scores.Wellbeing}}</span></div>
+                    <div class="system-row"><span class="label" style="min-width:22mm;font-size:6.2pt;">Качество сна</span><div class="bar-wrap"><div class="progress-bar-thick"><span class="fill fill-sage" style="width:{{.Scores.Sleep}}%;"></span></div></div><span class="score" style="font-size:6.2pt;">{{.Scores.Sleep}}</span></div>
+                    <div class="system-row"><span class="label" style="min-width:22mm;font-size:6.2pt;">Уровень стресса</span><div class="bar-wrap"><div class="progress-bar-thick"><span class="fill fill-sage" style="width:{{.Scores.Stress}}%;"></span></div></div><span class="score" style="font-size:6.2pt;">{{.Scores.Stress}}</span></div>
+                    <div class="system-row"><span class="label" style="min-width:22mm;font-size:6.2pt;">Физ. активность</span><div class="bar-wrap"><div class="progress-bar-thick"><span class="fill fill-mint" style="width:{{.Scores.Activity}}%;"></span></div></div><span class="score" style="font-size:6.2pt;">{{.Scores.Activity}}</span></div>
+                    <div class="system-row"><span class="label" style="min-width:22mm;font-size:6.2pt;">Питание</span><div class="bar-wrap"><div class="progress-bar-thick"><span class="fill fill-sage" style="width:{{.Scores.Nutrition}}%;"></span></div></div><span class="score" style="font-size:6.2pt;">{{.Scores.Nutrition}}</span></div>
+                    <div class="system-row"><span class="label" style="min-width:22mm;font-size:6.2pt;">Концентрация</span><div class="bar-wrap"><div class="progress-bar-thick"><span class="fill fill-rose" style="width:{{.Scores.Focus}}%;"></span></div></div><span class="score" style="font-size:6.2pt;">{{.Scores.Focus}}</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:8px 10px;margin-top:2px;">
+            <div style="font-size:6.5pt;font-weight:600;color:var(--teal);margin-bottom:4px;">Образ жизни и самочувствие</div>
+            <div class="lifestyle-grid">
+                <div class="donut-stat">
+                    <div class="donut-medium"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="40" pathLength="100"/><circle class="fg" cx="50" cy="50" r="40" pathLength="100" stroke-dasharray="{{.Scores.Wellbeing}} 100" style="stroke:#45D0B0;"/></svg><div class="center" style="font-size:11pt;">{{.Scores.Wellbeing}}</div></div>
+                    <div class="label">Самочувствие</div><div class="sub">из 100</div>
+                </div>
+                <div class="donut-stat">
+                    <div class="donut-medium"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="40" pathLength="100"/><circle class="fg" cx="50" cy="50" r="40" pathLength="100" stroke-dasharray="{{.Scores.Sleep}} 100" style="stroke:#8AA88A;"/></svg><div class="center" style="font-size:11pt;">{{.Scores.Sleep}}</div></div>
+                    <div class="label">Качество сна</div><div class="sub">из 100</div>
+                </div>
+                <div class="donut-stat">
+                    <div class="donut-medium"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="40" pathLength="100"/><circle class="fg" cx="50" cy="50" r="40" pathLength="100" stroke-dasharray="{{.Scores.Stress}} 100" style="stroke:#8AA88A;"/></svg><div class="center" style="font-size:11pt;">{{.Scores.Stress}}</div></div>
+                    <div class="label">Уровень стресса</div><div class="sub">из 100</div>
+                </div>
+                <div class="donut-stat">
+                    <div class="donut-medium"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="40" pathLength="100"/><circle class="fg" cx="50" cy="50" r="40" pathLength="100" stroke-dasharray="{{.Scores.Activity}} 100" style="stroke:#45D0B0;"/></svg><div class="center" style="font-size:11pt;">{{.Scores.Activity}}</div></div>
+                    <div class="label">Физ. активность</div><div class="sub">из 100</div>
+                </div>
+                <div class="donut-stat">
+                    <div class="donut-medium"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="40" pathLength="100"/><circle class="fg" cx="50" cy="50" r="40" pathLength="100" stroke-dasharray="{{.Scores.Nutrition}} 100" style="stroke:#8AA88A;"/></svg><div class="center" style="font-size:11pt;">{{.Scores.Nutrition}}</div></div>
+                    <div class="label">Питание</div><div class="sub">из 100</div>
+                </div>
+                <div class="donut-stat">
+                    <div class="donut-medium"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="40" pathLength="100"/><circle class="fg" cx="50" cy="50" r="40" pathLength="100" stroke-dasharray="{{.Scores.Focus}} 100" style="stroke:#D97070;"/></svg><div class="center" style="font-size:11pt;">{{.Scores.Focus}}</div></div>
+                    <div class="label">Концентрация</div><div class="sub">из 100</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="callout" style="margin-top:2px;">
+            <strong>Ключевой вывод:</strong> интегральная оценка построена на реальных лабораторных данных и ответах опросника. Потенциал улучшения — {{.Scores.Potential}}/100.
+        </div>
+
+        <div style="font-size:6pt;color:var(--text-secondary);margin-top:2px;border-top:1px solid var(--border);padding-top:3px;">
+            Отчёт носит информационный характер и не заменяет консультацию врача. Интерпретация основана на предоставленных данных.
+        </div>
+    </div>
+
+    <div class="page-footer">
+        <span>Prisma · персональный профиль</span>
+        <span>{{printf "%02d" $p}}</span>
+    </div>
+</section>
+
+<!-- ===================== SYNTHESIS (ОБЩАЯ КАРТИНА) ===================== -->
+<section class="page">
+    {{$p = add $p 1}}
+    <div class="page-header"><span class="brand">Общая картина здоровья</span><span class="page-num">{{printf "%02d" $p}}</span></div>
+    <div class="eyebrow">Сводный портрет</div>
+    <h2>Какая у вас общая картина</h2>
+    <p class="lead">Единый связный рассказ о здоровье — как образ жизни и присланные анализы складываются в одну картину, где корневые причины и что даст наибольший эффект.</p>
+    {{if .Synthesis}}
+    <div class="card card-insight" style="margin-top:4px;">
+        <div class="text-block" style="white-space: pre-line; font-size:7.4pt; line-height:1.8;">{{.Synthesis}}</div>
+    </div>
+    {{else}}
+    <div class="callout" style="margin-top:4px;">Интегральная оценка построена на ответах опросника и присланных анализах. Потенциал улучшения — {{.Scores.Potential}}/100.</div>
+    {{end}}
+    <div class="page-footer"><span>Prisma · общая картина</span><span>{{printf "%02d" $p}}</span></div>
+</section>
+
+<!-- ===================== SURVEY ===================== -->
+<section class="page">
+    {{$p = add $p 1}}
+    <div class="page-header"><span class="brand">Результаты анкетирования</span><span class="page-num">{{printf "%02d" $p}}</span></div>
+    <div class="eyebrow">01 · Полный разбор опросника</div>
+    <h2>Детальный анализ ответов</h2>
+    <p class="lead">Каждый ответ анкеты проанализирован с точки зрения влияния на здоровье и сопоставлен с лабораторными данными.</p>
+
+    <div class="answer-grid" style="margin-top:4px;">
+        {{range .Survey}}
+        <div><span class="q">{{.Num}}. {{.Question}}</span> <span class="a">{{.Answer}}</span></div>
+        {{end}}
+    </div>
+
+    <div class="callout" style="margin-top:4px;">Анкета выявила ключевые зоны образа жизни, напрямую связанные с метаболическими показателями крови.</div>
+    <div class="page-footer"><span>Prisma · анкета</span><span>{{printf "%02d" $p}}</span></div>
+</section>
+
+<!-- ===================== LIFESTYLE SECTIONS ===================== -->
+{{range .Lifestyle}}
+<section class="page">
+    {{$p = add $p 1}}
+    <div class="page-header"><span class="brand">{{.Title}}</span><span class="page-num">{{printf "%02d" $p}}</span></div>
+    <div class="eyebrow">Глубинная диагностика образа жизни</div>
+    <h2>{{.Title}}</h2>
+
+    <div style="display:flex; align-items:center; gap:10px; margin-top:4px;">
+        <div class="donut-medium" style="flex:0 0 auto;">
+            <svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="40" pathLength="100"/><circle class="fg" cx="50" cy="50" r="40" pathLength="100" stroke-dasharray="{{.Score}} 100" style="stroke:{{donutColor .Status}};"/></svg>
+            <div class="center" style="font-size:13pt;">{{.Score}}</div>
+        </div>
+        <div>
+            <span class="pill {{pillClass .Status}}">{{statusLabel .Status}}</span>
+            <div class="small" style="margin-top:2px;">оценка раздела из 100</div>
+        </div>
+    </div>
+
+    <div class="text-block mt-1" style="white-space: pre-line; font-size:7.3pt; line-height:1.8;">{{.Narrative}}</div>
+
+    <div class="recommend-item mt-2">
+        <div class="title">Рекомендации</div>
+        {{range .Recommendations}}<div class="desc">• {{.}}</div>{{end}}
+    </div>
+    <div class="page-footer"><span>Prisma · образ жизни</span><span>{{printf "%02d" $p}}</span></div>
+</section>
+{{end}}
+
+<!-- ===================== LAB SYSTEMS ===================== -->
+{{range .LabSystems}}
+<section class="page">
+    {{$p = add $p 1}}
+    <div class="page-header"><span class="brand">{{.Title}}</span><span class="page-num">{{printf "%02d" $p}}</span></div>
+    <div class="eyebrow">Лабораторная панель</div>
+    <h2>{{.Title}}</h2>
+
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;align-items:center;">
+        <span class="pill {{pillClass .Status}}">{{statusLabel .Status}}</span>
+        <span class="small">{{.Summary}}</span>
+    </div>
+
+    {{if .Indicators}}
+    <div class="indicator-grid" style="margin-top:6px;">
+        {{range .Indicators}}
+        <div class="indicator-card">
+            <div class="iname">{{.Name}}</div>
+            <div><span class="ivalue">{{.Value}}</span> <span class="iunit">{{.Unit}}</span></div>
+            <div class="inormal">норма {{.Normal}}</div>
+            <div style="margin-top:2px;"><span class="pill {{pillClass .Status}}">{{statusLabel .Status}}</span></div>
+        </div>
+        {{end}}
+    </div>
+    {{end}}
+
+    <div class="text-block mt-1" style="white-space: pre-line; font-size:7.3pt; line-height:1.8;">{{.Narrative}}</div>
+
+    <div class="recommend-item mt-2">
+        <div class="title">Рекомендации</div>
+        {{range .Recommendations}}<div class="desc">• {{.}}</div>{{end}}
+    </div>
+    <div class="page-footer"><span>Prisma · лабораторные данные</span><span>{{printf "%02d" $p}}</span></div>
+</section>
+{{end}}
+
+<!-- ===================== PRIORITIES ===================== -->
+<section class="page">
+    {{$p = add $p 1}}
+    <div class="page-header"><span class="brand">Персональные рекомендации</span><span class="page-num">{{printf "%02d" $p}}</span></div>
+    <div class="eyebrow">04 · Интегральный план действий</div>
+    <h2>Комплексная карта улучшения здоровья</h2>
+    <p class="lead">Синтез всех рекомендаций в единый план действий с приоритетами и сроками.</p>
+
+    <div style="margin-top:4px;">
+        {{range .Priorities}}
+        <div class="card" style="margin-bottom:3px; border-left:3px solid var(--mint);">
+            <span class="metric-name">{{.Title}}</span>
+            <div class="small">Срок: {{.Period}}</div>
+            <div style="margin-top:2px;">
+                {{range .Items}}<div style="font-size:6.5pt;color:#3d5d59;line-height:1.5;">• {{.}}</div>{{end}}
+            </div>
+        </div>
+        {{end}}
+    </div>
+
+    <div class="card card-insight" style="margin-top:4px;">
+        <div class="insight-box"><div class="label">Уникальность подхода</div><div class="text">Интегральный анализ выявляет корневые причины отклонений и формирует персонализированный план, учитывающий все аспекты жизни пациента.</div></div>
+    </div>
+    <div class="page-footer"><span>Prisma · рекомендации</span><span>{{printf "%02d" $p}}</span></div>
+</section>
+
+<!-- ===================== REFERENCES ===================== -->
+<section class="page">
+    {{$p = add $p 1}}
+    <div class="page-header"><span class="brand">Научная база</span><span class="page-num">{{printf "%02d" $p}}</span></div>
+    <div class="eyebrow">05 · Источники и методология</div>
+    <h2>Научная база отчёта</h2>
+    <p class="lead">Интерпретация основана на актуальных клинических рекомендациях и научных данных.</p>
+
+    <div style="margin-top:4px;">
+        {{range .References}}
+        <div class="source-item"><strong>{{.Source}}</strong> — {{.Detail}} <span class="ref"></span></div>
+        {{end}}
+    </div>
+
+    <div class="card card-soft" style="margin-top:4px;">
+        <div class="eyebrow">Методология интегрального анализа</div>
+        <p class="small">Каждый показатель интерпретировался с учётом референсных интервалов, индивидуального контекста (возраст, пол, анамнез, образ жизни) и актуальных клинических руководств. Отчёт не является диагнозом и предназначен для информированного обсуждения с врачом.</p>
+    </div>
+    <div class="page-footer"><span>Prisma · научная база</span><span>{{printf "%02d" $p}}</span></div>
+</section>
+
+</body>
+</html>

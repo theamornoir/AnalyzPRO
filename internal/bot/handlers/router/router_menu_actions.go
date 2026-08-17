@@ -11,6 +11,7 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/bot/botutil"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
@@ -22,7 +23,7 @@ import (
 // чтобы Telegram WebView перезапросил свежие файлы (иначе отдаёт
 // закэшированную старую версию — отсюда «пустой/старый» дашборд после правок).
 // Должна совпадать с ?v= в ссылках на активы в webapp_files/index.html.
-const WebAppAssetsVersion = "v8"
+const WebAppAssetsVersion = "v9"
 
 // WithWebAppVersion добавляет ?v=<version> к URL Mini App, сбрасывая кэш
 // Telegram WebView при обновлении активов. Пустой URL не трогает.
@@ -402,9 +403,10 @@ func (r *router) handleExtendedAnalysis(ctx context.Context, b *tgbot.Bot, chatI
 	return true
 }
 
-// handleBioscanStart - запускает bioscan.
-func (r *router) handleBioscanStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
-	log.Printf(locales.LogRouterBioscanStart, chatID)
+// handleBioscanBasicStart - запускает БАЗОВЫЙ (бесплатный) Bioscan: 1 фото ->
+// текстовый результат в чат. Доступен всем (проверка соглашения + busy).
+func (r *router) handleBioscanBasicStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf("[BIOSCAN] запуск БАЗОВОГО для chatID=%d", chatID)
 
 	if !r.agreementStorage.IsAgreed(chatID) {
 		log.Printf(locales.LogRouterAgreeNotDone, chatID)
@@ -426,10 +428,54 @@ func (r *router) handleBioscanStart(ctx context.Context, b *tgbot.Bot, chatID in
 		return true
 	}
 
+	r.setCurrentSection(chatID, "analysis")
+	r.deleteHubBlock(ctx, b, chatID)
+	bioscan.StartBioscanBasicFlow(ctx, b, r.stateManager, chatID)
+	return true
+}
+
+// handleBioscanExtendedStart - запускает РАСШИРЕННЫЙ (Premium) Bioscan PRO:
+// 4 фото -> детальный PDF-отчёт. Premium-гейт: без подписки — сообщение об
+// оформлении Premium (анализ не начинается).
+func (r *router) handleBioscanExtendedStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf("[BIOSCAN] запуск РАСШИРЕННОГО (PRO) для chatID=%d", chatID)
+
+	if !r.agreementStorage.IsAgreed(chatID) {
+		log.Printf(locales.LogRouterAgreeNotDone, chatID)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgBioscanAgreementRequired,
+			ReplyMarkup: keyboards.StartMenu(),
+		})
+		return true
+	}
+
+	currentState := r.stateManager.GetState(chatID)
+	if currentState != states.StateIdle {
+		log.Printf(locales.LogRouterUserBusy, chatID, currentState)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgUserBusy,
+		})
+		return true
+	}
+
+	if !r.paymentService.IsUserPremium(chatID) {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgBioscanExtendedPremiumRequired,
+			ReplyMarkup: keyboards.BackMenu(),
+			ParseMode:   "Markdown",
+		})
+		return true
+	}
+
+	r.setCurrentSection(chatID, "analysis")
+	r.deleteHubBlock(ctx, b, chatID)
+
 	// Принудительно устанавливаем состояние
 	r.stateManager.SetState(chatID, states.StateWaitingBioscanName)
 	log.Printf(locales.LogRouterForceBioscan, chatID)
-	r.setCurrentSection(chatID, "analysis")
 
 	// Единая Reply-клавиатура [Назад] внизу на всём протяжении Bioscan.
 	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
@@ -444,8 +490,10 @@ func (r *router) handleBioscanStart(ctx context.Context, b *tgbot.Bot, chatID in
 	return true
 }
 
-// handleDashboard — открывает веб-дашборд (только для Premium).
-func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+// handleDashboard — открывает веб-дашборд. Если demo=true — добавляет
+// ?demo=1 к URL, чтобы открыть «полностью заполненную» синтетическую
+// сводку без реальных анализов и без Premium (для предпросмотра графиков).
+func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64, demo bool) bool {
 	log.Printf(locales.LogRouterDashboard, chatID)
 
 	// Выбрано под-действие — убираем блок-хаб, чтобы в чате не висело меню
@@ -457,7 +505,15 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 	log.Printf(locales.LogDashboardPremiumCheck, chatID, isPremium)
 
 	// Версия в URL сбрасывает кэш Telegram WebView (см. WebAppAssetsVersion).
+	// При demo добавляем ?demo=1 — бэкенд отдаст синтетические метрики.
 	webAppTarget := WithWebAppVersion(r.webAppURL)
+	if demo {
+		if strings.Contains(webAppTarget, "?") {
+			webAppTarget += "&demo=1"
+		} else {
+			webAppTarget += "?demo=1"
+		}
+	}
 	if webAppTarget == "" {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
@@ -514,27 +570,40 @@ func monitoringWebAppURL(base string) string {
 	return base
 }
 
-// handleMonitoring — открывает веб-приложение «Мониторинг» (Premium-функция).
-func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
-	log.Printf("[MONITORING] открытие для chatID=%d", chatID)
+// handleMonitoring — открывает веб-приложение «Мониторинг». Если
+// demo=true — добавляет ?demo=1 к URL, открывая синтетические проекты
+// (без реальных записей и без Premium) для предпросмотра графиков.
+func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int64, demo bool) bool {
+	log.Printf("[MONITORING] открытие для chatID=%d (demo=%v)", chatID, demo)
 
 	// Выбрано под-действие — убираем блок-хаб.
 	r.deleteHubBlock(ctx, b, chatID)
 	r.setCurrentSection(chatID, "health")
 
-	isPremium := r.paymentService.IsUserPremium(chatID)
-	if !isPremium {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgMonitoringPremiumRequired,
-			ReplyMarkup: keyboards.BackMenu(),
-			ParseMode:   "Markdown",
-		})
-		return true
+	// Демо-режим пропускает проверку Premium: открываем синтетические
+	// проекты для предпросмотра графиков.
+	if !demo {
+		isPremium := r.paymentService.IsUserPremium(chatID)
+		if !isPremium {
+			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+				ChatID:      chatID,
+				Text:        locales.MsgMonitoringPremiumRequired,
+				ReplyMarkup: keyboards.BackMenu(),
+				ParseMode:   "Markdown",
+			})
+			return true
+		}
 	}
 
 	// Версия в URL сбрасывает кэш Telegram WebView (см. WebAppAssetsVersion).
 	webAppTarget := WithWebAppVersion(monitoringWebAppURL(r.webAppURL))
+	if demo {
+		if strings.Contains(webAppTarget, "?") {
+			webAppTarget += "&demo=1"
+		} else {
+			webAppTarget += "?demo=1"
+		}
+	}
 	if webAppTarget == "" {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
