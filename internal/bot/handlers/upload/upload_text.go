@@ -81,8 +81,14 @@ func handleTextUpload(
 		Text:   result,
 	})
 
+	// Дополнительно запрашиваем у ИИ структурированные показатели (sections/
+	// categories с indicators), чтобы наполнить блоки «Сводки здоровья»
+	// РЕАЛЬНЫМИ значениями обычного текстового анализа. Не критично: при
+	// ошибке сохраняем только текст (текущее поведение).
+	indicatorsJSON, _ := analysisService.HandleAnalysisJSON(ctx, payload)
+
 	// Сохраняем ОБЫЧНЫЙ анализ (текстом) в «Сводку здоровья».
-	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, result)
+	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, result, indicatorsJSON)
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
 
 	// Сообщаем, что результат сохранён в «Сводку здоровья», и даём

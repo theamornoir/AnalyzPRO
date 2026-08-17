@@ -2,6 +2,7 @@ package upload
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -26,21 +27,142 @@ import (
 // entryType, чтобы он появился в «Сводке здоровья» вместе с прочими
 // результатами. Формирует аккуратный HTML-документ (ReportHTML), чтобы
 // кнопка «📄 PDF» в Сводке открывала именно этот результат без ошибки рендера.
-func savePlainResult(ctx context.Context, saver monitoring.Repository, chatID int64, entryType, title, note string) {
+//
+// indicatorsJSON - опциональный структурированный JSON отчёта (sections/
+// categories с indicators), полученный от ИИ. Если непустой и валидный - его
+// группы показателей вливаются в JsonData записи, чтобы дашборд «Сводка
+// здоровья» мог строить блоки (кровь/биохимия и т.п.) и заполнять карточки
+// крови/питания/активности из РЕАЛЬНЫХ показателей обычного анализа.
+func savePlainResult(ctx context.Context, saver monitoring.Repository, chatID int64, entryType, title, note, indicatorsJSON string) {
 	if saver == nil || strings.TrimSpace(note) == "" {
 		return
+	}
+	// Итоговый JSON записи: человекочитаемый текст (note) + структурированные
+	// показатели (sections/categories) для блоков дашборда.
+	record := map[string]interface{}{
+		"title": title,
+		"note":  note,
+	}
+	if groups := extractIndicatorGroups(indicatorsJSON); groups != nil {
+		if sections, ok := groups["sections"]; ok {
+			record["sections"] = sections
+		}
+		if categories, ok := groups["categories"]; ok {
+			record["categories"] = categories
+		}
+	}
+	payload, err := json.Marshal(record)
+	if err != nil {
+		// На крайний случай - хотя бы текст.
+		payload = []byte(fmt.Sprintf(`{"title":%q,"note":%q}`, title, note))
 	}
 	entry := &monitoring.HistoryEntry{
 		TelegramID: chatID,
 		Type:       entryType,
 		Title:      title,
 		Date:       time.Now(),
-		JsonData:   fmt.Sprintf(`{"title":%q,"note":%q}`, title, note),
+		JsonData:   string(payload),
 		ReportHTML: helpers.PlainResultHTML(title, note),
 	}
 	if err := saver.SaveResult(ctx, entry); err != nil {
 		log.Printf("[UPLOAD] не удалось сохранить %s chatID=%d: %v", entryType, chatID, err)
 	}
+}
+
+// extractIndicatorGroups извлекает массивы sections/categories из JSON
+// структурированного отчёта анализа (возвращается ИИ). Возвращает nil, если
+// валидного JSON нет или в обоих массивах нет элементов.
+// stripJSONFences убирает markdown-ограждения (```json ... ```) и случайный
+// текст вокруг JSON, которые модель иногда добавляет даже при явном запросе
+// «строго JSON». Без этого json.Unmarshal падает, и структурированные
+// показатели не попадают в «Сводка здоровья» (блоки не строятся даже при
+// активной Premium).
+func stripJSONFences(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.ReplaceAll(s, "```json", "")
+	s = strings.ReplaceAll(s, "```", "")
+	s = strings.TrimSpace(s)
+	// Отбрасываем возможный текст до первой «{» и после последней «}».
+	if start := strings.Index(s, "{"); start > 0 {
+		s = s[start:]
+	}
+	if end := strings.LastIndex(s, "}"); end >= 0 && end < len(s)-1 {
+		s = s[:end+1]
+	}
+	return strings.TrimSpace(s)
+}
+
+func extractIndicatorGroups(indicatorsJSON string) map[string]interface{} {
+	s := stripJSONFences(indicatorsJSON)
+	if s == "" {
+		return nil
+	}
+	var doc struct {
+		Sections   json.RawMessage `json:"sections"`
+		Categories json.RawMessage `json:"categories"`
+	}
+	if err := json.Unmarshal([]byte(s), &doc); err != nil {
+		return nil
+	}
+	out := map[string]interface{}{}
+	if len(doc.Sections) > 0 && string(doc.Sections) != "null" {
+		var arr []json.RawMessage
+		if json.Unmarshal(doc.Sections, &arr) == nil && len(arr) > 0 {
+			out["sections"] = arr
+		}
+	}
+	if len(doc.Categories) > 0 && string(doc.Categories) != "null" {
+		var arr []json.RawMessage
+		if json.Unmarshal(doc.Categories, &arr) == nil && len(arr) > 0 {
+			out["categories"] = arr
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// mergeIndicatorGroups объединяет несколько структурированных JSON-отчётов
+// (по одному на файл) в один общий объект с массивами sections/categories.
+func mergeIndicatorGroups(parts []string) string {
+	sections := []json.RawMessage{}
+	categories := []json.RawMessage{}
+	for _, p := range parts {
+		if strings.TrimSpace(p) == "" {
+			continue
+		}
+		var doc struct {
+			Sections   json.RawMessage `json:"sections"`
+			Categories json.RawMessage `json:"categories"`
+		}
+		if err := json.Unmarshal([]byte(p), &doc); err != nil {
+			continue
+		}
+		if len(doc.Sections) > 0 {
+			var arr []json.RawMessage
+			if json.Unmarshal(doc.Sections, &arr) == nil {
+				sections = append(sections, arr...)
+			}
+		}
+		if len(doc.Categories) > 0 {
+			var arr []json.RawMessage
+			if json.Unmarshal(doc.Categories, &arr) == nil {
+				categories = append(categories, arr...)
+			}
+		}
+	}
+	if len(sections) == 0 && len(categories) == 0 {
+		return ""
+	}
+	merged, err := json.Marshal(map[string]interface{}{
+		"sections":   sections,
+		"categories": categories,
+	})
+	if err != nil {
+		return ""
+	}
+	return string(merged)
 }
 
 // processSingleFile - обрабатывает один файл.
@@ -113,9 +235,16 @@ func processSingleFile(
 		Text:   result,
 	})
 
+	// Дополнительно запрашиваем у ИИ структурированные показатели
+	// (sections/categories с indicators), чтобы наполнить блоки «Сводки
+	// здоровья» РЕАЛЬНЫМИ значениями обычного анализа (кровь/биохимия и т.п.).
+	// Не критично: при ошибке сохраняем только текст (текущее поведение).
+	indicatorsJSON, _ := analysisService.HandleAnalysisFromFileJSON(ctx, fileData, file.MimeType, contextInfo)
+
 	// Сохраняем ОБЫЧНЫЙ анализ в «Сводку здоровья» (история пользователя),
-	// чтобы он был доступен там вместе с прочими результатами.
-	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, result)
+	// чтобы он был доступен там вместе с прочими результатами. Вместе с
+	// текстом сохраняем структурированные показатели для блоков дашборда.
+	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, result, indicatorsJSON)
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
 
 	// Сообщаем, что результат сохранён в «Сводку здоровья», и даём
@@ -142,6 +271,7 @@ func processMultipleFiles(
 	webAppURL string,
 ) {
 	var collectedTexts []string
+	collectedIndicators := []string{}
 
 	for i, file := range files {
 		fileData, err := file.readData()
@@ -157,6 +287,10 @@ func processMultipleFiles(
 		)
 		if err == nil && res != "" {
 			collectedTexts = append(collectedTexts, fmt.Sprintf("=== Данные из файла %d (%s) ===\n%s", i+1, file.FileName, res))
+		}
+		// Параллельно собираем структурированные показатели для дашборда.
+		if ind, ierr := analysisService.HandleAnalysisFromFileJSON(ctx, fileData, file.MimeType, contextInfo); ierr == nil && ind != "" {
+			collectedIndicators = append(collectedIndicators, ind)
 		}
 	}
 
@@ -198,8 +332,12 @@ func processMultipleFiles(
 		ParseMode: "HTML",
 	})
 
+	// Структурированные показатели (объединяем по всем файлам) для блоков
+	// «Сводки здоровья».
+	indicatorsJSON := mergeIndicatorGroups(collectedIndicators)
+
 	// Сохраняем ОБЫЧНЫЙ анализ (несколько файлов) в «Сводку здоровья».
-	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, finalResult)
+	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, finalResult, indicatorsJSON)
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
 
 	// Сообщаем, что результат сохранён в «Сводку здоровья», и даём

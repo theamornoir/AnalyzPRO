@@ -186,26 +186,22 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 
 	metrics := h.buildMetrics(r.Context(), telegramID)
 
-	// Премиум-гейт: «богатые» метрики (кровь/питание/активность/тренды)
-	// доступны только Premium. Но ОНБОРДИНГ (регистрация профиля) - для
-	// ВСЕХ: при отсутствии данных не-Premium пользователь тоже видит форму
-	// заполнения, а не пустой экран с «нужна Premium». Поэтому не отдаём
-	// 403, а помечаем premiumRequired и скрываем rich-поля, оставляя
-	// noData/имя профиля - чтобы Mini App мог показать карточку регистрации.
+	// Премиум-гейт «Сводки здоровья» (как было раньше): без Premium
+	// богатые метрики обзора скрываются - пользователь видит только
+	// баннер с предложением оформить подписку. Бесплатные результаты
+	// (обычный анализ, базовый биоскан) доступны в разделе отчётов
+	// (/api/reports), где они не гейтятся и показываются своим карточками.
 	isPremium := h.pay.IsPremium(telegramID)
-	metrics.PremiumRequired = !isPremium
 	if !isPremium {
-		metrics.HealthIndex = 0
-		metrics.EnergyLevel = "-"
+		metrics.Groups = nil
 		metrics.Blood = BloodData{}
 		metrics.Nutrition = NutData{}
 		metrics.Activity = ActData{}
 		metrics.Trend = TrendData{}
-		// «Богатые» блоки показателей скрываем для не-Premium вместе с
-		// остальными rich-полями - они строятся из реальных анализов, но
-		// доступны только по подписке.
-		metrics.Groups = nil
+		metrics.HealthIndex = 0
+		metrics.EnergyLevel = "-"
 	}
+	metrics.PremiumRequired = !isPremium
 
 	if err := json.NewEncoder(w).Encode(metrics); err != nil {
 		log.Printf(locales.LogAPIEncodeError, err)
@@ -253,26 +249,43 @@ func (h *Handler) Reports(w http.ResponseWriter, r *http.Request) {
 
 	data := h.buildReportsData(r.Context(), telegramID)
 
-	// Премиум-гейт: «богатые» данные (индексы/зоны/индикаторы) - только для
-	// Premium. Сам факт наличия отчётов и количество (Count) остаются видны.
+	// Премиум-гейт «Сводки здоровья» (как было раньше): без Premium
+	// богатые поля отчётов (scores/zones/indicators/сравнение) скрываются.
+	// Бесплатные результаты (обычный анализ, базовый биоскан) не содержат
+	// этих полей, поэтому их карточки и архив остаются видимыми - это
+	// собственные результаты пользователя. Расширенный анализ-досье и
+	// Bioscan PRO генерируются по подписке в боте и здесь тоже скрываются
+	// (богатый контент очищается, флаг rich сохраняется для фронтенда).
 	isPremium := h.pay.IsPremium(telegramID)
-	data.PremiumRequired = !isPremium
 	if !isPremium {
-		hideGroup := func(g *ReportsGroup) {
-			g.Latest.Scores = map[string]int{}
-			g.Latest.Zones = nil
-			g.Latest.Indicators = nil
-			g.Latest.MainScore = 0
-			g.Latest.Summary = ""
-			g.Previous = ReportBlock{}
-			g.Delta = 0
-			g.HasComparison = false
-		}
-		hideGroup(&data.Analysis)
-		hideGroup(&data.Bioscan)
+		data.Analysis = stripRichReports(data.Analysis)
+		data.Bioscan = stripRichReports(data.Bioscan)
 	}
+	data.PremiumRequired = !isPremium
 
 	_ = json.NewEncoder(w).Encode(data)
+}
+
+// stripRichReports очищает богатые поля отчётов (scores/zones/indicators/
+// сравнение) для не-Premium пользователей. Флаг Rich у каждого отчёта
+// сохраняется намеренно: фронтенд использует его, чтобы спрятать
+// премиум-контент без подписки, но показать бесплатный (обычный анализ,
+// базовый биоскан), у которого этих полей и так нет.
+func stripRichReports(g ReportsGroup) ReportsGroup {
+	clear := func(b ReportBlock) ReportBlock {
+		b.Scores = nil
+		b.Zones = nil
+		b.Indicators = nil
+		b.Comparison = ComparisonView{}
+		b.MainScore = 0
+		return b
+	}
+	for i := range g.Reports {
+		g.Reports[i] = clear(g.Reports[i])
+	}
+	g.Latest = clear(g.Latest)
+	g.Previous = clear(g.Previous)
+	return g
 }
 
 // ReportFile - обработчик GET /api/reports/file. Отдаёт сохранённый отчёт
@@ -900,11 +913,22 @@ func (h *Handler) buildAdaptiveGroups(ctx context.Context, telegramID int64) []M
 // анализа (categories/sections → indicators).
 type categoryShape struct {
 	Name       string          `json:"name"`
+	Title      string          `json:"title"`
 	Indicators []indicatorJson `json:"indicators"`
 }
 
 type indicatorJson struct {
 	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Unit   string `json:"unit"`
+	Status string `json:"status"`
+}
+
+// indicatorRaw - сырая форма показателя для parseReport (читает и name, и
+// title, т.к. разные ИИ-отчёты используют разные ключи заголовка группы).
+type indicatorRaw struct {
+	Name   string `json:"name"`
+	Title  string `json:"title"`
 	Value  string `json:"value"`
 	Status string `json:"status"`
 }
@@ -921,7 +945,13 @@ func groupsFromAnalysis(jsonStr string) []MetricGroup {
 	}
 	var groups []MetricGroup
 	add := func(c categoryShape) {
-		if strings.TrimSpace(c.Name) == "" {
+		// Заголовок группы: приоритет у «name», иначе «title»
+		// (часть ИИ-отчётов отдаёт секции с title вместо name).
+		heading := strings.TrimSpace(c.Name)
+		if heading == "" {
+			heading = strings.TrimSpace(c.Title)
+		}
+		if heading == "" {
 			return
 		}
 		items := []MetricItem{}
@@ -929,16 +959,22 @@ func groupsFromAnalysis(jsonStr string) []MetricGroup {
 			if strings.TrimSpace(ind.Name) == "" {
 				continue
 			}
+			// Подставляем единицу измерения к значению, если модель
+			// вернула её отдельным полем (value="145", unit="г/л").
+			val := strings.TrimSpace(ind.Value)
+			if u := strings.TrimSpace(ind.Unit); u != "" && !strings.Contains(val, u) {
+				val = val + " " + u
+			}
 			items = append(items, MetricItem{
 				Name:   ind.Name,
-				Value:  strings.TrimSpace(ind.Value),
+				Value:  val,
 				Status: normStatus(ind.Status),
 			})
 		}
 		if len(items) > 0 {
 			groups = append(groups, MetricGroup{
-				Title: strings.TrimSpace(c.Name),
-				Icon:  iconForCategory(c.Name),
+				Title: heading,
+				Icon:  iconForCategory(heading),
 				Items: items,
 			})
 		}
@@ -1172,12 +1208,16 @@ func parseReport(jsonStr string) reportData {
 		} `json:"profile"`
 		Categories []struct {
 			Name       string `json:"name"`
-			Indicators []struct {
-				Name   string `json:"name"`
-				Value  string `json:"value"`
-				Status string `json:"status"`
-			} `json:"indicators"`
+			Title      string `json:"title"`
+			Indicators []indicatorRaw
 		} `json:"categories"`
+		// Sections - альтернативная форма группировки показателей
+		// (некоторые ИИ-отчёты отдают секции с title вместо name).
+		Sections []struct {
+			Name       string `json:"name"`
+			Title      string `json:"title"`
+			Indicators []indicatorRaw
+		} `json:"sections"`
 		Recommendations []string `json:"recommendations"`
 	}
 	if err := json.Unmarshal([]byte(jsonStr), &doc); err != nil {
@@ -1190,20 +1230,33 @@ func parseReport(jsonStr string) reportData {
 	out.Potential = doc.Profile.Potential
 	out.Recommendations = doc.Recommendations
 
-	for _, cat := range doc.Categories {
-		for _, ind := range cat.Indicators {
+	// Собираем показатели из categories и sections (заголовок - name,
+	// либо title, если name пуст). Первое встреченное значение побеждает.
+	collect := func(name, title string, inds []indicatorRaw) {
+		heading := strings.TrimSpace(name)
+		if heading == "" {
+			heading = strings.TrimSpace(title)
+		}
+		if heading == "" {
+			return
+		}
+		for _, ind := range inds {
 			key := normalizeIndicatorName(ind.Name)
 			if key == "" {
 				continue
 			}
 			if v, ok := firstNumber(ind.Value); ok {
-				// Если один показатель встречается несколько раз, берём
-				// первое значение (исторически - самое общее).
 				if _, exists := out.indicators[key]; !exists {
 					out.indicators[key] = v
 				}
 			}
 		}
+	}
+	for _, cat := range doc.Categories {
+		collect(cat.Name, cat.Title, cat.Indicators)
+	}
+	for _, sec := range doc.Sections {
+		collect(sec.Name, sec.Title, sec.Indicators)
 	}
 	return out
 }
