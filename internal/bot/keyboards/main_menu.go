@@ -6,6 +6,17 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
+// isDev - флаг окружения development. Управляется из bot.New через
+// SetDevMode. Влияет на то, показываются ли dev--only элементы интерфейса
+// (например, вход в тестовое меню уведомлений). В продакшене они скрыты.
+var isDev bool
+
+// SetDevMode задаёт окружение (development=true). Вызывается один раз при
+// старте бота из bot.New.
+func SetDevMode(dev bool) {
+	isDev = dev
+}
+
 // ProcessAnalysisMenu - меню с кнопками обработки и возврата
 func ProcessAnalysisMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
@@ -104,24 +115,34 @@ func HealthHubMenu() models.InlineKeyboardMarkup {
 // «Назад в меню» не нужна: основное меню (reply-клавиатура) и так всегда
 // видно внизу экрана.
 func ServiceHubMenu() models.InlineKeyboardMarkup {
-	return models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{{Text: locales.BtnFeedback, CallbackData: "section_feedback_start"}},
-			{{Text: locales.BtnAbout, CallbackData: "section_about"}},
-			{{Text: locales.BtnTestNotify, CallbackData: "section_test_notify"}},
-		},
+	rows := [][]models.InlineKeyboardButton{
+		{{Text: locales.BtnFeedback, CallbackData: "section_feedback_start"}},
+		{{Text: locales.BtnAbout, CallbackData: "section_about"}},
 	}
+	// Тестовое меню уведомлений - ТОЛЬКО в development. В продакшене
+	// эта кнопка не показывается (иначе пользователи увидят dev-инструмент).
+	if isDev {
+		rows = append(rows, []models.InlineKeyboardButton{
+			{Text: locales.BtnTestNotify, CallbackData: "section_test_notify"},
+		})
+	}
+	return models.InlineKeyboardMarkup{InlineKeyboard: rows}
 }
 
-// TestNotifyMenu - под-меню проверки уведомлений (раздел «Сервис»):
-// кнопки планируют отправку реального образца уведомления через 30 секунд,
-// а также «Назад» - возврат в хаб «Сервис».
+// TestNotifyMenu - под-меню проверки уведомлений (раздел «Сервис», только
+// в development). Кнопки планируют отправку реального образца уведомления
+// через 10 секунд (подписка: за 7/3/1/0 дней; анализы: проверка или
+// реальная отправка по отклонениям), а также «Назад» - возврат в хаб
+// «Сервис».
 func TestNotifyMenu() models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{{Text: locales.BtnTestReminder, CallbackData: "test_notify_reminder"}},
-			{{Text: locales.BtnTestMotivation, CallbackData: "test_notify_motivation"}},
-			{{Text: locales.BtnTestFeature, CallbackData: "test_notify_feature"}},
+			{{Text: locales.BtnTestSub7d, CallbackData: "test_sub_7d"}},
+			{{Text: locales.BtnTestSub3d, CallbackData: "test_sub_3d"}},
+			{{Text: locales.BtnTestSub1d, CallbackData: "test_sub_1d"}},
+			{{Text: locales.BtnTestSubToday, CallbackData: "test_sub_today"}},
+			{{Text: locales.BtnTestAnalyticsCheck, CallbackData: "test_analytics_check"}},
+			{{Text: locales.BtnTestAnalyticsSend, CallbackData: "test_analytics_send"}},
 			{{Text: locales.BtnBack, CallbackData: "test_notify_back"}},
 		},
 	}

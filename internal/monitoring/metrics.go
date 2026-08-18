@@ -32,6 +32,13 @@ func extractMetrics(jsonStr string) map[string]float64 {
 	return out
 }
 
+// ExtractMetrics - экспортируемая обёртка над extractMetrics для
+// внешних пакетов (например, системы уведомлений), которым нужно
+// извлечь плоский набор числовых метрик из JSON-результата анализа.
+func ExtractMetrics(jsonStr string) map[string]float64 {
+	return extractMetrics(jsonStr)
+}
+
 // Ключи, которые трактуются как «название показателя».
 var labelKeys = []string{"name", "label", "title", "parameter", "test", "analyte", "marker", "indicator", "metric"}
 

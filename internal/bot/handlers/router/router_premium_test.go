@@ -122,6 +122,7 @@ func TestPremiumScreenCleanedOnBack(t *testing.T) {
 		pay,
 		nil, // appStorage (TouchActivity защищён nil-проверкой)
 		nil, // monitorRepo
+		nil, // notificationsSvc (в premium-флоу не нужен)
 		"https://app.example/dashboard",
 		"https://app.example/dashboard",
 	)

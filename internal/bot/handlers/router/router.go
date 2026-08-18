@@ -20,6 +20,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
+	"github.com/theamornoir/analyzpro/internal/notifications"
 	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
@@ -40,8 +41,17 @@ type router struct {
 	paymentService   *payment.MockPaymentService
 	appStorage       *storage.Storage
 	monitorRepo      monitoring.Repository
-	webAppURL        string
-	dashboardURL     string
+	// notifSvc - указатель на ПОЛЕ notificationsService бота (а не сам
+	// сервис). Бот строит роутер внутри New(), ДО того как снаружи
+	// вызывается SetNotificationsService (в app.go). Поэтому на момент
+	// построения роутера поле ещё nil. Чтобы роутер видел сервис, заданный
+	// позже, храним указатель на поле и разыменовываем его в момент
+	// отправки (getNotificationsSvc). Без этого тест-уведомления из
+	// инлайн-меню («🧪 Тест уведомлений») падали бы с «неизвестный тип»,
+	// т.к. r.notificationsSvc оставался nil.
+	notifSvc     **notifications.Service
+	webAppURL    string
+	dashboardURL string
 }
 
 // MessageRouter - главный маршрутизатор сообщений бота.
@@ -57,6 +67,7 @@ func MessageRouter(
 	paymentService *payment.MockPaymentService,
 	appStorage *storage.Storage,
 	monitorRepo monitoring.Repository,
+	notifSvcPtr **notifications.Service,
 	webAppURL string,
 	dashboardURL string,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
@@ -73,11 +84,22 @@ func MessageRouter(
 		paymentService:   paymentService,
 		appStorage:       appStorage,
 		monitorRepo:      monitorRepo,
+		notifSvc:         notifSvcPtr,
 		webAppURL:        webAppURL,
 		dashboardURL:     dashboardURL,
 	}
 
 	return r.handle
+}
+
+// getNotificationsSvc возвращает сервис уведомлений, разыменовывая
+// указатель на ПОЛЕ бота, заданное позже через SetNotificationsService.
+// Если поле ещё не задано (nil) - возвращает nil (роутер не должен падать).
+func (r *router) getNotificationsSvc() *notifications.Service {
+	if r.notifSvc == nil {
+		return nil
+	}
+	return *r.notifSvc
 }
 
 // handle - точка входа маршрутизатора.
@@ -523,20 +545,31 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		r.setCurrentSection(chatID, "service")
 		menu.AboutHandler()(ctx, b, update)
 
-	// Под-меню теста уведомлений (раздел «Сервис» → 🧪 Тест уведомлений):
-	// вывод меню и планирование тестовых уведомлений через 30 секунд.
+	// Под-меню теста уведомлений (раздел «Сервис» → 🧪 Тест уведомлений,
+	// только в development): вывод меню и планирование тестовых
+	// уведомлений через 10 секунд (подписка: за 7/3/1/0 дней; анализы:
+	// проверка или реальная отправка по отклонениям).
 	case "section_test_notify":
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_test_notify")
 		r.handleTestNotifyMenu(ctx, b, chatID)
-	case "test_notify_reminder":
-		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "test_notify_reminder")
-		r.handleTestNotifyAction(ctx, b, chatID, "reminder")
-	case "test_notify_motivation":
-		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "test_notify_motivation")
-		r.handleTestNotifyAction(ctx, b, chatID, "motivation")
-	case "test_notify_feature":
-		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "test_notify_feature")
-		r.handleTestNotifyAction(ctx, b, chatID, "feature")
+	case "test_sub_7d":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "test_sub_7d")
+		r.handleTestNotifyAction(ctx, b, chatID, "sub_7d")
+	case "test_sub_3d":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "test_sub_3d")
+		r.handleTestNotifyAction(ctx, b, chatID, "sub_3d")
+	case "test_sub_1d":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "test_sub_1d")
+		r.handleTestNotifyAction(ctx, b, chatID, "sub_1d")
+	case "test_sub_today":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "test_sub_today")
+		r.handleTestNotifyAction(ctx, b, chatID, "sub_today")
+	case "test_analytics_check":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "test_analytics_check")
+		r.handleTestNotifyAction(ctx, b, chatID, "analytics_check")
+	case "test_analytics_send":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "test_analytics_send")
+		r.handleTestNotifyAction(ctx, b, chatID, "analytics_send")
 
 	// Подтверждение загрузки файлов (inline-кнопки «Обработать/Отмена»).
 	case "upload_process":

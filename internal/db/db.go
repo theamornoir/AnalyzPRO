@@ -148,6 +148,32 @@ func Migrate(conn *sql.DB) error {
 			UNIQUE(user_id, code)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_used_promocodes_user ON used_promocodes(user_id)`,
+
+		// Лог отправленных уведомлений об окончании Premium-подписки.
+		// Ровно одна запись на каждый из 4 моментов (за 7/3/1/0 дней до
+		// окончания) на пользователя: UNIQUE(telegram_id, days_before)
+		// гарантирует, что одно и то же напоминание не уйдёт дважды.
+		`CREATE TABLE IF NOT EXISTS subscription_notifications (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			telegram_id INTEGER NOT NULL,
+			days_before INTEGER NOT NULL,
+			sent_at DATETIME NOT NULL,
+			UNIQUE(telegram_id, days_before)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_sub_notif_user ON subscription_notifications(telegram_id)`,
+
+		// Подавление (suppression) повторных уведомлений об отклонениях в
+		// анализах ПО КОНКРЕТНОМУ ПОКАЗАТЕЛЮ. После отправки уведомления по
+		// показателю он «замолкает» на 14 дней. UNIQUE(telegram_id,
+		// indicator) хранит ровно одну запись подавления на показатель.
+		`CREATE TABLE IF NOT EXISTS notification_suppressions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			telegram_id INTEGER NOT NULL,
+			indicator TEXT NOT NULL,
+			suppressed_until DATETIME NOT NULL,
+			UNIQUE(telegram_id, indicator)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_notif_supp_user ON notification_suppressions(telegram_id)`,
 	}
 
 	for _, stmt := range schema {
@@ -180,6 +206,62 @@ func Migrate(conn *sql.DB) error {
 		}
 	} else {
 		rows2.Close()
+	}
+
+	// Для уже существующих баз, где таблицы уведомлений были созданы по
+	// старой схеме (kind/key вместо days_before/indicator), пересоздаём их
+	// под новый формат. Данных в dev ещё нет, поэтому пересоздание
+	// безопасно (нет потери реальных рассылок).
+	if err := ensureNotificationSchema(conn); err != nil {
+		return fmt.Errorf("ошибка миграции (уведомления): %w", err)
+	}
+
+	return nil
+}
+
+// ensureNotificationSchema приводит таблицы subscription_notifications и
+// notification_suppressions к актуальной схеме. Если таблица уже имеет
+// нужные столбцы (days_before / indicator) - ничего не делает. Если
+// существует старая схема (kind / key) или таблицы нет вовсе - пересоздаёт
+// (DROP + CREATE). Запросы используют ExecContext/QueryRow напрямую без
+// незакрытых *sql.Rows, чтобы не допускать утечки соединений из пула.
+func ensureNotificationSchema(conn *sql.DB) error {
+	// subscription_notifications: обязан быть столбец days_before.
+	if _, err := conn.Exec("SELECT days_before FROM subscription_notifications LIMIT 0"); err != nil {
+		if _, derr := conn.Exec("DROP TABLE IF EXISTS subscription_notifications"); derr != nil {
+			return derr
+		}
+		if _, cerr := conn.Exec(`CREATE TABLE subscription_notifications (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			telegram_id INTEGER NOT NULL,
+			days_before INTEGER NOT NULL,
+			sent_at DATETIME NOT NULL,
+			UNIQUE(telegram_id, days_before)
+		)`); cerr != nil {
+			return cerr
+		}
+		if _, ierr := conn.Exec("CREATE INDEX IF NOT EXISTS idx_sub_notif_user ON subscription_notifications(telegram_id)"); ierr != nil {
+			return ierr
+		}
+	}
+
+	// notification_suppressions: обязан быть столбец indicator.
+	if _, err := conn.Exec("SELECT indicator FROM notification_suppressions LIMIT 0"); err != nil {
+		if _, derr := conn.Exec("DROP TABLE IF EXISTS notification_suppressions"); derr != nil {
+			return derr
+		}
+		if _, cerr := conn.Exec(`CREATE TABLE notification_suppressions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			telegram_id INTEGER NOT NULL,
+			indicator TEXT NOT NULL,
+			suppressed_until DATETIME NOT NULL,
+			UNIQUE(telegram_id, indicator)
+		)`); cerr != nil {
+			return cerr
+		}
+		if _, ierr := conn.Exec("CREATE INDEX IF NOT EXISTS idx_notif_supp_user ON notification_suppressions(telegram_id)"); ierr != nil {
+			return ierr
+		}
 	}
 
 	return nil

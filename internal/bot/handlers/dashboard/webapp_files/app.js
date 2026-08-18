@@ -299,7 +299,6 @@ async function loadMetrics() {
 function render(data) {
     hideMessage();
     hideRegisterCard();
-    hidePremiumBanner();
     hidePremiumStubs();
 
     document.getElementById('userName').textContent = data.userName ? data.userName : "Мой профиль";
@@ -318,10 +317,10 @@ function render(data) {
     }
 
     // Премиум-гейт «Мой профиль» (как было раньше): без Premium
-    // богатые блоки обзора скрываются, показываем только баннер с
-    // предложением оформить подписку. Свои бесплатные результаты
-    // (обычный анализ, базовый биоскан) видны в разделе отчётов
-    // (вкладки «Анализы»/«Bioscan»), где они не гейтятся.
+    // богатые блоки обзора скрываются, вместо них показываем заглушки-
+    // тизеры (premiumStubs) с предложением оформить подписку. Свои
+    // бесплатные результаты (обычный анализ, базовый биоскан) видны в
+    // разделе отчётов (вкладки «Анализы»/«Bioscan»), где они не гейтятся.
     if (data.premiumRequired) {
         document.getElementById('healthIndex').textContent = "-";
         document.getElementById('energyLevel').textContent = "-";
@@ -334,7 +333,6 @@ function render(data) {
         // Free видит график динамики строго по 3 последним замерам
         // (как и список отчётов) — богатые блоки обзора при этом скрыты.
         renderTrendCard(data.trend);
-        showPremiumBanner();
         // Показываем заглушки-тизеры: пользователь видит, какие карточки
         // с анализами и прогрессом появятся после оформления Premium.
         showPremiumStubs();
@@ -603,19 +601,6 @@ function showPremiumRequired() {
 
 function hideMessage() {
     document.getElementById('messageCard').style.display = 'none';
-}
-
-// Показывает НЕблокирующую подсказку про Premium. Реальные данные
-// пользователя уже отрисованы выше - баннер лишь предлагает расширить
-// возможности (расширенный анализ-досье, Bioscan PRO) по подписке.
-function showPremiumBanner() {
-    const el = document.getElementById('premiumBanner');
-    if (el) el.style.display = 'block';
-}
-
-function hidePremiumBanner() {
-    const el = document.getElementById('premiumBanner');
-    if (el) el.style.display = 'none';
 }
 
 // Показывает заглушки-тизеры на вкладке «Обзор»: пользователь без Premium

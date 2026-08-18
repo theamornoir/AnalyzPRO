@@ -21,7 +21,7 @@ import (
 // закэшированный файл отдать невозможно. ServeWebApp (dashboard.go)
 // резолвит любую версию в актуальный встроенный файл.
 // Должна совпадать с версией в ссылках на активы в webapp_files/index.html.
-const WebAppAssetsVersion = "v42"
+const WebAppAssetsVersion = "v43"
 
 // WithWebAppVersion добавляет ?v=<version> к URL Mini App, сбрасывая кэш
 // Telegram WebView при обновлении активов. Пустой URL не трогает.

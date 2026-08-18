@@ -36,6 +36,12 @@ type Config struct {
 	// PromoCodes - список одноразовых промокодов на активацию Premium.
 	// Читается из PROMO_CODES (через запятую). Пусто - промокоды отключены.
 	PromoCodes []string
+	// PromoCodesMonthly - список одноразовых промокодов на активацию
+	// Premium на 30 дней (вместо года). Читается из PROMO_CODES_MONTHLY
+	// (через запятую). Пусто - месячные промокоды отключены. Годовые и
+	// месячные списки независимы (коды должны быть уникальны между ними,
+	// чтобы не было двусмысленности при активации).
+	PromoCodesMonthly []string
 	// LogLevel - уровень логирования (DEBUG/INFO/WARN/ERROR). Читается из
 	// LOG_LEVEL; по умолчанию INFO. Применяется централизованно в logging.
 	LogLevel string
@@ -73,22 +79,23 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		BotToken:         strings.TrimSpace(os.Getenv("BOT_TOKEN")),
-		UploadDir:        getEnv("UPLOAD_DIR", "./uploads"),
-		AppEnv:           getEnv("APP_ENV", "development"),
-		LoadingStickerID: os.Getenv("LOADING_STICKER_ID"),
-		AdminChatID:      adminID,
-		WebAppURL:        webAppURL,
-		DashboardURL:     dashboardURL,
-		HTTPAddr:         httpAddr,
-		HTML2PDFAPIKey:   getEnv("HTML2PDF_API_KEY", ""),
-		StoragePath:      getEnv("STORAGE_PATH", "./data/analyzpro.db.json"),
-		MonitoringPath:   getEnv("MONITORING_PATH", "./data/monitoring.db.json"),
-		AnalyticsPath:    getEnv("ANALYTICS_PATH", "./data/analytics.jsonl"),
-		DBPath:           getEnv("DB_PATH", "./data/analyzpro.db"),
-		PostHogAPIKey:    os.Getenv("POSTHOG_API_KEY"),
-		LogLevel:         getEnv("LOG_LEVEL", "INFO"),
-		PromoCodes:       parseCSV(os.Getenv("PROMO_CODES")),
+		BotToken:          strings.TrimSpace(os.Getenv("BOT_TOKEN")),
+		UploadDir:         getEnv("UPLOAD_DIR", "./uploads"),
+		AppEnv:            getEnv("APP_ENV", "development"),
+		LoadingStickerID:  os.Getenv("LOADING_STICKER_ID"),
+		AdminChatID:       adminID,
+		WebAppURL:         webAppURL,
+		DashboardURL:      dashboardURL,
+		HTTPAddr:          httpAddr,
+		HTML2PDFAPIKey:    getEnv("HTML2PDF_API_KEY", ""),
+		StoragePath:       getEnv("STORAGE_PATH", "./data/analyzpro.db.json"),
+		MonitoringPath:    getEnv("MONITORING_PATH", "./data/monitoring.db.json"),
+		AnalyticsPath:     getEnv("ANALYTICS_PATH", "./data/analytics.jsonl"),
+		DBPath:            getEnv("DB_PATH", "./data/analyzpro.db"),
+		PostHogAPIKey:     os.Getenv("POSTHOG_API_KEY"),
+		LogLevel:          getEnv("LOG_LEVEL", "INFO"),
+		PromoCodes:        parseCSV(os.Getenv("PROMO_CODES")),
+		PromoCodesMonthly: parseCSV(os.Getenv("PROMO_CODES_MONTHLY")),
 	}, nil
 }
 

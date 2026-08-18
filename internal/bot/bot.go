@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,10 +15,12 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/dashboard"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/router"
+	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/reminders"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
+	"github.com/theamornoir/analyzpro/internal/notifications"
 	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
@@ -43,12 +46,20 @@ type Bot struct {
 	botToken         string
 	monitorRepo      monitoring.Repository
 	monitorSvc       *monitoring.Service
+	// notificationsService - сервис фоновых уведомлений о подписке и
+	// аналитике. Задаётся из app.go через SetNotificationsService (после
+	// создания бота, т.к. сервису нужен Telegram-клиент для отправки).
+	notificationsService *notifications.Service
 	// appEnv - окружение (development/production). Пробрасывается в
 	// HTTP-обработчики дашборда, чтобы демо-режим (?demo=1) работал
 	// только в development.
 	appEnv string
 	// promoCodes - список действующих промокодов на активацию Premium.
 	promoCodes []string
+	// promoCodesMonthly - список действующих промокодов на активацию
+	// Premium на 30 дней (вместо года). Коды из этого списка при
+	// активации дают premium_monthly, а не premium_yearly.
+	promoCodesMonthly []string
 }
 
 func New(
@@ -69,6 +80,7 @@ func New(
 	httpAddr string,
 	appEnv string,
 	promoCodes []string,
+	promoCodesMonthly []string,
 ) (*Bot, error) {
 
 	if stateManager == nil {
@@ -85,25 +97,26 @@ func New(
 	}
 
 	botInstance := &Bot{
-		client:           client,
-		stateManager:     stateManager,
-		analysisService:  analysisService,
-		reportRenderer:   reportRenderer,
-		pdfConverter:     pdfConverter,
-		uploadDir:        uploadDir,
-		stickerID:        stickerID,
-		adminChatID:      adminChatID,
-		agreementStorage: agreementStorage,
-		paymentService:   paymentService,
-		appStorage:       appStorage,
-		webAppURL:        webAppURL,
-		dashboardURL:     dashboardURL,
-		httpAddr:         httpAddr,
-		botToken:         token,
-		monitorRepo:      monitorRepo,
-		monitorSvc:       monitoring.NewService(monitorRepo),
-		appEnv:           appEnv,
-		promoCodes:       promoCodes,
+		client:            client,
+		stateManager:      stateManager,
+		analysisService:   analysisService,
+		reportRenderer:    reportRenderer,
+		pdfConverter:      pdfConverter,
+		uploadDir:         uploadDir,
+		stickerID:         stickerID,
+		adminChatID:       adminChatID,
+		agreementStorage:  agreementStorage,
+		paymentService:    paymentService,
+		appStorage:        appStorage,
+		webAppURL:         webAppURL,
+		dashboardURL:      dashboardURL,
+		httpAddr:          httpAddr,
+		botToken:          token,
+		monitorRepo:       monitorRepo,
+		monitorSvc:        monitoring.NewService(monitorRepo),
+		appEnv:            appEnv,
+		promoCodes:        promoCodes,
+		promoCodesMonthly: promoCodesMonthly,
 	}
 
 	// Диагностика: логируем id бота из токена, чтобы при ошибках валидации
@@ -114,6 +127,11 @@ func New(
 		bid = bid[:strings.Index(bid, ":")]
 	}
 	log.Printf("[MONITORING] serverBotID=%q (из BOT_TOKEN), botTokenLen=%d", bid, len(token))
+
+	// В development показываем dev-only элементы интерфейса (например,
+	// вход в тестовое меню уведомлений «🧪 Тест уведомлений»). В проде
+	// они скрыты, чтобы пользователи не видели отладочный инструмент.
+	keyboards.SetDevMode(appEnv == "development")
 
 	botInstance.registerHandlers()
 
@@ -136,6 +154,13 @@ func (b *Bot) Storage() *storage.Storage {
 // наличия сохранённых данных у пользователя в мотивационных напоминаниях).
 func (b *Bot) MonitorRepo() monitoring.Repository {
 	return b.monitorRepo
+}
+
+// SetNotificationsService задаёт сервис фоновых уведомлений (dev-команды
+// /test_sub, /test_analytics). Вызывается из app.go сразу после создания
+// бота, т.к. сервису нужен Telegram-клиент для отправки сообщений.
+func (b *Bot) SetNotificationsService(s *notifications.Service) {
+	b.notificationsService = s
 }
 
 func (b *Bot) Start(ctx context.Context) {
@@ -233,6 +258,19 @@ func (b *Bot) setupCommands(ctx context.Context) {
 		{Command: "resetme", Description: "Сбросить Premium и онбординг (тест, только для админа)"},
 		{Command: "reset_premium", Description: "Алиас /resetme - сброс статуса (тест)"},
 		{Command: "announce", Description: "Анонс новой фичи всем пользователям (только для админа)"},
+		{Command: "notifications", Description: "Управление уведомлениями об анализах: on / off / status"},
+	}
+	// Dev-команды тестовой отправки уведомлений показываем в списке
+	// команд ТОЛЬКО в development, чтобы не светить их в проде.
+	if b.appEnv == "development" {
+		commands = append(commands,
+			models.BotCommand{Command: "test_sub_7d", Description: "Тест уведомления о подписке: за 7 дней (dev)"},
+			models.BotCommand{Command: "test_sub_3d", Description: "Тест уведомления о подписке: за 3 дня (dev)"},
+			models.BotCommand{Command: "test_sub_1d", Description: "Тест уведомления о подписке: за 1 день (dev)"},
+			models.BotCommand{Command: "test_sub_today", Description: "Тест уведомления о подписке: в день окончания (dev)"},
+			models.BotCommand{Command: "test_analytics_check", Description: "Тест проверки анализов (без отправки, dev)"},
+			models.BotCommand{Command: "test_analytics_send", Description: "Тест отправки уведомлений по анализам (dev)"},
+		)
 	}
 	if _, err := b.client.SetMyCommands(ctx, &tgbot.SetMyCommandsParams{
 		Commands: commands,
@@ -269,8 +307,10 @@ func (b *Bot) SetupMenuButton(ctx context.Context) {
 }
 
 // handlePromo обрабатывает команду /promo <code>: одноразовая активация
-// Premium на 365 дней для текущего аккаунта. Каждый код можно использовать
-// только один раз на аккаунт (хранится в used_promocodes).
+// Premium для текущего аккаунта. Коды из cfg.PromoCodes дают год Premium
+// (premium_yearly), из cfg.PromoCodesMonthly - месяц (premium_monthly).
+// Каждый код можно использовать только один раз на аккаунт
+// (хранится в used_promocodes).
 func (b *Bot) handlePromo(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
 	if update.Message == nil {
 		return
@@ -286,17 +326,27 @@ func (b *Bot) handlePromo(ctx context.Context, tb *tgbot.Bot, update *models.Upd
 		return
 	}
 
-	// Нормализуем регистр и ищем в списке действующих кодов.
+	// Нормализуем регистр и ищем код в годовых, затем в месячных списках.
+	// По принадлежности кода к списку определяем тариф активации.
 	code = strings.ToUpper(code)
-	valid := false
+	tariffID := ""
 	for _, c := range b.promoCodes {
 		if strings.EqualFold(c, code) {
-			valid = true
+			tariffID = "premium_yearly"
 			code = c
 			break
 		}
 	}
-	if !valid {
+	if tariffID == "" {
+		for _, c := range b.promoCodesMonthly {
+			if strings.EqualFold(c, code) {
+				tariffID = "premium_monthly"
+				code = c
+				break
+			}
+		}
+	}
+	if tariffID == "" {
 		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,
 			Text:   locales.MsgPromoInvalid,
@@ -314,10 +364,10 @@ func (b *Bot) handlePromo(ctx context.Context, tb *tgbot.Bot, update *models.Upd
 		return
 	}
 
-	// Активируем Premium (год) через сервис платежей - он источник истины
-	// для Premium-гейтов в дашборде/базе.
-	if err := b.paymentService.ActivatePremiumManually(chatID, "premium_yearly"); err != nil {
-		log.Printf("⚠️ не удалось активировать Premium по промокоду для chatID=%d: %v", chatID, err)
+	// Активируем Premium через сервис платежей - он источник истины
+	// для Premium-гейтов в дашборде/базе. Тариф зависит от типа кода.
+	if err := b.paymentService.ActivatePremiumManually(chatID, tariffID); err != nil {
+		log.Printf("⚠️ не удалось активировать Premium по промокоду для chatID=%d (tariff=%s): %v", chatID, tariffID, err)
 		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,
 			Text:   locales.MsgPromoInvalid,
@@ -325,9 +375,16 @@ func (b *Bot) handlePromo(ctx context.Context, tb *tgbot.Bot, update *models.Upd
 		return
 	}
 
-	// Синхронизируем флаг is_premium в БД (историческое поле).
+	// Синхронизируем флаг is_premium и дату окончания в БД
+	// (историческое поле). Длительность зависит от тарифа.
+	expiresAt := time.Now().AddDate(1, 0, 0)
+	activatedMsg := locales.MsgPromoActivated
+	if tariffID == "premium_monthly" {
+		expiresAt = time.Now().AddDate(0, 1, 0)
+		activatedMsg = locales.MsgPromoActivatedMonth
+	}
 	if u, gerr := b.appStorage.Users.GetUserByTelegramID(ctx, chatID); gerr == nil {
-		_ = b.appStorage.Users.UpdateUserPremiumStatus(ctx, u.ID, true, time.Now().AddDate(1, 0, 0))
+		_ = b.appStorage.Users.UpdateUserPremiumStatus(ctx, u.ID, true, expiresAt)
 	}
 
 	// Фиксируем использование кода (нельзя применить повторно).
@@ -337,8 +394,116 @@ func (b *Bot) handlePromo(ctx context.Context, tb *tgbot.Bot, update *models.Upd
 
 	_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID: chatID,
-		Text:   locales.MsgPromoActivated,
+		Text:   activatedMsg,
 	})
+}
+
+// handleDevTestCommand обрабатывает dev-команды тестовой отправки
+// уведомлений: /test_sub_7d, /test_sub_3d, /test_sub_1d, /test_sub_today
+// (подписка) и /test_analytics_check, /test_analytics_send (анализы).
+// Доступны ТОЛЬКО в development (регистрируются только там). Отправляют
+// реальный образец уведомления (без ожидания 10 сек - команды для быстрой
+// проверки без кнопок).
+func (b *Bot) handleDevTestCommand(ctx context.Context, tb *tgbot.Bot, update *models.Update, kind string) {
+	if update.Message == nil {
+		return
+	}
+	chatID := update.Message.Chat.ID
+
+	s := b.notificationsService
+	if s == nil {
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+		return
+	}
+
+	switch kind {
+	case "sub_7d", "sub_3d", "sub_1d", "sub_today":
+		var days int
+		switch kind {
+		case "sub_7d":
+			days = 7
+		case "sub_3d":
+			days = 3
+		case "sub_1d":
+			days = 1
+		case "sub_today":
+			days = 0
+		}
+		text, err := s.SendSubscriptionTest(ctx, chatID, days)
+		if err != nil {
+			_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+			return
+		}
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: text, ParseMode: "Markdown"})
+	case "analytics_check":
+		findings, err := s.RunAnalyticsDryRun(ctx, chatID)
+		if errors.Is(err, notifications.ErrNoAnalysisData) {
+			_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifAnalyticsNoData})
+			return
+		}
+		if err != nil {
+			_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+			return
+		}
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: s.DryRunMessage(findings), ParseMode: "Markdown"})
+	case "analytics_send":
+		n, err := s.SendAnalyticsTest(ctx, chatID)
+		if errors.Is(err, notifications.ErrNoAnalysisData) {
+			_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifAnalyticsNoData})
+			return
+		}
+		if err != nil {
+			_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+			return
+		}
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: fmt.Sprintf(locales.MsgNotifAnalyticsSent, n), ParseMode: "Markdown"})
+	default:
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+	}
+}
+
+// handleNotificationsCommand обрабатывает команду /notifications
+// (on|off|status) - управление уведомлениями об отклонениях в анализах
+// для конкретного пользователя. Доступна всем (не только в dev).
+func (b *Bot) handleNotificationsCommand(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+	if update.Message == nil {
+		return
+	}
+	chatID := update.Message.Chat.ID
+	action := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/notifications")))
+
+	if b.notificationsService == nil {
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotificationsError})
+		return
+	}
+
+	switch action {
+	case "on":
+		if err := b.notificationsService.SetUserNotificationsEnabled(ctx, chatID, true); err != nil {
+			_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotificationsError})
+			return
+		}
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotificationsOn})
+	case "off":
+		if err := b.notificationsService.SetUserNotificationsEnabled(ctx, chatID, false); err != nil {
+			_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotificationsError})
+			return
+		}
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotificationsOff})
+	case "status", "":
+		enabled, err := b.notificationsService.GetUserNotificationsEnabled(ctx, chatID)
+		if err != nil {
+			_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotificationsError})
+			return
+		}
+		text := locales.MsgNotificationsStatusDisabled
+		if enabled {
+			text = locales.MsgNotificationsStatusEnabled
+		}
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: text})
+	default:
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotificationsUsage})
+	}
 }
 
 func (b *Bot) registerHandlers() {
@@ -355,6 +520,7 @@ func (b *Bot) registerHandlers() {
 		b.paymentService,
 		b.appStorage,
 		b.monitorRepo,
+		&b.notificationsService,
 		b.webAppURL,
 		b.dashboardURL,
 	)
@@ -410,6 +576,18 @@ func (b *Bot) registerHandlers() {
 		},
 	)
 
+	// Управление уведомлениями об отклонениях в анализах для
+	// конкретного пользователя: /notifications on|off|status. Доступна
+	// всем (не только в dev).
+	b.client.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		"/notifications",
+		tgbot.MatchTypePrefix,
+		func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+			b.handleNotificationsCommand(ctx, tb, update)
+		},
+	)
+
 	// Админ-команда анонса новой фичи: /announce <текст> рассылает
 	// одноразовое уведомление всем пользователям, не отключившим
 	// уведомления. Работает только для ADMIN_CHAT_ID.
@@ -443,6 +621,32 @@ func (b *Bot) registerHandlers() {
 			})
 		},
 	)
+
+	// Dev-команды тестовой отправки уведомлений о подписке и аналитике.
+	// Регистрируем ТОЛЬКО в development, чтобы не засорять прод и не
+	// давать пользователям слать себе тестовые рассылки. Каждая команда
+	// присылает реальный образец уведомления (или предпросмотр) сразу.
+	if b.appEnv == "development" {
+		devTestCommands := map[string]string{
+			"/test_sub_7d":          "sub_7d",
+			"/test_sub_3d":          "sub_3d",
+			"/test_sub_1d":          "sub_1d",
+			"/test_sub_today":       "sub_today",
+			"/test_analytics_check": "analytics_check",
+			"/test_analytics_send":  "analytics_send",
+		}
+		for cmd, kind := range devTestCommands {
+			k := kind
+			b.client.RegisterHandler(
+				tgbot.HandlerTypeMessageText,
+				cmd,
+				tgbot.MatchTypeExact,
+				func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+					b.handleDevTestCommand(ctx, tb, update, k)
+				},
+			)
+		}
+	}
 
 	// Обычный текст
 	b.client.RegisterHandler(

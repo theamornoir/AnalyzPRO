@@ -20,6 +20,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/logging"
 	monitoring_sqlrepo "github.com/theamornoir/analyzpro/internal/monitoring/sqlrepo"
+	"github.com/theamornoir/analyzpro/internal/notifications"
 	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
@@ -31,6 +32,8 @@ type App struct {
 	cfg    *config.Config
 	bot    *bot.Bot
 	dbConn *sql.DB
+	// notifService - сервис фоновых уведомлений о подписке и аналитике.
+	notifService *notifications.Service
 }
 
 func New() (*App, error) {
@@ -100,6 +103,13 @@ func New() (*App, error) {
 	paymentService := payment.NewMockPaymentService("./data/premium_users.json")
 	log.Printf(locales.LogPaymentServiceInit)
 
+	// Сервис фоновых уведомлений о подписке (Premium скоро заканчивается)
+	// и аналитике (обновились показатели по сохранённым анализам).
+	// bot-клиент задаётся позже (bot.New создаётся ниже), поэтому здесь
+	// передаём без него - он устанавливается через SetBotClient сразу
+	// после создания бота.
+	notifService := notifications.NewService(dbConn, appStorage, paymentService, monitorRepo, cfg.AppEnv == "development")
+
 	// Слой аналитики (события: старт, анализ, премиум, ошибки). Персистентный
 	// JSONL-файл (ANALYTICS_PATH).
 	analytics.Init(cfg.AnalyticsPath)
@@ -134,10 +144,17 @@ func New() (*App, error) {
 		cfg.HTTPAddr,
 		cfg.AppEnv,
 		cfg.PromoCodes,
+		cfg.PromoCodesMonthly,
 	)
 	if err != nil {
 		return nil, err
 	}
+
+	// Связываем сервис уведомлений с ботом: задаём Telegram-клиент для
+	// отправки и регистрируем сервис в боте (dev-команды /test_sub,
+	// /test_analytics).
+	notifService.SetBotClient(telegramBot.Client())
+	telegramBot.SetNotificationsService(notifService)
 
 	log.Printf(locales.LogAppInitialized)
 	log.Printf(locales.LogConfiguration)
@@ -159,9 +176,10 @@ func New() (*App, error) {
 	}
 
 	return &App{
-		cfg:    cfg,
-		bot:    telegramBot,
-		dbConn: dbConn,
+		cfg:          cfg,
+		bot:          telegramBot,
+		dbConn:       dbConn,
+		notifService: notifService,
 	}, nil
 }
 
@@ -206,6 +224,11 @@ func (a *App) Run(parent context.Context) {
 	// анализе при >30 дней неактивности и мягкие мотивационные сообщения.
 	// Запускается в горутине и завершается вместе с ctx (остановка бота).
 	go reminders.RunReminderLoop(ctx, a.bot.Client(), a.bot.Storage(), a.bot.MonitorRepo())
+
+	// Фоновая система уведомлений о подписке и аналитике (периодический
+	// цикл). Запускается в горутине и завершается вместе с ctx (остановка
+	// бота).
+	go a.notifService.Run(ctx)
 
 	a.bot.Start(ctx)
 }

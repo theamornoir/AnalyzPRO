@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -16,9 +17,9 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/userdata"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
-	"github.com/theamornoir/analyzpro/internal/bot/reminders"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
+	"github.com/theamornoir/analyzpro/internal/notifications"
 )
 
 // WebAppAssetsVersion и WithWebAppVersion вынесены в пакет keyboards
@@ -872,11 +873,11 @@ func sendLongMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text strin
 // testNotifyDelay - через сколько секунд приходит ТЕСТОВОЕ уведомление после
 // нажатия кнопки в под-меню «Сервис → 🧪 Тест уведомлений». Сделано малым,
 // чтобы разработчик мог быстро проверить систему уведомлений «вживую».
-const testNotifyDelay = 30 * time.Second
+const testNotifyDelay = 10 * time.Second
 
 // handleTestNotifyMenu - открывает под-меню проверки уведомлений (раздел
-// «Сервис»): поясняет, что нажатие кнопки пришлёт реальный образец
-// уведомления через 30 секунд.
+// «Сервис», только в development): поясняет, что нажатие кнопки пришлёт
+// реальный образец уведомления через 10 секунд.
 func (r *router) handleTestNotifyMenu(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf("[TEST-NOTIFY] открытие меню для chatID=%d", chatID)
 
@@ -897,17 +898,19 @@ func (r *router) handleTestNotifyMenu(ctx context.Context, b *tgbot.Bot, chatID 
 }
 
 // handleTestNotifyAction - планирует отправку ТЕСТОВОГО уведомления указанного
-// типа (reminder/motivation/feature) через 30 секунд и подтверждает это
-// пользователю, оставляя открытым тестовое меню (можно проверить иные типы).
+// типа (sub_7d/sub_3d/sub_1d/sub_today/analytics_check/analytics_send) через
+// 10 секунд и подтверждает это пользователю, оставляя открытым тестовое
+// меню (можно проверить иные типы). Реальную отправку/проверку выполняет
+// runTestNotification уже после задержки.
 func (r *router) handleTestNotifyAction(ctx context.Context, b *tgbot.Bot, chatID int64, kind string) bool {
 	log.Printf("[TEST-NOTIFY] планирование уведомления kind=%s для chatID=%d", kind, chatID)
 
 	// Используем фоновый контекст: контекст апдейта отменяется сразу после
-	// ответа, а уведомление должно прийти спустя 30 секунд.
+	// ответа, а уведомление должно прийти спустя 10 секунд.
 	go func() {
 		select {
 		case <-time.After(testNotifyDelay):
-			reminders.SendTestNotification(context.Background(), b, chatID, kind)
+			r.runTestNotification(context.Background(), b, chatID, kind)
 		}
 	}()
 
@@ -921,4 +924,70 @@ func (r *router) handleTestNotifyAction(ctx context.Context, b *tgbot.Bot, chatI
 		r.setLastMsg(chatID, msg.ID)
 	}
 	return true
+}
+
+// runTestNotification выполняет отложенную (после 10 сек) отправку
+// ТЕСТОВОГО уведомления заданного типа в чат. Доступно только из dev-меню
+// «🧪 Тест уведомлений» (само меню скрыто в продакшене).
+func (r *router) runTestNotification(ctx context.Context, b *tgbot.Bot, chatID int64, kind string) {
+	svc := r.getNotificationsSvc()
+	if svc == nil {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+		return
+	}
+	switch kind {
+	case "sub_7d", "sub_3d", "sub_1d", "sub_today":
+		var days int
+		switch kind {
+		case "sub_7d":
+			days = 7
+		case "sub_3d":
+			days = 3
+		case "sub_1d":
+			days = 1
+		case "sub_today":
+			days = 0
+		}
+		text, err := svc.SendSubscriptionTest(ctx, chatID, days)
+		if err != nil {
+			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+			return
+		}
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: text, ParseMode: "Markdown"})
+	case "analytics_check":
+		// Предпросмотр: показываем, какие отклонения нашлись, БЕЗ отправки.
+		findings, err := svc.RunAnalyticsDryRun(ctx, chatID)
+		if errors.Is(err, notifications.ErrNoAnalysisData) {
+			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifAnalyticsNoData})
+			return
+		}
+		if err != nil {
+			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+			return
+		}
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:    chatID,
+			Text:      svc.DryRunMessage(findings),
+			ParseMode: "Markdown",
+		})
+	case "analytics_send":
+		// Реальная отправка уведомлений по найденным отклонениям
+		// (с подавлением на 14 дней, как в боевой рассылке).
+		n, err := svc.SendAnalyticsTest(ctx, chatID)
+		if errors.Is(err, notifications.ErrNoAnalysisData) {
+			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifAnalyticsNoData})
+			return
+		}
+		if err != nil {
+			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+			return
+		}
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:    chatID,
+			Text:      fmt.Sprintf(locales.MsgNotifAnalyticsSent, n),
+			ParseMode: "Markdown",
+		})
+	default:
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+	}
 }
