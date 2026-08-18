@@ -67,7 +67,7 @@ const (
 	BtnOpenHealthSummary = "📊 Открыть Мой профиль"
 )
 
-// UserAgreementText - текст пользовательского соглашения (версия 1.0).
+// UserAgreementText - текст пользовательского соглашения (версия 2.0).
 // Определён в internal/locales/agreement.go.
 
 // Lowercase button texts (for case-insensitive matching)

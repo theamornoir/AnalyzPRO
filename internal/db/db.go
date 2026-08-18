@@ -95,6 +95,12 @@ func Migrate(conn *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_diagnoses_date ON diagnoses(date)`,
 		`CREATE INDEX IF NOT EXISTS idx_diagnoses_user_type ON diagnoses(user_id, type)`,
 		`CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at)`,
+		// Индекс по дате окончания Premium ускоряет проверки истёкших
+		// подписок (фоновый луп напоминаний / очистка). IF NOT EXISTS -
+		// идемпотентно, безопасно при каждом старте. Примечание: для
+		// SQLite (modernc.org/sqlite) CONCURRENTLY не поддерживается,
+		// поэтому индекс создаётся обычным CREATE INDEX.
+		`CREATE INDEX IF NOT EXISTS idx_users_premium_expires_at ON users(premium_expires_at)`,
 		`CREATE TABLE IF NOT EXISTS cycles (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL,
