@@ -230,6 +230,14 @@ func processSingleFile(
 		return
 	}
 
+	// Пустой результат без явной ошибки - тоже «неверный ответ» ИИ.
+	// Не отправляем пустоту и не ломаем состояние: даём пользователю
+	// вернуться в главное меню.
+	if strings.TrimSpace(result) == "" {
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+		return
+	}
+
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID: chatID,
 		Text:   result,

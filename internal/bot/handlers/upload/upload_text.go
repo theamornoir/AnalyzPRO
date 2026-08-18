@@ -76,6 +76,12 @@ func handleTextUpload(
 		return
 	}
 
+	// Пустой результат без явной ошибки - тоже «неверный ответ» ИИ.
+	if strings.TrimSpace(result) == "" {
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+		return
+	}
+
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID: chatID,
 		Text:   result,

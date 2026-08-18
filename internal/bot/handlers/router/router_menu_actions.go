@@ -510,7 +510,7 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        "⚠️ URL дашборда не настроен. Задайте WEBAPP_URL или запустите `make mini`.",
-			ReplyMarkup: keyboards.BackMenu(),
+			ReplyMarkup: keyboards.MainMenu(),
 			ParseMode:   "Markdown",
 		})
 		return true

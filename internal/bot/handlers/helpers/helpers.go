@@ -9,14 +9,18 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// SendError - отправляет сообщение об ошибке.
+// SendError - отправляет сообщение об ошибке вместе с главным меню, чтобы
+// после сбоя пользователь никогда не «зависал» без клавиатуры и мог вернуться
+// в меню.
 func SendError(ctx context.Context, b *tgbot.Bot, chatID int64) {
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text:   locales.MsgTextProcessingError,
+		ChatID:      chatID,
+		Text:        locales.MsgTextProcessingError,
+		ReplyMarkup: keyboards.MainMenu(),
 	})
 }
 

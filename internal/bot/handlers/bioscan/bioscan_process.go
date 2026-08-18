@@ -51,10 +51,11 @@ func ProcessBioscanWithPhotos(
 
 	if name == "" || age == "" || height == "" || weight == "" || goal == "" ||
 		photo1ID == "" || photo2ID == "" || photo3ID == "" || photo4ID == "" {
+		sm.SetState(chatID, states.StateIdle)
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanIncompleteData,
-			ReplyMarkup: keyboards.BackMenu(),
+			ReplyMarkup: keyboards.MainMenu(),
 		})
 		return
 	}
@@ -82,10 +83,11 @@ func ProcessBioscanWithPhotos(
 		photoData, _, err := helpers.DownloadFileByID(ctx, b, photoID, uploadDir)
 		if err != nil {
 			helpers.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
+			sm.SetState(chatID, states.StateIdle)
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 				ChatID:      chatID,
 				Text:        locales.MsgBioscanDownloadError,
-				ReplyMarkup: keyboards.BackMenu(),
+				ReplyMarkup: keyboards.MainMenu(),
 			})
 			return
 		}
@@ -94,10 +96,11 @@ func ProcessBioscanWithPhotos(
 
 	if len(photosData) == 0 {
 		helpers.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
+		sm.SetState(chatID, states.StateIdle)
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanDownloadError,
-			ReplyMarkup: keyboards.BackMenu(),
+			ReplyMarkup: keyboards.MainMenu(),
 		})
 		return
 	}
@@ -126,10 +129,11 @@ func ProcessBioscanWithPhotos(
 		helpers.DeleteMessage(ctx, b, chatID, textMsg.ID)
 		log.Printf(locales.LogBioscanError, err)
 
+		sm.SetState(chatID, states.StateIdle)
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        fmt.Sprintf(locales.MsgBioscanProcessingError, err),
-			ReplyMarkup: keyboards.BackMenu(),
+			ReplyMarkup: keyboards.MainMenu(),
 		})
 		return
 	}
