@@ -5,33 +5,54 @@ import (
 	"encoding/json"
 	"math"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/theamornoir/analyzpro/internal/monitoring"
 )
 
-// ReportsResponse - ответ API /api/reports: последний отчёт
-// расширенного анализа и Bioscan PRO, сохранённые в истории пользователя.
+// ReportsResponse - ответ API /api/reports: архив отчётов расширенного
+// анализа и Bioscan PRO, сохранённые в истории пользователя.
+//
+// Модель Free/Premium: для не-Premium пользователей архив ограничен
+// 3 последними записями (лимит применяется здесь, на backend, а не
+// скрытием на фронте - чтобы Free не мог получить старые записи
+// прямым запросом к API). Тренд-бейджи считаются по ПОЛНОЙ истории, но
+// раскрывают только направление изменения, без значений скрытых записей.
 type ReportsResponse struct {
 	PremiumRequired bool         `json:"premiumRequired"`
+	IsPremium       bool         `json:"isPremium"`
+	TrendBadges     []TrendBadge `json:"trendBadges"`
 	Analysis        ReportsGroup `json:"analysis"`
 	Bioscan         ReportsGroup `json:"bioscan"`
 }
 
+// TrendBadge - компактный бейдж направления тренда показателя,
+// вычисленный по полной истории пользователя. Раскрывает ТОЛЬКО
+// направление (стрелка/слово) и период - не сами значения записей,
+// поэтому безопасен для показа Free-пользователю даже по скрытым записям.
+type TrendBadge struct {
+	Indicator string `json:"indicator"`
+	Arrow     string `json:"arrow"`
+	Direction string `json:"direction"`
+	Period    string `json:"period"`
+}
+
 // ReportsGroup - группа отчётов одного типа (analysis / bioscan).
 type ReportsGroup struct {
-	Reports []ReportBlock `json:"reports"`
-	Latest  ReportBlock   `json:"latest"`
-	Count   int           `json:"count"`
+	Reports     []ReportBlock `json:"reports"`
+	Latest      ReportBlock   `json:"latest"`
+	Count       int           `json:"count"`
+	TotalCount  int           `json:"totalCount"`
+	HiddenCount int           `json:"hiddenCount"`
 }
 
 // ReportBlock - нормализованное представление одного отчёта для графиков
 // дашборда: индекс, набор имён-оценок (для radar/bar), зоны (для биоскана),
 // индикаторы (для списка).
 type ReportBlock struct {
-	// ID - идентификатор записи в истории; фронтенд запрашивает этот
-	// конкретный отчёт как PDF через /api/reports/file.
 	ID         int64           `json:"id"`
 	Available  bool            `json:"available"`
 	Title      string          `json:"title"`
@@ -45,10 +66,6 @@ type ReportBlock struct {
 }
 
 // IndicatorView - один показатель списка (имя/значение/статус).
-// Поля Num/RefMin/RefMax/Normal нужны фронтенду, чтобы рисовать
-// вертикальный индикатор с зонами (норма/внимание/критично) и ставить
-// метку текущего значения. Если референс неизвестен (RefMax == 0) -
-// фронт рисует только цифру и текстовый статус, без шкалы.
 type IndicatorView struct {
 	Name   string  `json:"name"`
 	Value  string  `json:"value"`
@@ -67,35 +84,51 @@ type ZoneView struct {
 	Comment string `json:"comment"`
 }
 
-// buildReportsData собирает последний+предыдущий отчёты analysis и bioscan
-// из истории пользователя и вычисляет дельту индекса.
-func (h *Handler) buildReportsData(ctx context.Context, telegramID int64) ReportsResponse {
-	resp := ReportsResponse{}
-	resp.Analysis = h.buildGroup(ctx, telegramID, "analysis")
-	resp.Bioscan = h.buildGroup(ctx, telegramID, "bioscan")
+type trendPoint struct {
+	Date time.Time
+	Num  float64
+}
+
+// buildReportsData собирает архив analysis и bioscan из истории
+// пользователя, применяет лимит истории для Free (3 последние записи),
+// вычисляет тренд-бейджи по полной истории и дельту индекса.
+func (h *Handler) buildReportsData(ctx context.Context, telegramID int64, isPremium bool) ReportsResponse {
+	resp := ReportsResponse{
+		IsPremium:   isPremium,
+		TrendBadges: []TrendBadge{},
+	}
+	resp.Analysis = h.buildGroup(ctx, telegramID, "analysis", isPremium)
+	resp.Bioscan = h.buildGroup(ctx, telegramID, "bioscan", isPremium)
+	resp.TrendBadges = computeTrendBadges(ctx, h.repo, telegramID)
 	return resp
 }
 
-func (h *Handler) buildGroup(ctx context.Context, telegramID int64, entryType string) ReportsGroup {
-	// Берём ВСЕ отчёты этого типа (pageSize=0 → без пагинации), чтобы
-	// собрать полный архив для «Мой профиль» (история прогресса).
+// freeHistoryLimit - сколько последних записей показываем Free-пользователю.
+const freeHistoryLimit = 3
+
+func (h *Handler) buildGroup(ctx context.Context, telegramID int64, entryType string, isPremium bool) ReportsGroup {
 	entries, total, err := h.repo.ListHistory(ctx, telegramID, entryType, 0, 0)
-	g := ReportsGroup{Count: total, Reports: []ReportBlock{}}
+	g := ReportsGroup{Count: total, TotalCount: total, HiddenCount: 0, Reports: []ReportBlock{}}
 	if err != nil || len(entries) == 0 {
 		return g
 	}
 
+	reports := make([]ReportBlock, 0, len(entries))
 	for _, e := range entries {
-		g.Reports = append(g.Reports, parseReportBlock(e, entryType))
+		reports = append(reports, parseReportBlock(e, entryType))
 	}
-	g.Latest = g.Reports[0]
+
+	if !isPremium && len(reports) > freeHistoryLimit {
+		reports = reports[:freeHistoryLimit]
+	}
+	g.HiddenCount = total - len(reports)
+	g.Reports = reports
+	if len(g.Reports) > 0 {
+		g.Latest = g.Reports[0]
+	}
 	return g
 }
 
-// parseReportBlock толерантно парсит JSON отчёта обеих схем (analysis:
-// sections/categories/profile; bioscan: BodyScanReport) и нормализует его
-// в ReportBlock для графиков. На ошибках/пустоте возвращает пустой блок
-// (Available=false) - дашборд корректно покажет «нет данных».
 func parseReportBlock(e monitoring.HistoryEntry, entryType string) ReportBlock {
 	jsonStr := e.JsonData
 	dateStr := e.Date.Format("2006-01-02")
@@ -118,7 +151,6 @@ func parseReportBlock(e monitoring.HistoryEntry, entryType string) ReportBlock {
 	return out
 }
 
-// indicatorShape - общая форма блока indicators (для analysis).
 type indicatorShape struct {
 	Name   string `json:"name"`
 	Value  string `json:"value"`
@@ -127,7 +159,6 @@ type indicatorShape struct {
 	Score  int    `json:"score"`
 }
 
-// parseAnalysisBlock парсит расширенный анализ (sections/categories/profile).
 func parseAnalysisBlock(jsonStr string, out *ReportBlock) {
 	var doc struct {
 		Title   string `json:"title"`
@@ -203,9 +234,6 @@ func parseAnalysisBlock(jsonStr string, out *ReportBlock) {
 	for _, s := range doc.Sections {
 		addIndicators(s.Indicators)
 	}
-	// Досье хранит лабораторные показатели в lab_systems (а не в
-	// categories/sections) - подхватываем их, чтобы в карточке отчёта
-	// тоже рисовался вертикальный индикатор с зонами.
 	for _, ls := range doc.LabSystems {
 		addIndicators(ls.Indicators)
 	}
@@ -228,10 +256,6 @@ func parseAnalysisBlock(jsonStr string, out *ReportBlock) {
 		out.ScoreLabel = "Индекс"
 	}
 
-	// Если не нашли ни sections/categories, ни profile - возможно, это
-	// досье здоровья (HealthDossier) с картой scores (Health/Potential/...).
-	// Используем его для radar и индекса (применяется для файлового
-	// расширенного анализа, который сохраняется как HealthDossier).
 	if len(out.Scores) == 0 {
 		var dossier struct {
 			Scores    map[string]int `json:"scores"`
@@ -250,10 +274,8 @@ func parseAnalysisBlock(jsonStr string, out *ReportBlock) {
 	if out.Summary == "" && len(out.Indicators) > 0 {
 		out.Summary = "Показатели загружены из отчёта. Подробности - в PDF-документе."
 	}
-
 }
 
-// parseBioscanBlock парсит Bioscan PRO (BodyScanReport).
 func parseBioscanBlock(jsonStr string, out *ReportBlock) {
 	var doc struct {
 		Title   string `json:"title"`
@@ -322,13 +344,8 @@ func parseBioscanBlock(jsonStr string, out *ReportBlock) {
 	if out.Title == "" {
 		out.Title = "Bioscan PRO"
 	}
-
 }
 
-// parseIndicatorRef извлекает числовое значение показателя и границы
-// референсного интервала (нормы) из строк. Возвращает (num, refMin, refMax);
-// если норма не распознана - refMin/refMax = 0 (фронт тогда не дёргает
-// шкалу и показывает только цифру со статусом).
 func parseIndicatorRef(value, normal string) (num, refMin, refMax float64) {
 	num = leadingFloat(value)
 	if rmin, rmax, ok := parseRefRange(normal); ok {
@@ -338,8 +355,6 @@ func parseIndicatorRef(value, normal string) (num, refMin, refMax float64) {
 	return
 }
 
-// leadingFloat извлекает первое вещественное число из строки
-// ("255.00 Ед/мл" -> 255.0, "5.2 ммоль/л" -> 5.2, "-3.1" -> -3.1).
 func leadingFloat(s string) float64 {
 	s = strings.TrimSpace(s)
 	re := regexp.MustCompile(`-?\d+(?:[.,]\d+)?`)
@@ -355,10 +370,6 @@ func leadingFloat(s string) float64 {
 	return v
 }
 
-// parseRefRange распознаёт референсный интервал из строки вида
-// "0-100", "0 - 100", "0.00 - 100.00 Ед/мл", "(3.9-6.1)", "менее 100".
-// Возвращает (min, max, ok). Для "более X" верхняя граница аппроксимируется
-// как X*2 (чтобы маркер уходил в красную зону, но шкала оставалась конечной).
 func parseRefRange(s string) (min, max float64, ok bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -373,17 +384,145 @@ func parseRefRange(s string) (min, max float64, ok bool) {
 			return a, b, true
 		}
 	}
-	// "менее X" / "до X" / "< X" -> (0, X)
 	if m := regexp.MustCompile(`(?:менее|до|не более|<)\s*(\d+(?:[.,]\d+)?)`).FindStringSubmatch(s); m != nil {
 		if x, err := strconv.ParseFloat(strings.ReplaceAll(m[1], ",", "."), 64); err == nil {
 			return 0, x, true
 		}
 	}
-	// "более X" / "> X" -> (X, X*2)
 	if m := regexp.MustCompile(`(?:более|свыше|больше|>)\s*(\d+(?:[.,]\d+)?)`).FindStringSubmatch(s); m != nil {
 		if x, err := strconv.ParseFloat(strings.ReplaceAll(m[1], ",", "."), 64); err == nil {
 			return x, math.Max(x*2, x+1), true
 		}
 	}
 	return 0, 0, false
+}
+
+var priorityBiomarkers = []string{
+	"Глюкоза", "glucose",
+	"Ферритин", "ferritin",
+	"АЛТ", "ALT", "алт",
+	"АСТ", "AST", "аст",
+	"Холестерин", "cholesterol",
+	"ЛПВП", "HDL",
+	"ЛПНП", "LDL",
+	"Триглицериды", "triglycerides",
+	"ТТГ", "TSH",
+	"Креатинин", "creatinine",
+	"Гемоглобин", "hemoglobin",
+	"Мочевина", "urea",
+	"Билирубин", "bilirubin",
+	"Витамин D", "vitamin d",
+}
+
+func computeTrendBadges(ctx context.Context, repo monitoring.Repository, telegramID int64) []TrendBadge {
+	entries, _, err := repo.ListHistory(ctx, telegramID, "", 0, 0)
+	if err != nil || len(entries) == 0 {
+		return []TrendBadge{}
+	}
+
+	series := map[string][]trendPoint{}
+	for _, e := range entries {
+		block := parseReportBlock(e, e.Type)
+		for _, ind := range block.Indicators {
+			if ind.Num == 0 {
+				continue
+			}
+			name := strings.TrimSpace(ind.Name)
+			if name == "" {
+				continue
+			}
+			series[name] = append(series[name], trendPoint{Date: e.Date, Num: ind.Num})
+		}
+	}
+	if len(series) == 0 {
+		return []TrendBadge{}
+	}
+
+	type candidate struct {
+		badge TrendBadge
+		count int
+	}
+	candidates := []candidate{}
+
+	for name, pts := range series {
+		if len(pts) < 2 {
+			continue
+		}
+		sort.SliceStable(pts, func(i, j int) bool {
+			return pts[i].Date.Before(pts[j].Date)
+		})
+		first := pts[0]
+		last := pts[len(pts)-1]
+
+		delta := last.Num - first.Num
+		rel := delta / (math.Abs(first.Num) + 1e-9)
+		var dir, arrow string
+		switch {
+		case math.Abs(rel) < 0.1:
+			dir, arrow = "stable", "→"
+		case delta > 0:
+			dir, arrow = "up", "↑"
+		default:
+			dir, arrow = "down", "↓"
+		}
+		months := int(math.Round(last.Date.Sub(first.Date).Hours() / 24 / 30.44))
+		if months < 1 {
+			months = 1
+		}
+
+		candidates = append(candidates, candidate{
+			badge: TrendBadge{
+				Indicator: name,
+				Arrow:     arrow,
+				Direction: dir,
+				Period:    monthsPhrase(months),
+			},
+			count: len(pts),
+		})
+	}
+	if len(candidates) == 0 {
+		return []TrendBadge{}
+	}
+
+	priorityRank := func(name string) int {
+		low := strings.ToLower(name)
+		for i, p := range priorityBiomarkers {
+			if strings.EqualFold(p, name) || strings.EqualFold(p, low) {
+				return -1000 + i
+			}
+		}
+		return 0
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		ri, rj := priorityRank(candidates[i].badge.Indicator), priorityRank(candidates[j].badge.Indicator)
+		if ri != rj {
+			return ri < rj
+		}
+		return candidates[i].count > candidates[j].count
+	})
+
+	const maxBadges = 4
+	limit := maxBadges
+	if len(candidates) < limit {
+		limit = len(candidates)
+	}
+	out := make([]TrendBadge, 0, limit)
+	for i := 0; i < limit; i++ {
+		out = append(out, candidates[i].badge)
+	}
+	return out
+}
+
+func monthsPhrase(n int) string {
+	if n <= 0 {
+		n = 1
+	}
+	unit := "месяцев"
+	switch {
+	case n%10 == 1 && n%100 != 11:
+		unit = "месяц"
+	case n%10 >= 2 && n%10 <= 4 && (n%100 < 10 || n%100 >= 20):
+		unit = "месяца"
+	}
+	return "за последние " + strconv.Itoa(n) + " " + unit
 }

@@ -176,3 +176,22 @@ body {
     .field-row { flex-direction: column; gap: 0; }
     .tab-btn { font-size: 11px; padding: 10px 4px; }
 }
+
+
+/* === Заглушка Мониторинга для Free === */
+.free-stub { display: flex; flex-direction: column; gap: 14px; }
+.free-stub-text { font-size: 14px; color: #33414f; line-height: 1.5; margin: 0; }
+.free-stub-chart { height: 220px; width: 100%; }
+
+/* Плашка-призыв к Premium в заглушке Мониторинга (Free): короткая
+   подсказка, БЕЗ глубоких ссылок на бота - пользователь открывает
+   подписку самостоятельно через меню бота (кнопка «💎 Premium»). */
+.premium-plaque {
+    background: var(--mint-bg);
+    border: 1px solid rgba(31,166,168,0.35);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--dark);
+    line-height: 1.45;
+}

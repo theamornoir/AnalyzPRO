@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Prisma - Мой профиль</title>
     <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <link rel="stylesheet" href="style.v39.css">
+    <link rel="stylesheet" href="style.v42.css">
 </head>
 <body>
     <div class="dashboard">
@@ -135,10 +135,12 @@
                         <canvas id="chartAnalysis"></canvas>
                     </div>
                     <div class="ind-list" id="analysisIndicators"></div>
+                    <div class="free-history-note" id="analysisHistoryNote" style="display:none;"></div>
                     <div class="archive" id="analysisArchive" style="display:none;">
                         <div class="archive-title">📚 История отчётов</div>
                         <div class="archive-list" id="analysisArchiveList"></div>
                     </div>
+                    <div class="trend-badges" id="analysisTrendBadges"></div>
                     <p class="hint" id="analysisHint"></p>
                 </section>
             </section>
@@ -168,10 +170,12 @@
                         <canvas id="chartBioscan"></canvas>
                     </div>
                     <div class="zone-grid" id="bioscanZones"></div>
+                    <div class="free-history-note" id="bioscanHistoryNote" style="display:none;"></div>
                     <div class="archive" id="bioscanArchive" style="display:none;">
                         <div class="archive-title">📚 История отчётов</div>
                         <div class="archive-list" id="bioscanArchiveList"></div>
                     </div>
+                    <div class="trend-badges" id="bioscanTrendBadges"></div>
                     <p class="hint" id="bioscanHint"></p>
                 </section>
             </section>
@@ -246,6 +250,16 @@
         <iframe class="report-viewer-frame" id="reportViewerFrame" title="Отчёт" frameborder="0"></iframe>
     </div>
 
-    <script defer src="app.v39.js"></script>
+    <div class="premium-modal" id="premiumModal" style="display:none;">
+        <div class="premium-modal-backdrop" id="premiumModalBackdrop"></div>
+        <div class="premium-modal-card">
+            <h2 id="premiumModalTitle">💎 Premium</h2>
+            <ul id="premiumModalBullets" class="premium-modal-bullets"></ul>
+            <button class="btn-primary" id="premiumModalOpen" type="button">💎 Открыть Premium</button>
+            <button class="premium-modal-close" id="premiumModalClose" type="button">Закрыть</button>
+        </div>
+    </div>
+
+    <script defer src="app.v42.js"></script>
 </body>
 </html>

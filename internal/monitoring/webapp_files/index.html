@@ -9,12 +9,22 @@
          который используется для авторизации API мониторинга. -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <link rel="stylesheet" href="style.css?v=v10">
+    <link rel="stylesheet" href="style.css?v=v11">
 </head>
 <body>
     <div class="app">
         <!-- MAIN -->
         <main class="main">
+            <!-- VIEW: FREE STUB (Мониторинг недоступен без Premium) -->
+            <section id="view-free" class="view hidden">
+                <div class="card free-stub">
+                    <h2>Мониторинг</h2>
+                    <p class="free-stub-text">Без Мониторинга вы видите отдельные анализы. С Мониторингом - видите тренд: как меняется показатель со временем и в норме ли он.</p>
+                    <div class="free-stub-chart"><canvas id="freeStubChart"></canvas></div>
+                    <div class="premium-plaque" id="freeStubPlaque">💎 Купите Premium, чтобы открыть Мониторинг. С подпиской вы сможете создавать проекты, привязывать анализы и строить графики с референсными линиями нормы.</div>
+                </div>
+            </section>
+
             <!-- VIEW: PROJECTS LIST -->
             <section id="view-projects" class="view">
                 <div id="projectsList" class="projects"></div>
@@ -129,6 +139,6 @@
         <div id="loading" class="loading hidden"><div class="spinner"></div></div>
     </div>
 
-    <script src="app.js?v=v10"></script>
+    <script src="app.js?v=v12"></script>
 </body>
 </html>

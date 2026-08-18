@@ -173,7 +173,7 @@ func TestAPIHandler(t *testing.T) {
 	repo := NewMockRepository()
 	svc := NewService(repo)
 	botToken := "TEST_BOT_TOKEN"
-	h := NewAPIHandler(svc, botToken).Handler()
+	h := NewAPIHandler(svc, botToken, func(int64) bool { return true }).Handler()
 
 	initData := buildInitData(botToken, 111)
 	authHeader := func(req *http.Request) { req.Header.Set("X-Telegram-Init-Data", initData) }
@@ -315,5 +315,69 @@ func TestServeWebApp(t *testing.T) {
 	ServeWebApp(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("ожидали 404, получили %d", rec.Code)
+	}
+}
+
+// TestAPIHandlerFreeGate - мутирующие эндпоинты Мониторинга заблокированы
+// для Free даже при прямом вызове (защита на бэкенде, а не только скрытие
+// кнопки на фронте). GET-эндпоинты доступны, чтобы фронт мог показать
+// заглушку.
+func TestAPIHandlerFreeGate(t *testing.T) {
+	repo := NewMockRepository()
+	svc := NewService(repo)
+	botToken := "TEST_BOT_TOKEN"
+	// Free-пользователь: premiumCheck всегда false.
+	h := NewAPIHandler(svc, botToken, func(int64) bool { return false }).Handler()
+	initData := buildInitData(botToken, 111)
+	authHeader := func(req *http.Request) { req.Header.Set("X-Telegram-Init-Data", initData) }
+
+	// Статус: isPremium=false, monitoringAvailable=false.
+	req := httptest.NewRequest(http.MethodGet, "/api/monitoring/status", nil)
+	authHeader(req)
+	rec := httptest.NewRecorder()
+	h(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: ожидали 200, получили %d", rec.Code)
+	}
+	var st map[string]interface{}
+	_ = json.Unmarshal(rec.Body.Bytes(), &st)
+	if st["isPremium"] != false {
+		t.Errorf("ожидали isPremium=false, got %v", st["isPremium"])
+	}
+
+	// Создание проекта заблокировано для Free -> 403.
+	body, _ := json.Marshal(CreateProjectRequest{Name: "Курс", Type: "course", StartDate: "2026-01-01"})
+	req = httptest.NewRequest(http.MethodPost, "/api/monitoring/projects", strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+	authHeader(req)
+	rec = httptest.NewRecorder()
+	h(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("ожидали 403 для Free при создании проекта, получили %d", rec.Code)
+	}
+
+	// GET список проектов разрешён (фронт покажет заглушку) -> 200.
+	req = httptest.NewRequest(http.MethodGet, "/api/monitoring/projects", nil)
+	authHeader(req)
+	rec = httptest.NewRecorder()
+	h(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("ожидали 200 для GET projects, получили %d", rec.Code)
+	}
+
+	// Привязка записи заблокирована для Free (прямой вызов) -> 403,
+	// даже если проект существует.
+	p, err := svc.CreateProject(context.Background(), 111, CreateProjectRequest{Name: "X", Type: "course", StartDate: "2026-01-01"})
+	if err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+	bindBody, _ := json.Marshal(BindEntryRequest{EntryID: 1})
+	req = httptest.NewRequest(http.MethodPost, "/api/monitoring/projects/"+strconv.FormatInt(p.ID, 10)+"/entries", strings.NewReader(string(bindBody)))
+	req.Header.Set("Content-Type", "application/json")
+	authHeader(req)
+	rec = httptest.NewRecorder()
+	h(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("ожидали 403 для Free при привязке записи, получили %d", rec.Code)
 	}
 }

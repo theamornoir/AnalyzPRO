@@ -197,7 +197,22 @@ document.addEventListener('DOMContentLoaded', () => {
     initProjectTabs();
     initModal();
     loadProjects();
+    // Возврат из бота после оплаты Premium: обновляем список проектов,
+    // если была попытка оплаты (защита от «мёртвого конца»). sessionStorage
+    // общий для вложенного фрейма и родительского «Моего профиля».
+    document.addEventListener('visibilitychange', function () {
+        if (document.hidden) return;
+        let attempted = false;
+        try { attempted = sessionStorage.getItem('payment_attempt') === 'true'; } catch (e) {}
+        if (!attempted) return;
+        try { sessionStorage.removeItem('payment_attempt'); } catch (e) {}
+        loadProjects();
+        showToast('✅ Оплата выполнена? Статус Premium обновлён — проекты доступны.');
+    });
 });
+
+// Ссылка на оформление Premium (из /api/monitoring/status).
+let __premiumLink = "";
 
 function loadProjects() {
     showLoading(true);
@@ -207,16 +222,63 @@ function loadProjects() {
         showLoading(false);
         return;
     }
-    api('/api/monitoring/projects')
+    // Сначала статус подписки: Free не может пользоваться Мониторингом
+    // (создание проектов/привязка заблокированы на бэкенде) - вместо
+    // интерфейса показываем заглушку с демо-графиком.
+    api('/api/monitoring/status')
         .then(({ ok, body }) => {
-            if (!ok) throw new Error(body.error || 'Ошибка загрузки');
-            state.projects = body || [];
-            renderProjects();
-            setHeader('Мои проекты', 'Отслеживайте показатели во времени');
-            showView('view-projects');
+            if (ok && body && body.premiumLink) __premiumLink = body.premiumLink;
+            if (ok && body && !body.isPremium) {
+                showFreeStub();
+                return;
+            }
+            return api('/api/monitoring/projects').then(({ ok, body }) => {
+                if (!ok) throw new Error(body.error || 'Ошибка загрузки');
+                state.projects = body || [];
+                renderProjects();
+                setHeader('Мои проекты', 'Отслеживайте показатели во времени');
+                showView('view-projects');
+            });
         })
         .catch(err => { showToast('Не удалось загрузить проекты: ' + err.message); })
         .finally(() => showLoading(false));
+}
+
+// Заглушка Мониторинга для Free: объяснение ценности + демо-график
+// (не данные пользователя) + кнопка перехода к оформлению Premium.
+function showFreeStub() {
+    setHeader('Мониторинг', '💎 Доступно на Premium');
+    showView('view-free');
+    drawFreeStubChart();
+}
+
+// Статичный демо-график с референсными зонами (иллюстрация, не данные
+// пользователя). Подписан как пример тренда.
+function drawFreeStubChart() {
+    const canvas = $('freeStubChart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    const ctx = canvas.getContext('2d');
+    const labels = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн'];
+    const values = [6.8, 6.4, 6.0, 5.6, 5.3, 5.1];
+    const refMin = 3.9, refMax = 5.5;
+    const datasets = [{
+        label: 'Глюкоза',
+        data: values,
+        borderColor: '#1FA6A8',
+        backgroundColor: 'rgba(31,166,168,0.15)',
+        borderWidth: 3, fill: true, tension: 0.35, pointRadius: 4,
+    }];
+    datasets.push({ label: 'Норма (мин)', data: labels.map(() => refMin), borderColor: '#4F8A6D', borderWidth: 1, borderDash: [5, 4], pointRadius: 0, fill: false });
+    datasets.push({ label: 'Норма (макс)', data: labels.map(() => refMax), borderColor: '#E8744A', borderWidth: 1, borderDash: [5, 4], pointRadius: 0, fill: false });
+    new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 8, font: { size: 10 } } } },
+            scales: { y: { beginAtZero: false }, x: { grid: { display: false } } },
+        },
+    });
 }
 
 // ------------------------------------------------------------

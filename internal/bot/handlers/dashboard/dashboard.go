@@ -230,20 +230,22 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 	// PostHog: открытие Мой профиль реальным пользователем (не демо).
 	analytics.Track(telegramID, "dashboard_opened", nil)
 
-	metrics := h.buildMetrics(r.Context(), telegramID)
+	isPremium := h.pay.IsPremium(telegramID)
+	metrics := h.buildMetrics(r.Context(), telegramID, isPremium)
 
 	// Премиум-гейт «Мой профиль» (как было раньше): без Premium
 	// богатые метрики обзора скрываются - пользователь видит только
 	// баннер с предложением оформить подписку. Бесплатные результаты
 	// (обычный анализ, базовый биоскан) доступны в разделе отчётов
 	// (/api/reports), где они не гейтятся и показываются своим карточками.
-	isPremium := h.pay.IsPremium(telegramID)
+	// Тренд динамики для Free НЕ очищаем: он строится по 3 последним
+	// замерам и показывается в Обзоре как тизер (см. renderTrendCard в
+	// app.js), утечки нет - данные собственные.
 	if !isPremium {
 		metrics.Groups = nil
 		metrics.Blood = BloodData{}
 		metrics.Nutrition = NutData{}
 		metrics.Activity = ActData{}
-		metrics.Trend = TrendData{}
 		metrics.HealthIndex = 0
 		metrics.EnergyLevel = "-"
 	}
@@ -293,7 +295,11 @@ func (h *Handler) Reports(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := h.buildReportsData(r.Context(), telegramID)
+	// Премиум-статус нужен ДО сборки данных: от него зависит лимит
+	// истории (3 последние записи для Free) и вычисление тренд-бейджей.
+	isPremium := h.pay.IsPremium(telegramID)
+
+	data := h.buildReportsData(r.Context(), telegramID, isPremium)
 
 	// Премиум-гейт «Мой профиль» (как было раньше): без Premium
 	// богатые поля отчётов (scores/zones/indicators/сравнение) скрываются.
@@ -302,7 +308,6 @@ func (h *Handler) Reports(w http.ResponseWriter, r *http.Request) {
 	// собственные результаты пользователя. Расширенный анализ-досье и
 	// Bioscan PRO генерируются по подписке в боте и здесь тоже скрываются
 	// (богатый контент очищается, флаг rich сохраняется для фронтенда).
-	isPremium := h.pay.IsPremium(telegramID)
 	if !isPremium {
 		data.Analysis = stripRichReports(data.Analysis)
 		data.Bioscan = stripRichReports(data.Bioscan)
@@ -423,6 +428,38 @@ func (h *Handler) ReportFile(w http.ResponseWriter, r *http.Request) {
 	if entry.TelegramID != telegramID || entry.Type != entryType {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
+	}
+
+	// Для Free-пользователей открытие отчёта ограничено окном «3 последние
+	// записи» данного типа (аналогично лимиту в GET /api/reports). Любой
+	// запрос отчёта вне тройки последних возвращает 403, чтобы нельзя было
+	// обойти тизер «Показаны 3 из N» прямым вызовом /api/reports/file по
+	// известному id старой записи. Свои текущие 3 записи открываются как
+	// раньше (200). Лимит применяется на бэкенде, а не скрытием на фронте.
+	if !h.pay.IsPremium(telegramID) {
+		windowEntries, _, werr := h.repo.ListHistory(r.Context(), telegramID, entryType, 1, freeHistoryLimit)
+		if werr != nil {
+			log.Printf("[DASHBOARD] ошибка проверки доступа к отчёту id=%d user=%s: %v", entryID, MaskID(telegramID), werr)
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "ошибка проверки доступа"})
+			return
+		}
+		inWindow := false
+		for _, e := range windowEntries {
+			if e.ID == entryID {
+				inWindow = true
+				break
+			}
+		}
+		if !inWindow {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "доступ ограничен для Free-пользователей. Откройте Premium для доступа ко всей истории",
+			})
+			return
+		}
 	}
 
 	html, renderErr := h.reportHTML(entry)
@@ -865,7 +902,7 @@ func profileRecommendations(goal string) []string {
 }
 
 // buildMetrics строит метрики на основе реальной истории пользователя.
-func (h *Handler) buildMetrics(ctx context.Context, telegramID int64) MetricsResponse {
+func (h *Handler) buildMetrics(ctx context.Context, telegramID int64, isPremium bool) MetricsResponse {
 	resp := MetricsResponse{Recommendations: []string{}}
 
 	entries, _, err := h.repo.ListHistory(ctx, telegramID, "", 1, 0)
@@ -949,12 +986,20 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64) MetricsRes
 	// - строятся только из того, что есть у пользователя в истории.
 	resp.Groups = h.buildAdaptiveGroups(ctx, telegramID)
 
-	// Тренд: по одной точке на РЕАЛЬНЫЙ замер, от старых к новым.
-	labels := make([]string, 0, len(measurements))
-	values := make([]int, 0, len(measurements))
+	// Тренд динамики индекса здоровья. Free видит график строго по 3
+	// последним замерам (как и список отчётов в /api/reports), Premium —
+	// по всей истории. Данные собственные, утечки нет: это лишь
+	// агрегированный индекс по тем же 3 записям, что доступны в разделе
+	// «Анализы» (бесплатные результаты — свои).
+	trendMeas := measurements
+	if !isPremium && len(trendMeas) > freeHistoryLimit {
+		trendMeas = trendMeas[:freeHistoryLimit]
+	}
 	// measurements идут свежие→старые; строим тренд старые→свежие.
-	for i := len(measurements) - 1; i >= 0; i-- {
-		e := measurements[i]
+	labels := make([]string, 0, len(trendMeas))
+	values := make([]int, 0, len(trendMeas))
+	for i := len(trendMeas) - 1; i >= 0; i-- {
+		e := trendMeas[i]
 		labels = append(labels, e.Date.Format("01.02"))
 		values = append(values, healthIndex(i+1, parseReport(e.JsonData)))
 	}

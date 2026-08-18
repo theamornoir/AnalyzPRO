@@ -5,20 +5,37 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 )
 
 // APIHandler - HTTP-обработчики API мониторинга. Все эндпоинты
 // защищены валидацией Telegram initData; telegramID извлекается из него.
+//
+// Модель Free/Premium: мутирующие эндпоинты (создание проекта, привязка
+// записи, завершение проекта) запрещены для не-Premium пользователей на
+// уровне API - даже при прямом вызове. GET-эндпоинты доступны всем, но
+// фронт для Free показывает заглушку вместо интерфейса.
 type APIHandler struct {
-	svc      *Service
-	botToken string
+	svc          *Service
+	botToken     string
+	premiumCheck func(telegramID int64) bool
+	premiumLink  string
 }
 
-// NewAPIHandler создаёт обработчик API.
-func NewAPIHandler(svc *Service, botToken string) *APIHandler {
-	return &APIHandler{svc: svc, botToken: botToken}
+// NewAPIHandler создаёт обработчик API. premiumCheck возвращает true,
+// если пользователь с данным telegramID имеет Premium-подписку.
+func NewAPIHandler(svc *Service, botToken string, premiumCheck func(telegramID int64) bool) *APIHandler {
+	if premiumCheck == nil {
+		premiumCheck = func(int64) bool { return true }
+	}
+	return &APIHandler{
+		svc:          svc,
+		botToken:     botToken,
+		premiumCheck: premiumCheck,
+		premiumLink:  strings.TrimSpace(os.Getenv("WEBAPP_PREMIUM_LINK")),
+	}
 }
 
 // Handler возвращает http.HandlerFunc, диспетчеризирующий маршруты
@@ -39,6 +56,9 @@ func (h *APIHandler) Handler() http.HandlerFunc {
 		ctx := r.Context()
 
 		switch {
+		case path == "status" && r.Method == http.MethodGet:
+			h.handleStatus(ctx, w, telegramID)
+
 		case path == "projects" && r.Method == http.MethodGet:
 			h.handleListProjects(ctx, w, telegramID)
 		case path == "projects" && r.Method == http.MethodPost:
@@ -98,6 +118,18 @@ func (h *APIHandler) Handler() http.HandlerFunc {
 	}
 }
 
+// handleStatus возвращает флаг Premium-статуса и ссылку на оформление
+// подписки - чтобы фронт мог показать заглушку Мониторинга для Free
+// и кнопку «Открыть Мониторинг».
+func (h *APIHandler) handleStatus(ctx context.Context, w http.ResponseWriter, telegramID int64) {
+	isPremium := h.premiumCheck(telegramID)
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"isPremium":           isPremium,
+		"monitoringAvailable": isPremium,
+		"premiumLink":         h.premiumLink,
+	})
+}
+
 // auth извлекает и валидирует initData (header или query-параметр).
 func (h *APIHandler) auth(r *http.Request) (int64, bool) {
 	initData := r.Header.Get("X-Telegram-Init-Data")
@@ -127,6 +159,18 @@ func (h *APIHandler) auth(r *http.Request) (int64, bool) {
 	return id, true
 }
 
+// requirePremium - true, если мутирующее действие разрешено (Premium).
+// Для Free возвращает 403 и false. Бэкенд НЕ доверяет demo-флагу при
+// мутациях: Free-пользователь не может обойти гейт через ?demo=1,
+// иначе прямой вызов /api/monitoring/projects создал бы проект.
+func (h *APIHandler) requirePremium(w http.ResponseWriter, telegramID int64) bool {
+	if h.premiumCheck(telegramID) {
+		return true
+	}
+	h.writeError(w, http.StatusForbidden, "monitoring_requires_premium")
+	return false
+}
+
 func (h *APIHandler) handleListProjects(ctx context.Context, w http.ResponseWriter, telegramID int64) {
 	projects, err := h.svc.ListProjects(ctx, telegramID)
 	if err != nil {
@@ -137,6 +181,9 @@ func (h *APIHandler) handleListProjects(ctx context.Context, w http.ResponseWrit
 }
 
 func (h *APIHandler) handleCreateProject(ctx context.Context, w http.ResponseWriter, r *http.Request, telegramID int64) {
+	if !h.requirePremium(w, telegramID) {
+		return
+	}
 	var req CreateProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid JSON")
@@ -161,6 +208,9 @@ func (h *APIHandler) handleProjectDetail(ctx context.Context, w http.ResponseWri
 }
 
 func (h *APIHandler) handleBindEntry(ctx context.Context, w http.ResponseWriter, r *http.Request, telegramID, projectID int64) {
+	if !h.requirePremium(w, telegramID) {
+		return
+	}
 	var req BindEntryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.EntryID == 0 {
 		h.writeError(w, http.StatusBadRequest, "invalid JSON или entry_id")
@@ -174,6 +224,9 @@ func (h *APIHandler) handleBindEntry(ctx context.Context, w http.ResponseWriter,
 }
 
 func (h *APIHandler) handleUnbindEntry(ctx context.Context, w http.ResponseWriter, telegramID, projectID, entryID int64) {
+	if !h.requirePremium(w, telegramID) {
+		return
+	}
 	if err := h.svc.UnbindEntry(ctx, telegramID, projectID, entryID); err != nil {
 		h.writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -182,6 +235,9 @@ func (h *APIHandler) handleUnbindEntry(ctx context.Context, w http.ResponseWrite
 }
 
 func (h *APIHandler) handleCompleteProject(ctx context.Context, w http.ResponseWriter, telegramID, projectID int64) {
+	if !h.requirePremium(w, telegramID) {
+		return
+	}
 	if err := h.svc.CompleteProject(ctx, telegramID, projectID); err != nil {
 		h.writeError(w, http.StatusBadRequest, err.Error())
 		return

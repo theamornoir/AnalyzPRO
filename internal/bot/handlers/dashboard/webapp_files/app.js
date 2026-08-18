@@ -25,6 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     } catch (e) { /* нет TG WebApp */ }
     loadMetrics();
+    bindPremiumModal();
+    fetchPremiumLink();
+    addReturnReload();
 });
 
 // Выводит initData изо всех возможных источников. Порядок важен:
@@ -73,6 +76,183 @@ function getInitData() {
     console.warn("[Prisma] initData недоступен: window.Telegram.WebApp пуст и tgWebAppData отсутствует в URL (query/hash).");
     return "";
 }
+// ============================================================
+// Free/Premium: локализация и модалка оформления подписки.
+// Все пользовательские тексты вынесены в TEXTS - меняются без правок
+// логики. Модалка открывается поверх текущего экрана (история или
+// Мониторинг) и не теряет контекст раздела.
+// ============================================================
+const TEXTS = {
+    historyNote: function (n) {
+        return "Показаны 3 из " + n + " записей. Открыть всю историю →";
+    },
+    trendBadgeDirection: function (d) {
+        if (d === "up") return "растёт";
+        if (d === "down") return "снижается";
+        return "стабильно";
+    },
+    premiumModal: {
+        title: "💎 Premium",
+        bulletsHistory: [
+            "Полная история анализов и биосканов",
+            "Графики динамики показателей за весь период",
+            "Все показатели, тренды и сравнения без ограничений"
+        ],
+        bulletsMonitoring: [
+            "Проекты мониторинга здоровья",
+            "Привязка анализов и биосканов к проекту",
+            "Графики с референсными линиями нормы"
+        ]
+    },
+    openPremiumFallback: "Откройте бота Prisma и нажмите кнопку «💎 Premium» в меню, чтобы оформить подписку."
+};
+
+let __premiumLink = "";
+
+function fetchPremiumLink() {
+    const initData = getInitData();
+    if (!initData) return;
+    fetch("/api/monitoring/status?initData=" + encodeURIComponent(initData))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) { if (j && j.premiumLink) __premiumLink = j.premiumLink; })
+        .catch(function () {});
+}
+
+function bindPremiumModal() {
+    const modal = document.getElementById("premiumModal");
+    if (!modal) return;
+    const close = function () { modal.style.display = "none"; };
+    const back = document.getElementById("premiumModalBackdrop");
+    if (back) back.addEventListener("click", close);
+    const cb = document.getElementById("premiumModalClose");
+    if (cb) cb.addEventListener("click", close);
+    const open = document.getElementById("premiumModalOpen");
+    if (open) open.addEventListener("click", openPremium);
+}
+
+function openPremiumModal(entryPoint) {
+    const t = TEXTS.premiumModal;
+    const titleEl = document.getElementById("premiumModalTitle");
+    if (titleEl) titleEl.textContent = t.title;
+    const bullets = document.getElementById("premiumModalBullets");
+    if (bullets) {
+        bullets.innerHTML = "";
+        const list = entryPoint === "monitoring" ? t.bulletsMonitoring : t.bulletsHistory;
+        list.forEach(function (b) {
+            const li = document.createElement("li");
+            li.textContent = b;
+            bullets.appendChild(li);
+        });
+    }
+    const modal = document.getElementById("premiumModal");
+    if (modal) modal.style.display = "flex";
+}
+
+function openPremium() {
+    const modal = document.getElementById("premiumModal");
+    if (modal) modal.style.display = "none";
+    if (__premiumLink && window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openTelegramLink) {
+        // Запоминаем попытку оплаты, чтобы при возврате из бота
+        // предложить проверить статус Premium и обновить данные.
+        try { sessionStorage.setItem("payment_attempt", "true"); } catch (e) {}
+        try { window.Telegram.WebApp.openTelegramLink(__premiumLink); return; } catch (e) {}
+    }
+    // Fallback: нет ссылки/WebApp — просто плашка с подсказкой, как
+    // открыть Premium в боте (кнопка «💎 Premium» в меню). Никаких
+    // глубоких ссылок на сторонние/неправильные боты не уходим.
+    showMessage(TEXTS.openPremiumFallback, "info");
+}
+
+// Перезагрузка данных при возврате из бота (после оплаты Premium):
+// пользователь остаётся на том же экране, но с разблокированным доступом.
+function addReturnReload() {
+    document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) {
+            loadMetrics();
+            reloadMonitoringFrame();
+            checkPremiumStatusAfterReturn();
+        }
+    });
+}
+
+// checkPremiumStatusAfterReturn — вызывается при возврате из бота (после
+// оплаты Premium): если была попытка оплаты, предлагает проверить статус
+// и обновить данные. Защищает от «мёртвого конца», если возврат в Mini App
+// не перерисовал раздел автоматически.
+function checkPremiumStatusAfterReturn() {
+    let attempted = false;
+    try { attempted = sessionStorage.getItem("payment_attempt") === "true"; } catch (e) {}
+    if (!attempted) return;
+    try { sessionStorage.removeItem("payment_attempt"); } catch (e) {}
+    showMessage("✅ Оплата выполнена? Проверьте статус Premium — данные обновятся автоматически.", "info");
+    addCheckStatusButton();
+}
+
+// addCheckStatusButton — добавляет кнопку «Проверить статус Premium» в
+// плашку сообщения; по клику перезагружает данные раздела.
+function addCheckStatusButton() {
+    if (document.getElementById("checkPremiumStatusBtn")) return;
+    const btn = document.createElement("button");
+    btn.id = "checkPremiumStatusBtn";
+    btn.type = "button";
+    btn.className = "btn-primary";
+    btn.style.marginTop = "12px";
+    btn.textContent = "🔄 Проверить статус Premium";
+    btn.onclick = function () {
+        if (btn.parentNode) btn.parentNode.removeChild(btn);
+        loadMetrics();
+        reloadMonitoringFrame();
+    };
+    const msg = document.getElementById("messageCard");
+    if (msg) {
+        msg.appendChild(btn);
+        msg.style.display = "block";
+    } else {
+        const header = document.querySelector(".header");
+        if (header) header.appendChild(btn);
+    }
+}
+
+function reloadMonitoringFrame() {
+    const frame = document.getElementById("monitoringFrame");
+    if (!frame) return;
+    monitoringFrameLoaded = false;
+    frame.src = "";
+    if (activeTab === "monitoring") loadMonitoringFrame();
+}
+
+// Счётчик скрытых записей (Free) над списком истории.
+function renderFreeHistoryNote(kind, group, premiumRequired) {
+    const el = document.getElementById(kind + "HistoryNote");
+    if (!el) return;
+    if (premiumRequired && group && group.hiddenCount > 0) {
+        el.textContent = TEXTS.historyNote(group.totalCount);
+        el.style.display = "block";
+        el.onclick = function () { openPremiumModal("history"); };
+    } else {
+        el.style.display = "none";
+        el.onclick = null;
+    }
+}
+
+// Тренд-бейджи (направление по полной истории) - показываем один раз
+// (в разделе «Анализы»), чтобы не дублировать между вкладками.
+function renderTrendBadges(kind, premiumRequired) {
+    const el = document.getElementById(kind + "TrendBadges");
+    if (!el) return;
+    if (kind !== "analysis") { el.innerHTML = ""; return; }
+    const badges = (window.__reportsData && window.__reportsData.trendBadges) || [];
+    if (!badges.length) { el.style.display = "none"; el.innerHTML = ""; return; }
+    el.style.display = "block";
+    el.innerHTML = '<div class="trend-badges-title">📈 Тренды</div>';
+    badges.forEach(function (b) {
+        const row = document.createElement("div");
+        row.className = "trend-badge";
+        row.textContent = b.arrow + " " + b.indicator + ": " + TEXTS.trendBadgeDirection(b.direction) + " " + b.period;
+        el.appendChild(row);
+    });
+}
+
 
 async function loadMetrics() {
     const initData = getInitData();
@@ -146,12 +326,14 @@ function render(data) {
         document.getElementById('healthIndex').textContent = "-";
         document.getElementById('energyLevel').textContent = "-";
         document.getElementById('metricGroups').style.display = "none";
-        document.getElementById('trendCard').style.display = "none";
         const recList = document.getElementById('recList');
         if (recList) recList.innerHTML = "";
         const recCard = document.getElementById('recommendationsCard');
         if (recCard) recCard.style.display = "none";
         document.getElementById('lastUpdate').textContent = "Обновлено: " + new Date().toLocaleString('ru-RU');
+        // Free видит график динамики строго по 3 последним замерам
+        // (как и список отчётов) — богатые блоки обзора при этом скрыты.
+        renderTrendCard(data.trend);
         showPremiumBanner();
         // Показываем заглушки-тизеры: пользователь видит, какие карточки
         // с анализами и прогрессом появятся после оформления Premium.
@@ -179,49 +361,11 @@ function render(data) {
         recList.appendChild(li);
     });
 
-    // Динамика: текущее значение индекса на шкале 0-100 всегда видно;
-    // линейный график (изменение во времени) рисуем только при 2+ замерах
-    // - иначе точка одна и «график» не несёт информации.
-    const trend = data.trend || { labels: [], values: [] };
-    if (trend.values && trend.values.length >= 1) {
-        document.getElementById('trendCard').style.display = 'block';
-        const latest = trend.values[trend.values.length - 1];
-        const color = latest >= 80 ? '#1FA6A8' : latest >= 60 ? '#E8744A' : '#D32F2F';
-        const tv = document.getElementById('trendValue');
-        tv.textContent = latest;
-        tv.style.color = color;
-        const td = document.getElementById('trendDate');
-        if (td) td.textContent = (trend.labels && trend.labels.length) ? trend.labels[trend.labels.length - 1] : '';
-        const fill = document.getElementById('trendScaleFill');
-        if (fill) {
-            fill.style.width = Math.max(0, Math.min(100, latest)) + '%';
-            fill.style.background = color;
-        }
-        const hint = document.getElementById('trendHint');
-        const chartWrap = document.getElementById('trendChartWrap');
-        const placeholder = document.getElementById('trendPlaceholder');
-        const n = trend.values.length;
-        if (n >= 2) {
-            // Два и более замеров - рисуем полную линию динамики и
-            // подписываем их число, чтобы было понятно, на каком
-            // объёме данных построена динамика.
-            if (chartWrap) { chartWrap.style.display = 'block'; drawTrend(trend.labels, trend.values); }
-            if (placeholder) placeholder.style.display = 'none';
-            if (hint) hint.textContent = 'Динамика по ' + n + ' замерам. Повторяйте анализ раз в 2-4 недели, чтобы отслеживать изменения.';
-        } else {
-            // Один замер - линию динамики построить нельзя. В «Обзоре»
-            // плашку не показываем (она перенесена в раздел «Анализы»);
-            // оставляем только текущий индекс. Скрываем график и
-            // уничтожаем ранее отрисованный (чтобы в скрытом канвасе
-            // не висела старая точка/линия).
-            if (trendChart) { try { trendChart.destroy(); } catch (e) {} trendChart = null; }
-            if (chartWrap) chartWrap.style.display = 'none';
-            if (placeholder) placeholder.style.display = 'none';
-            if (hint) hint.textContent = '';
-        }
-    } else {
-        document.getElementById('trendCard').style.display = 'none';
-    }
+    // Динамика: график по замерам (для Free — строго по 3 последним,
+    // для Premium — по всей истории; лимит задаёт бэкенд в buildMetrics).
+    // Логика вынесена в renderTrendCard, чтобы переиспользоваться и для
+    // Free-ветки выше.
+    renderTrendCard(data.trend);
 
     document.getElementById('lastUpdate').textContent = "Обновлено: " + new Date().toLocaleString('ru-RU');
 }
@@ -267,6 +411,43 @@ function renderMetricGroups(groups) {
         card.appendChild(gridEl);
         wrap.appendChild(card);
     });
+}
+
+// renderTrendCard - отрисовывает карточку «Динамика» (текущий индекс +
+// линейный график) из данных тренда. Для Free тренд содержит не более 3
+// точек (см. buildMetrics на бэкенде), для Premium — всю историю. При
+// одной точке рисуем только индекс без линии (линию построить нельзя).
+function renderTrendCard(trend) {
+    const card = document.getElementById('trendCard');
+    if (!card) return;
+    const t = trend || { labels: [], values: [] };
+    if (!t.values || t.values.length < 1) {
+        card.style.display = 'none';
+        return;
+    }
+    card.style.display = 'block';
+    const latest = t.values[t.values.length - 1];
+    const color = latest >= 80 ? '#1FA6A8' : latest >= 60 ? '#E8744A' : '#D32F2F';
+    const tv = document.getElementById('trendValue');
+    if (tv) { tv.textContent = latest; tv.style.color = color; }
+    const td = document.getElementById('trendDate');
+    if (td) td.textContent = (t.labels && t.labels.length) ? t.labels[t.labels.length - 1] : '';
+    const fill = document.getElementById('trendScaleFill');
+    if (fill) { fill.style.width = Math.max(0, Math.min(100, latest)) + '%'; fill.style.background = color; }
+    const hint = document.getElementById('trendHint');
+    const chartWrap = document.getElementById('trendChartWrap');
+    const placeholder = document.getElementById('trendPlaceholder');
+    const n = t.values.length;
+    if (n >= 2) {
+        if (chartWrap) { chartWrap.style.display = 'block'; drawTrend(t.labels, t.values); }
+        if (placeholder) placeholder.style.display = 'none';
+        if (hint) hint.textContent = 'Динамика по ' + n + ' замерам. Загружайте анализы раз в 2-4 недели, чтобы отслеживать изменения.';
+    } else {
+        if (trendChart) { try { trendChart.destroy(); } catch (e) {} trendChart = null; }
+        if (chartWrap) chartWrap.style.display = 'none';
+        if (placeholder) placeholder.style.display = 'none';
+        if (hint) hint.textContent = '';
+    }
 }
 
 function drawTrend(labels, values) {
@@ -763,24 +944,11 @@ function renderReportGroup(kind, group, premiumRequired) {
         return;
     }
 
-    // Премиум-гейт (как было раньше): без Premium прячем «богатый»
-    // контент (scores/zones/indicators/сравнение), который уже очищен
-    // на бэкенде для не-Premium. Бесплатные результаты (обычный анализ,
-    // базовый биоскан) не имеют этих полей, поэтому их карточки и архив
-    // остаются видимыми - это собственные данные пользователя.
-    const premiumBlocked = premiumRequired && latest.rich;
-    if (premiumBlocked) {
-        // Только премиум-отчёт и нет бесплатных в архиве - прячем
-        // карточку и показываем заглушку.
-        const hasFree = (group.reports || []).some(function (r) {
-            return r && r.available && !r.rich;
-        });
-        if (!hasFree) {
-            card.style.display = "none";
-            if (ph) ph.style.display = "block";
-            return;
-        }
-    }
+    // Премиум-гейт (как было раньше): «богатый» контент
+    // (scores/zones/indicators/сравнение) уже очищен на бэкенде для
+    // не-Premium, поэтому на фронте скрывать нечего. Бесплатные
+    // результаты (обычный анализ, базовый биоскан) не имеют этих полей
+    // и остаются видимыми — это собственные данные пользователя.
 
     card.style.display = "block";
     if (ph) ph.style.display = "none";
@@ -789,7 +957,7 @@ function renderReportGroup(kind, group, premiumRequired) {
     // (rich) без подписки прячем, оставляем бесплатные. Используется ниже
     // для решения «показывать radar-график/плашку» и построения архива.
     const visible = (group.reports || []).filter(function (r) {
-        return r && r.available && !(premiumRequired && r.rich);
+        return r && r.available;
     });
 
     document.getElementById(kind + "ReportTitle").textContent =
@@ -841,7 +1009,7 @@ function renderReportGroup(kind, group, premiumRequired) {
     // не с чем. При скрытии уничтожаем график, чтобы в скрытом канвасе
     // не висел старый рисунок.
     const wrap = document.getElementById(kind + "ChartWrap");
-    const scores = premiumBlocked ? {} : (latest.scores || {});
+    const scores = latest.scores || {};
     const labels = Object.keys(scores);
     if (wrap) {
         if (labels.length > 0 && visible.length >= 2) {
@@ -863,7 +1031,7 @@ function renderReportGroup(kind, group, premiumRequired) {
     const indEl = document.getElementById(kind + "Indicators");
     if (indEl) {
         indEl.innerHTML = "";
-        const inds = premiumBlocked ? [] : (latest.indicators || []);
+        const inds = latest.indicators || [];
         inds.slice(0, 8).forEach(function (ind) {
             const row = document.createElement("div");
             row.className = "ind-row";
@@ -876,7 +1044,7 @@ function renderReportGroup(kind, group, premiumRequired) {
     const zonesEl = document.getElementById(kind + "Zones");
     if (zonesEl) {
         zonesEl.innerHTML = "";
-        const zones = premiumBlocked ? [] : (latest.zones || []);
+        const zones = latest.zones || [];
         zones.forEach(function (z) {
             const cell = document.createElement("div");
             cell.className = "zdonut-cell";
@@ -891,6 +1059,8 @@ function renderReportGroup(kind, group, premiumRequired) {
     // Визуальный архив ВСЕХ сохранённых отчётов. Без Premium прячем
     // премиум-отчёты (rich), оставляем бесплатные.
     renderArchive(kind, group.reports, group.latest.date, premiumRequired);
+    renderFreeHistoryNote(kind, group, premiumRequired);
+    renderTrendBadges(kind, premiumRequired);
 
     // Подсказка: для не-Premium - апселл, иначе - guidance при малом
     // числе отчётов (один отчёт = ещё нечего сравнивать, график бессмыслен).

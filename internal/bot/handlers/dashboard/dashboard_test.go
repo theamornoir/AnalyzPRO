@@ -293,6 +293,62 @@ func TestReportFileNonPremiumCanOpen(t *testing.T) {
 	}
 }
 
+// TestReportFileFreeAccessWindow проверяет гейт окна «3 последние записи»
+// для Free: запрос отчёта вне тройки последних возвращает 403, запрос
+// одной из 3 последних — 200. После активации Premium ограничение снимается.
+func TestReportFileFreeAccessWindow(t *testing.T) {
+	h, uid := newHandler(t)
+	h.pdfConverter = fakePDF{bytes: []byte("%PDF-1.4 fake"), err: nil}
+
+	// Free-пользователь (без Premium). Сохраняем 5 анализов с разными
+	// датами (самый свежий — first), чтобы окно топ-3 было детерминированным.
+	ctx := context.Background()
+	base := time.Now()
+	ids := make([]int64, 0, 5)
+	for i := 0; i < 5; i++ {
+		entry := &monitoring.HistoryEntry{
+			TelegramID: uid,
+			Type:       "analysis",
+			Title:      "Анализ",
+			Date:       base.AddDate(0, 0, -i),
+			JsonData:   "{\"title\":\"Тест\"}",
+			ReportHTML: "<html>report</html>",
+		}
+		if err := h.repo.SaveResult(ctx, entry); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		ids = append(ids, entry.ID)
+	}
+
+	initData := buildInitData(testBotToken, uid)
+	reqURL := func(id int64) string {
+		return "/api/reports/file?initData=" + url.QueryEscape(initData) +
+			"&type=analysis&id=" + strconv.FormatInt(id, 10)
+	}
+
+	// Самый свежий отчёт (в тройке) — 200.
+	wOK := httptest.NewRecorder()
+	h.ReportFile(wOK, httptest.NewRequest(http.MethodGet, reqURL(ids[0]), nil))
+	if wOK.Code != http.StatusOK {
+		t.Fatalf("ожидали 200 для свежего отчёта в тройке, получили %d: %s", wOK.Code, wOK.Body.String())
+	}
+
+	// 4-й по свежести (вне тройки) — 403 для Free.
+	w403 := httptest.NewRecorder()
+	h.ReportFile(w403, httptest.NewRequest(http.MethodGet, reqURL(ids[3]), nil))
+	if w403.Code != http.StatusForbidden {
+		t.Fatalf("ожидали 403 для скрытого отчёта Free, получили %d: %s", w403.Code, w403.Body.String())
+	}
+
+	// После активации Premium тот же скрытый id открывается (200).
+	h.pay.ActivatePremiumManually(uid, "premium_monthly")
+	wPrem := httptest.NewRecorder()
+	h.ReportFile(wPrem, httptest.NewRequest(http.MethodGet, reqURL(ids[3]), nil))
+	if wPrem.Code != http.StatusOK {
+		t.Fatalf("ожидали 200 для скрытого отчёта после Premium, получили %d", wPrem.Code)
+	}
+}
+
 func TestReportFileServesPDF(t *testing.T) {
 	h, uid := newHandler(t)
 	h.pay.ActivatePremiumManually(uid, "premium_monthly")

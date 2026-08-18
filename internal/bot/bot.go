@@ -187,7 +187,9 @@ func (b *Bot) Start(ctx context.Context) {
 			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 		})
 		mux.HandleFunc("/monitoring/", monitoring.ServeWebApp)
-		mux.HandleFunc("/api/monitoring/", monitoring.NewAPIHandler(b.monitorSvc, b.botToken).Handler())
+		mux.HandleFunc("/api/monitoring/", monitoring.NewAPIHandler(b.monitorSvc, b.botToken, func(id int64) bool {
+			return b.paymentService.IsPremium(id)
+		}).Handler())
 
 		srv := &http.Server{Addr: listenAddr, Handler: mux}
 		go func() {
