@@ -14,21 +14,14 @@ import (
 )
 
 type Config struct {
-	BotToken           string
-	GoogleGeminiAPIKey string
-	GoogleAIModel      string
-	GeminiProxy        string
-	YandexGPTAPIKey    string
-	YandexGPTFolderID  string
-	DeepSeekAPIKey     string
-	AnthropicAPIKey    string
-	UploadDir          string
-	AppEnv             string
-	LoadingStickerID   string
-	AdminChatID        int64
-	WebAppURL          string
-	DashboardURL       string
-	HTTPAddr           string
+	BotToken         string
+	UploadDir        string
+	AppEnv           string
+	LoadingStickerID string
+	AdminChatID      int64
+	WebAppURL        string
+	DashboardURL     string
+	HTTPAddr         string
 	// HTML2PDFAPIKey - API-ключ внешнего сервиса html2pdf.app (режим
 	// «отправить HTML на сервер, получить PDF»). Если пуст - PDF-конвертация
 	// недоступна, отчёты уходят как HTML.
@@ -77,28 +70,21 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		BotToken:           strings.TrimSpace(os.Getenv("BOT_TOKEN")),
-		GoogleGeminiAPIKey: os.Getenv("GOOGLE_GEMINI_API_KEY"),
-		GoogleAIModel:      getEnv("GOOGLE_AI_MODEL", "gemini-2.5-flash-latest"),
-		GeminiProxy:        os.Getenv("GEMINI_PROXY"),
-		YandexGPTAPIKey:    os.Getenv("YANDEX_GPT_API_KEY"),
-		YandexGPTFolderID:  os.Getenv("YANDEX_GPT_FOLDER_ID"),
-		DeepSeekAPIKey:     os.Getenv("DEEPSEEK_API_KEY"),
-		AnthropicAPIKey:    os.Getenv("ANTHROPIC_API_KEY"),
-		UploadDir:          getEnv("UPLOAD_DIR", "./uploads"),
-		AppEnv:             getEnv("APP_ENV", "development"),
-		LoadingStickerID:   os.Getenv("LOADING_STICKER_ID"),
-		AdminChatID:        adminID,
-		WebAppURL:          webAppURL,
-		DashboardURL:       dashboardURL,
-		HTTPAddr:           httpAddr,
-		HTML2PDFAPIKey:     getEnv("HTML2PDF_API_KEY", ""),
-		StoragePath:        getEnv("STORAGE_PATH", "./data/analyzpro.db.json"),
-		MonitoringPath:     getEnv("MONITORING_PATH", "./data/monitoring.db.json"),
-		AnalyticsPath:      getEnv("ANALYTICS_PATH", "./data/analytics.jsonl"),
-		DBPath:             getEnv("DB_PATH", "./data/analyzpro.db"),
-		PostHogAPIKey:      os.Getenv("POSTHOG_API_KEY"),
-		LogLevel:           getEnv("LOG_LEVEL", "INFO"),
+		BotToken:         strings.TrimSpace(os.Getenv("BOT_TOKEN")),
+		UploadDir:        getEnv("UPLOAD_DIR", "./uploads"),
+		AppEnv:           getEnv("APP_ENV", "development"),
+		LoadingStickerID: os.Getenv("LOADING_STICKER_ID"),
+		AdminChatID:      adminID,
+		WebAppURL:        webAppURL,
+		DashboardURL:     dashboardURL,
+		HTTPAddr:         httpAddr,
+		HTML2PDFAPIKey:   getEnv("HTML2PDF_API_KEY", ""),
+		StoragePath:      getEnv("STORAGE_PATH", "./data/analyzpro.db.json"),
+		MonitoringPath:   getEnv("MONITORING_PATH", "./data/monitoring.db.json"),
+		AnalyticsPath:    getEnv("ANALYTICS_PATH", "./data/analytics.jsonl"),
+		DBPath:           getEnv("DB_PATH", "./data/analyzpro.db"),
+		PostHogAPIKey:    os.Getenv("POSTHOG_API_KEY"),
+		LogLevel:         getEnv("LOG_LEVEL", "INFO"),
 	}, nil
 }
 

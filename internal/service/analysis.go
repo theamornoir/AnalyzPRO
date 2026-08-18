@@ -6,12 +6,33 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/theamornoir/analyzpro/internal/ai/orchestrator"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/models"
 	"github.com/theamornoir/analyzpro/internal/report"
 	reportmodels "github.com/theamornoir/analyzpro/internal/report/models"
 )
+
+// AIClient - интерфейс AI-клиента. Реализуется единым мультимодальным
+// Claude-клиентом (internal/ai/claude). Выделен как интерфейс, чтобы сервис
+// не зависел от конкретного провайдера и оставался тестируемым.
+type AIClient interface {
+	GenerateAnalysisSummary(ctx context.Context, userInput string) (string, error)
+	GenerateAnalysisJSON(ctx context.Context, userInput string) (string, error)
+	GenerateAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextText string) (string, error)
+	// GenerateAnalysisFromFilesWithContext - анализ НЕСКОЛЬКИХ файлов
+	// (изображения/PDF) одним мультимодальным запросом. Все вложения
+	// передаются в ОДНО сообщение вместе с промптом, как в Bioscan PRO, -
+	// это гарантирует, что ни один файл/показатель не теряется и Claude видит
+	// связь между несколькими анализами сразу.
+	GenerateAnalysisFromFilesWithContext(ctx context.Context, data [][]byte, mimeTypes []string, contextText string) (string, error)
+	// GenerateAnalysisFromFilesJSON - структурированный JSON-анализ НЕСКОЛЬКИХ
+	// файлов одним мультимодальным запросом (показатели для дашборда).
+	GenerateAnalysisFromFilesJSON(ctx context.Context, data [][]byte, mimeTypes []string, contextText string) (string, error)
+	GenerateBioscanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error)
+	GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error)
+	GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error)
+	GenerateDossierJSON(ctx context.Context, userInput string) (string, error)
+}
 
 // AnalysisService - интерфейс сервиса анализа
 type AnalysisService interface {
@@ -36,6 +57,12 @@ type AnalysisService interface {
 	// Методы для работы с JSON
 	HandleAnalysisJSON(ctx context.Context, text string) (string, error)
 	HandleAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error)
+	// HandleAnalysisFromFilesWithContext - обрабатывает НЕСКОЛЬКО файлов
+	// единым мультимодальным запросом (все вложения в одном сообщении).
+	HandleAnalysisFromFilesWithContext(ctx context.Context, data [][]byte, mimeTypes []string, contextInfo string) (string, error)
+	// HandleAnalysisFromFilesJSON - структурированный JSON-анализ нескольких
+	// файлов одним запросом (для блоков дашборда «Мой профиль»).
+	HandleAnalysisFromFilesJSON(ctx context.Context, data [][]byte, mimeTypes []string, contextInfo string) (string, error)
 	// HandleExtendedDossierJSON - строит JSON универсального отчёта-досье
 	// здоровья (анализы пользователя + 20-вопросный опросник) и возвращает
 	// сырой JSON для последующего рендера в HTML (report.Renderer.RenderDossier).
@@ -44,13 +71,13 @@ type AnalysisService interface {
 
 // analysisService - реализация AnalysisService
 type analysisService struct {
-	aiClient *orchestrator.Orchestrator
+	aiClient AIClient
 	renderer *report.Renderer
 }
 
 // NewAnalysisService создает новый AnalysisService
 func NewAnalysisService(
-	aiClient *orchestrator.Orchestrator,
+	aiClient AIClient,
 	renderer *report.Renderer,
 ) AnalysisService {
 	return &analysisService{
@@ -86,6 +113,37 @@ func (s *analysisService) HandleAnalysisFromFileWithContext(
 ) (string, error) {
 	textPrompt := s.formatTextWithContext(locales.MsgDocumentContent, contextInfo)
 	return s.aiClient.GenerateAnalysisFromFileWithContext(ctx, data, mimeType, textPrompt)
+}
+
+// HandleAnalysisFromFilesWithContext - обрабатывает НЕСКОЛЬКО файлов единым
+// мультимодальным запросом. Все вложения уходят в одно сообщение к ИИ
+// (как в Bioscan PRO), что исключает потерю данных между файлами.
+func (s *analysisService) HandleAnalysisFromFilesWithContext(
+	ctx context.Context,
+	data [][]byte,
+	mimeTypes []string,
+	contextInfo string,
+) (string, error) {
+	if len(data) == 0 {
+		return "", fmt.Errorf("no files provided for analysis")
+	}
+	textPrompt := s.formatTextWithContext(locales.MsgDocumentContent, contextInfo)
+	return s.aiClient.GenerateAnalysisFromFilesWithContext(ctx, data, mimeTypes, textPrompt)
+}
+
+// HandleAnalysisFromFilesJSON - структурированный JSON-анализ нескольких
+// файлов одним запросом (показатели для блоков «Мой профиль»).
+func (s *analysisService) HandleAnalysisFromFilesJSON(
+	ctx context.Context,
+	data [][]byte,
+	mimeTypes []string,
+	contextInfo string,
+) (string, error) {
+	if len(data) == 0 {
+		return "", fmt.Errorf("no files provided for analysis")
+	}
+	textPrompt := s.formatTextWithContext(locales.MsgDocumentContent, contextInfo)
+	return s.aiClient.GenerateAnalysisFromFilesJSON(ctx, data, mimeTypes, textPrompt)
 }
 
 // HandleBioscan - обрабатывает фото для Bioscan и возвращает HTML-отчёт

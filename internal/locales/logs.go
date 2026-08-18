@@ -9,7 +9,7 @@ const (
 	LogConfiguration                = "📌 Configuration:"
 	LogAppEnv                       = "   - App Env: %s"
 	LogBotToken                     = "   - Bot Token: %s..."
-	LogGeminiModel                  = "   - Gemini Model: %s"
+	LogClaudeModel                  = "   - Claude Model: %s"
 	LogUploadDir                    = "   - Upload Dir: %s"
 	LogMockMode                     = "   - Mock Mode: %v"
 	LogAdminChatID                  = "   - Admin Chat ID: %d"

@@ -49,9 +49,3 @@ const (
 	LogBioscanStorageSaveFailed    = "[STORAGE] не удалось сохранить диагноз-биоскан chatID=%d: %v"
 	LogBioscanStorageSaved         = "[STORAGE] диагноз сохранён chatID=%d type=bioscan"
 )
-
-// ---------------------------------------------------------------------------
-// User-facing message fragment (internal/bot/handlers/bioscan/bioscan_process.go).
-// Prefix for the comparison note appended after a repeated Bioscan PRO report.
-// ---------------------------------------------------------------------------
-const MsgBioscanComparisonPrefix = "📈 Сравнение с предыдущим Bioscan PRO: "

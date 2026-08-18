@@ -22,8 +22,6 @@ var callbackLabels = map[string]string{
 	"section_diag_extended_demo":     "Открыл Демо: Расширенный анализ",
 	"section_bioscan_basic_demo":     "Открыл Демо: Bioscan",
 	"section_bioscan_extended_demo":  "Открыл Демо: Bioscan PRO",
-	"section_diag_extended_demo2":    "Открыл Демо: повтор. анализ",
-	"section_bioscan_extended_demo2": "Открыл Демо: повтор. Bioscan",
 	"section_health_summary":         "Открыл Мой профиль",
 	"section_health_summary_demo":    "Открыл демо-профиль",
 	"section_health_monitoring":      "Открыл Мониторинг",

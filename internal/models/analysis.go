@@ -25,33 +25,8 @@ type Report struct {
 	Nutrition      []string        `json:"nutrition"`
 	Recovery       []string        `json:"recovery"`
 	Progress       Progress        `json:"progress"`
-
-	// Comparison - блок сравнения с ПРЕДЫДУЩИМ отчётом (для ПОВТОРНЫХ
-	// анализов/биосканов). Заполняется ИИ, если пользователь уже делал
-	// такой отчёт ранее. Рендерится в отчёте как «что стало лучше /
-	// что улучшить» + таблица показателей до→после.
-	Comparison ReportComparison `json:"comparison"`
 }
 
-// ReportComparison - структура сравнительного блока для повторного отчёта.
-// Все поля опциональны: если отчёт первый - блок пустой и не рендерится.
-type ReportComparison struct {
-	Summary   string             `json:"summary"`    // общая динамика между отчётами
-	Improved  []string           `json:"improved"`   // что улучшилось
-	Unchanged []string           `json:"unchanged"`  // что осталось без изменений
-	Worsened  []string           `json:"worsened"`   // что ухудшилось / требует внимания
-	ToImprove []string           `json:"to_improve"` // конкретные рекомендации, что подтянуть
-	Metrics   []ComparisonMetric `json:"metrics"`    // per-метрика: до → после
-}
-
-// ComparisonMetric - одна строка таблицы сравнения (показатель до→после).
-type ComparisonMetric struct {
-	Name   string `json:"name"`   // название показателя
-	Before string `json:"before"` // значение в предыдущем отчёте
-	After  string `json:"after"`  // значение в текущем отчёте
-	Change string `json:"change"` // краткая дельта, напр. "+7" / "→"
-	Trend  string `json:"trend"`  // up | down | same
-}
 
 type Profile struct {
 	Name              string `json:"name"`
@@ -190,11 +165,6 @@ type BodyScanReport struct {
 	TrainingProgram []BodyScanTrainingPhase `json:"training_program"`
 
 	Recommendations []BodyScanRecommendation `json:"recommendations"`
-
-	// Comparison - блок сравнения с ПРЕДЫДУЩИМ Bioscan PRO (для повторного).
-	// Заполняется ИИ при повторном биоскане; рендерится как «что стало
-	// лучше / что улучшить» + таблица показателей до→после.
-	Comparison ReportComparison `json:"comparison"`
 
 	Disclaimer string `json:"disclaimer"`
 }

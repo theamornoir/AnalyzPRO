@@ -52,15 +52,7 @@ func handleTextUpload(
 	if isExtended {
 		log.Printf(locales.LogUploadExtendedTextAnalysis)
 
-		// Сравнительный контекст: если ранее уже делали расширенный анализ -
-		// подставляем предыдущий отчёт, чтобы ИИ построил СРАВНИТЕЛЬНЫЙ
-		// отчёт (динамика: что улучшилось / что улучшить), а не «с нуля».
-		analysisPayload := payload
-		if prevJSON, ok := monitoring.PreviousReportJSON(ctx, saver, chatID, "analysis"); ok {
-			analysisPayload = locales.ComparisonContext(prevJSON, "analysis") + "\n\n" + payload
-		}
-
-		jsonResult, err := analysisService.HandleAnalysisJSON(ctx, analysisPayload)
+		jsonResult, err := analysisService.HandleAnalysisJSON(ctx, payload)
 		if err == nil && jsonResult != "" {
 			renderAndSendReport(ctx, b, stateManager, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, jsonResult, appStorage, saver, webAppURL)
 			return

@@ -17,11 +17,7 @@ type HealthDossier struct {
 	Synthesis  string            `json:"synthesis"`
 	Priorities []DossierPriority `json:"priorities"`
 	References []Reference       `json:"references"`
-	// Comparison - блок сравнения с ПРЕДЫДУЩИМ досье (для повторного
-	// расширенного анализа). Заполняется ИИ; рендерится как «что стало
-	// лучше / что улучшить» + таблица показателей до→после.
-	Comparison ReportComparison `json:"comparison"`
-	Disclaimer string           `json:"disclaimer"`
+	Disclaimer string            `json:"disclaimer"`
 }
 
 // DossierPatient - идентификационные данные из опросника.

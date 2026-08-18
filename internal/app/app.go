@@ -10,8 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/theamornoir/analyzpro/internal/ai/httpclient"
-	"github.com/theamornoir/analyzpro/internal/ai/orchestrator"
+	"github.com/theamornoir/analyzpro/internal/ai/claude"
 	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/bot"
 	"github.com/theamornoir/analyzpro/internal/bot/reminders"
@@ -40,11 +39,6 @@ func New() (*App, error) {
 		return nil, err
 	}
 
-	// Настраиваем AI-HTTP-клиент с учётом прокси (GEMINI_PROXY / системный
-	// HTTP_PROXY/HTTPS_PROXY). Должно идти сразу после config.Load(), чтобы
-	// прокси подхватился ДО первых AI-вызовов (гео-блок Gemini во Франции и т.п.).
-	httpclient.Configure(cfg.GeminiProxy)
-
 	// Проверяем, нужно ли использовать моки
 	// Моки используются если:
 	// 1. APP_ENV=development и API ключ пустой или содержит "mock"
@@ -68,8 +62,8 @@ func New() (*App, error) {
 
 	stateManager := states.NewMemoryStateManager("./data/states.json")
 
-	// AI оркестратор (Gemini → DeepSeek → Claude)
-	aiOrchestrator := orchestrator.NewOrchestrator()
+	// Единый мультимодальный Claude-клиент (все файлы в одном запросе).
+	aiClient := claude.NewClient()
 
 	// HTML Renderer для отчётов
 	renderer, err := report.NewRenderer()
@@ -79,7 +73,7 @@ func New() (*App, error) {
 
 	// Сервис анализа
 	analysisService := service.NewAnalysisService(
-		aiOrchestrator,
+		aiClient,
 		renderer,
 	)
 
@@ -146,7 +140,7 @@ func New() (*App, error) {
 	log.Printf(locales.LogAppInitialized)
 	log.Printf(locales.LogConfiguration)
 	log.Printf(locales.LogAppEnv, cfg.AppEnv)
-	log.Printf(locales.LogGeminiModel, cfg.GoogleAIModel)
+	log.Printf(locales.LogClaudeModel, claude.Model)
 	log.Printf(locales.LogUploadDir, cfg.UploadDir)
 	log.Printf(locales.LogMockMode, useMock)
 	log.Printf(locales.LogAdminChatID, cfg.AdminChatID)

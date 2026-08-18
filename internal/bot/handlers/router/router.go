@@ -400,12 +400,6 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	case "section_bioscan_extended_demo":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan_extended_demo")
 		r.handleBioscanExtendedDemo(ctx, b, chatID)
-	case "section_diag_extended_demo2":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_extended_demo2")
-		r.handleExtendedAnalysisRepeatDemo(ctx, b, chatID)
-	case "section_bioscan_extended_demo2":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan_extended_demo2")
-		r.handleBioscanExtendedRepeatDemo(ctx, b, chatID)
 	case "section_health_summary":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_summary")
 		r.handleDashboard(ctx, b, chatID, false)

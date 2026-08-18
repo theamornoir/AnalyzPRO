@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	tgbot "github.com/go-telegram/bot"
@@ -107,22 +106,12 @@ func ProcessBioscanWithPhotos(
 
 	// Расширенный (Premium) Bioscan PRO -> подробный HTML-отчёт Body Intelligence.
 	// htmlReport - для отправки пользователю, jsonReport - «чистый» JSON
-	// отчёта (сохраняется в историю для графиков дашборда «Мой профиль»
-	// и используется при сравнительном повторном анализе).
-	//
-	// Сравнительный контекст: если ранее уже делали Bioscan PRO - подставляем
-	// предыдущий отчёт, чтобы ИИ построил СРАВНИТЕЛЬНЫЙ отчёт (динамика:
-	// что улучшилось / что улучшить), а не «с нуля».
-	bioscanContext := contextInfo
-	if prevJSON, ok := monitoring.PreviousReportJSON(ctx, saver, chatID, "bioscan"); ok {
-		bioscanContext = contextInfo + locales.ComparisonContext(prevJSON, "bioscan")
-	}
-
+	// отчёта (сохраняется в историю для графиков дашборда «Мой профиль»).
 	htmlReport, jsonReport, err := analysisService.HandleBioscanPro(
 		ctx,
 		photosData,
 		"image/jpeg",
-		bioscanContext,
+		contextInfo,
 	)
 	if err != nil {
 		helpers.DeleteMessage(ctx, b, chatID, loadingMsg.ID)
@@ -222,29 +211,9 @@ func ProcessBioscanWithPhotos(
 		ParseMode:   "Markdown",
 	})
 
-	// Прогресс + сравнение с предыдущим отчётом (если это повторный Bioscan PRO).
-	// Отдельным сообщением без parse-mode, чтобы summary из отчёта ИИ (где
-	// могут быть спецсимволы) не сломал Markdown предыдущего сообщения.
-	if note := bioscanReportNote(jsonReport); note != "" {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        note,
-			ReplyMarkup: keyboards.MainMenu(),
-		})
-	}
-
 	// Сообщаем, что результат сохранён в «Мой профиль», и даём
 	// кнопку для мгновенного открытия (все типы биосканов хранятся там).
 	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
 }
 
-// bioscanReportNote собирает текст доп. блока для выдачи Bioscan PRO:
-// напоминание о сравнении повторных отчётов + краткое сравнение (summary),
-// если ИИ сформировал сравнительный отчёт. jsonReport - JSON отчёта.
-func bioscanReportNote(jsonReport string) string {
-	parts := []string{locales.MsgReportProgressNote}
-	if s := monitoring.ParseComparisonSummary(jsonReport); s != "" {
-		parts = append(parts, "📈 Сравнение с предыдущим Bioscan PRO: "+s)
-	}
-	return strings.Join(parts, "\n\n")
-}
+

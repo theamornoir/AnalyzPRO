@@ -144,7 +144,7 @@ func renderAndSendReport(
 		ParseMode: "HTML",
 	})
 
-	sendAnalysisCompleteNote(ctx, b, stateManager, chatID, buildReportNote(jsonResult))
+	sendAnalysisComplete(ctx, b, stateManager, chatID)
 
 	// Сообщаем, что результат сохранён в «Мой профиль», и даём
 	// кнопку для мгновенного открытия (все типы анализов хранятся там).
@@ -282,7 +282,7 @@ func renderAndSendDossier(
 		ParseMode: "HTML",
 	})
 
-	sendAnalysisCompleteNote(ctx, b, stateManager, chatID, buildReportNote(jsonResult))
+	sendAnalysisComplete(ctx, b, stateManager, chatID)
 
 	// Сообщаем, что результат сохранён в «Мой профиль», и даём
 	// кнопку для мгновенного открытия (все типы анализов хранятся там).

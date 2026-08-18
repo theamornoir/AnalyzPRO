@@ -296,7 +296,6 @@ func stripRichReports(g ReportsGroup) ReportsGroup {
 		b.Scores = nil
 		b.Zones = nil
 		b.Indicators = nil
-		b.Comparison = ComparisonView{}
 		b.MainScore = 0
 		return b
 	}
@@ -304,7 +303,6 @@ func stripRichReports(g ReportsGroup) ReportsGroup {
 		g.Reports[i] = clear(g.Reports[i])
 	}
 	g.Latest = clear(g.Latest)
-	g.Previous = clear(g.Previous)
 	return g
 }
 
@@ -654,18 +652,6 @@ func (h *Handler) buildDemoReports() ReportsResponse {
 			{Name: "Холестерин", Value: "5.1 ммоль/л", Status: "warning", Normal: "0-5.0 ммоль/л", Num: 5.1, RefMin: 0, RefMax: 5.0},
 		},
 		Summary: "Показатели улучшились по сравнению с предыдущим анализом.",
-		Comparison: ComparisonView{
-			Summary:   "Общая динамика положительная: гемоглобин и глюкоза вернулись в норму.",
-			Improved:  []string{"Гемоглобин 145→152", "Глюкоза 6.8→5.2"},
-			Unchanged: []string{"Холестерин остаётся повышенным"},
-			Worsened:  []string{},
-			ToImprove: []string{"Снизить холестерин: меньше насыщенных жиров, кардионагрузки"},
-			Metrics: []ComparisonMetricView{
-				{Name: "Гемоглобин", Before: "145 г/л", After: "152 г/л", Change: "+7", Trend: "up"},
-				{Name: "Глюкоза", Before: "6.8", After: "5.2", Change: "-1.6", Trend: "up"},
-				{Name: "Холестерин", Before: "5.9", After: "5.1", Change: "-0.8", Trend: "up"},
-			},
-		},
 	}
 	prevA := ReportBlock{
 		ID:         2,
@@ -700,18 +686,6 @@ func (h *Handler) buildDemoReports() ReportsResponse {
 			{Name: "Ноги", Score: 80, Status: "good", Comment: "Крепкие квадрицепсы."},
 		},
 		Summary: "Телосложение укрепилось, осанка выровнена.",
-		Comparison: ComparisonView{
-			Summary:   "Body Score вырос на 4 пункта за 8 недель тренировок.",
-			Improved:  []string{"Пресс 64→74", "Осанка 80→84"},
-			Unchanged: []string{"Плечи стабильно сильные"},
-			Worsened:  []string{},
-			ToImprove: []string{"Подтянуть мобильность таза и нижний пресс"},
-			Metrics: []ComparisonMetricView{
-				{Name: "Body Score", Before: "82", After: "86", Change: "+4", Trend: "up"},
-				{Name: "Осанка", Before: "80", After: "84", Change: "+4", Trend: "up"},
-				{Name: "Пресс", Before: "64", After: "74", Change: "+10", Trend: "up"},
-			},
-		},
 	}
 	prevB := ReportBlock{
 		ID:         11,
@@ -735,20 +709,14 @@ func (h *Handler) buildDemoReports() ReportsResponse {
 	return ReportsResponse{
 		PremiumRequired: false,
 		Analysis: ReportsGroup{
-			Count:         3,
-			HasComparison: true,
-			Delta:         7,
-			Reports:       []ReportBlock{latestA, prevA, olderA},
-			Latest:        latestA,
-			Previous:      prevA,
+			Count:   3,
+			Reports: []ReportBlock{latestA, prevA, olderA},
+			Latest:  latestA,
 		},
 		Bioscan: ReportsGroup{
-			Count:         3,
-			HasComparison: true,
-			Delta:         4,
-			Reports:       []ReportBlock{latestB, prevB, olderB},
-			Latest:        latestB,
-			Previous:      prevB,
+			Count:   3,
+			Reports: []ReportBlock{latestB, prevB, olderB},
+			Latest:  latestB,
 		},
 	}
 }

@@ -123,48 +123,6 @@ func extractIndicatorGroups(indicatorsJSON string) map[string]interface{} {
 	return out
 }
 
-// mergeIndicatorGroups объединяет несколько структурированных JSON-отчётов
-// (по одному на файл) в один общий объект с массивами sections/categories.
-func mergeIndicatorGroups(parts []string) string {
-	sections := []json.RawMessage{}
-	categories := []json.RawMessage{}
-	for _, p := range parts {
-		if strings.TrimSpace(p) == "" {
-			continue
-		}
-		var doc struct {
-			Sections   json.RawMessage `json:"sections"`
-			Categories json.RawMessage `json:"categories"`
-		}
-		if err := json.Unmarshal([]byte(p), &doc); err != nil {
-			continue
-		}
-		if len(doc.Sections) > 0 {
-			var arr []json.RawMessage
-			if json.Unmarshal(doc.Sections, &arr) == nil {
-				sections = append(sections, arr...)
-			}
-		}
-		if len(doc.Categories) > 0 {
-			var arr []json.RawMessage
-			if json.Unmarshal(doc.Categories, &arr) == nil {
-				categories = append(categories, arr...)
-			}
-		}
-	}
-	if len(sections) == 0 && len(categories) == 0 {
-		return ""
-	}
-	merged, err := json.Marshal(map[string]interface{}{
-		"sections":   sections,
-		"categories": categories,
-	})
-	if err != nil {
-		return ""
-	}
-	return string(merged)
-}
-
 // processSingleFile - обрабатывает один файл.
 func processSingleFile(
 	ctx context.Context,
@@ -202,11 +160,6 @@ func processSingleFile(
 			return
 		}
 		combined := fileText + "\n\nДанные пациента и опросника об образе жизни:\n" + contextInfo
-		// Сравнительный контекст: если ранее уже делали расширенный анализ -
-		// подставляем предыдущий отчёт для СРАВНИТЕЛЬНОГО досье.
-		if prevJSON, ok := monitoring.PreviousReportJSON(ctx, saver, chatID, "analysis"); ok {
-			combined += locales.ComparisonContext(prevJSON, "analysis")
-		}
 		dossierJSON, derr := analysisService.HandleExtendedDossierJSON(ctx, combined)
 		if derr != nil || dossierJSON == "" {
 			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
@@ -260,7 +213,10 @@ func processSingleFile(
 	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
 }
 
-// processMultipleFiles - обрабатывает несколько файлов.
+// processMultipleFiles - обрабатывает несколько файлов ЕДИНЫМ мультимодальным
+// запросом. Все вложения (фото/PDF) передаются в Claude в ОДНО сообщение
+// вместе с промптом (как в Bioscan PRO) - это исключает потерю данных между
+// файлами и позволяет ИИ видеть связь между несколькими анализами сразу.
 func processMultipleFiles(
 	ctx context.Context,
 	b *tgbot.Bot,
@@ -278,50 +234,39 @@ func processMultipleFiles(
 	saver monitoring.Repository,
 	webAppURL string,
 ) {
-	var collectedTexts []string
-	collectedIndicators := []string{}
-
-	for i, file := range files {
+	// Собираем байты и MIME-типы всех файлов для единого запроса.
+	var filesData [][]byte
+	var mimeTypes []string
+	for _, file := range files {
 		fileData, err := file.readData()
 		if err != nil {
 			continue
 		}
-
-		res, err := analysisService.HandleAnalysisFromFileWithContext(
-			ctx,
-			fileData,
-			file.MimeType,
-			contextInfo,
-		)
-		if err == nil && res != "" {
-			collectedTexts = append(collectedTexts, fmt.Sprintf("=== Данные из файла %d (%s) ===\n%s", i+1, file.FileName, res))
-		}
-		// Параллельно собираем структурированные показатели для дашборда.
-		if ind, ierr := analysisService.HandleAnalysisFromFileJSON(ctx, fileData, file.MimeType, contextInfo); ierr == nil && ind != "" {
-			collectedIndicators = append(collectedIndicators, ind)
-		}
+		filesData = append(filesData, fileData)
+		mimeTypes = append(mimeTypes, file.MimeType)
 	}
 
-	if len(collectedTexts) == 0 {
+	if len(filesData) == 0 {
 		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
 		return
 	}
 
-	combinedPayload := strings.Join(collectedTexts, "\n\n")
+	// Один мультифайловый запрос на текстовый анализ всех вложений сразу.
+	analysisText, err := analysisService.HandleAnalysisFromFilesWithContext(
+		ctx,
+		filesData,
+		mimeTypes,
+		contextInfo,
+	)
+	if err != nil || strings.TrimSpace(analysisText) == "" {
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+		return
+	}
 
 	if isExtended {
 		// Расширенный анализ (несколько файлов) -> универсальное отчёт-досье.
-		combined := strings.Join(collectedTexts, "\n\n")
-		if combined == "" {
-			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
-			return
-		}
-		combined += "\n\nДанные пациента и опросника об образе жизни:\n" + contextInfo
-		// Сравнительный контекст: если ранее уже делали расширенный анализ -
-		// подставляем предыдущий отчёт для СРАВНИТЕЛЬНОГО досье.
-		if prevJSON, ok := monitoring.PreviousReportJSON(ctx, saver, chatID, "analysis"); ok {
-			combined += locales.ComparisonContext(prevJSON, "analysis")
-		}
+		// analysisText уже учитывает ВСЕ файлы совместно (один запрос).
+		combined := analysisText + "\n\nДанные пациента и опросника об образе жизни:\n" + contextInfo
 		dossierJSON, derr := analysisService.HandleExtendedDossierJSON(ctx, combined)
 		if derr != nil || dossierJSON == "" {
 			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
@@ -333,15 +278,15 @@ func processMultipleFiles(
 
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
-	finalResult := fmt.Sprintf(locales.MsgUploadResultFiles, len(files), combinedPayload)
+	finalResult := fmt.Sprintf(locales.MsgUploadResultFiles, len(files), analysisText)
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID: chatID,
 		Text:   finalResult,
 	})
 
-	// Структурированные показатели (объединяем по всем файлам) для блоков
-	// «Мой профиль».
-	indicatorsJSON := mergeIndicatorGroups(collectedIndicators)
+	// Один мультифайловый запрос на структурированные показатели (sections/
+	// categories) всех файлов сразу - для блоков «Мой профиль».
+	indicatorsJSON, _ := analysisService.HandleAnalysisFromFilesJSON(ctx, filesData, mimeTypes, contextInfo)
 
 	// Сохраняем ОБЫЧНЫЙ анализ (несколько файлов) в «Мой профиль».
 	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, finalResult, indicatorsJSON)
@@ -384,9 +329,8 @@ func sendAnalysisComplete(ctx context.Context, b *tgbot.Bot, stateManager states
 }
 
 // sendAnalysisCompleteNote - как sendAnalysisComplete, но дописывает блок
-// дополнительной информации (extra). Используется для расширенного анализа/
-// досье: в extra передаём запроса на сравнение с предыдущим отчётом и
-// напоминание, что динамику видно в «Мой профиль».
+// дополнительной информации (extra). Используется, чтобы напомнить
+// пользователю, что результат сохранён в «Мой профиль».
 func sendAnalysisCompleteNote(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64, extra string) {
 	stateManager.Reset(chatID)
 	text := locales.MsgAnalysisComplete
@@ -399,15 +343,4 @@ func sendAnalysisCompleteNote(ctx context.Context, b *tgbot.Bot, stateManager st
 		ReplyMarkup: keyboards.MainMenu(),
 		ParseMode:   "HTML",
 	})
-}
-
-// buildReportNote собирает текст доп. блока для выдачи расширенного отчёта:
-// напоминание о сравнении повторных отчётов + краткое сравнение (summary),
-// если ИИ сформировал сравнительный отчёт. jsonResult - JSON отчёта.
-func buildReportNote(jsonResult string) string {
-	parts := []string{locales.MsgReportProgressNote}
-	if s := monitoring.ParseComparisonSummary(jsonResult); s != "" {
-		parts = append(parts, "📈 Сравнение с предыдущим отчётом: "+s)
-	}
-	return strings.Join(parts, "\n\n")
 }

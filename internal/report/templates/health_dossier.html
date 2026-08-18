@@ -438,67 +438,6 @@
     {{else}}
     <div class="callout" style="margin-top:4px;">Интегральная оценка построена на ответах опросника и присланных анализах. Потенциал улучшения - {{.Scores.Potential}}/100.</div>
     {{end}}
-
-    {{/* Блок сравнения с предыдущим отчётом (для ПОВТОРНОГО анализа) */}}
-    {{with .Comparison}}
-    <section class="page">
-        {{$p = add $p 1}}
-        <div class="page-header"><span class="brand">Сравнение с предыдущим отчётом</span><span class="page-num">{{printf "%02d" $p}}</span></div>
-        <div class="eyebrow">Динамика прогресса</div>
-        <h2>Что изменилось с прошлого раза</h2>
-        <p class="lead">Это повторный отчёт. Ниже - сравнение с вашим предыдущим замером: что улучшилось, что осталось без изменений и на чём стоит сосредоточиться.</p>
-
-        {{if .Summary}}<div class="callout">{{.Summary}}</div>{{end}}
-
-        {{if .Metrics}}
-        <div class="card" style="margin-top:4px;">
-            <div class="metric-name" style="margin-bottom:3px;">Показатели до → после</div>
-            <table style="width:100%;border-collapse:collapse;font-size:6.8pt;">
-                <tr style="text-align:left;color:var(--text-secondary);border-bottom:1px solid var(--border);">
-                    <th style="padding:2px 4px;">Показатель</th>
-                    <th style="padding:2px 4px;">Было</th>
-                    <th style="padding:2px 4px;">Стало</th>
-                    <th style="padding:2px 4px;">Динамика</th>
-                </tr>
-                {{range .Metrics}}
-                <tr style="border-top:1px solid var(--border);">
-                    <td style="padding:2px 4px;font-weight:600;color:var(--navy);">{{.Name}}</td>
-                    <td style="padding:2px 4px;">{{.Before}}</td>
-                    <td style="padding:2px 4px;">{{.After}}</td>
-                    <td style="padding:2px 4px;font-weight:700;color:{{if eq .Trend "up"}}#1f7a5f{{else if eq .Trend "down"}}#b5603f{{else}}var(--text-secondary){{end}};">{{.Change}}</td>
-                </tr>
-                {{end}}
-            </table>
-        </div>
-        {{end}}
-
-        {{if .Improved}}
-        <div class="card card-soft" style="margin-top:3px;">
-            <div class="metric-name" style="color:#1f7a5f;">✓ Улучшилось</div>
-            {{range .Improved}}<div style="font-size:6.6pt;color:#3d5d59;line-height:1.5;">• {{.}}</div>{{end}}
-        </div>
-        {{end}}
-        {{if .Worsened}}
-        <div class="card card-danger" style="margin-top:3px;">
-            <div class="metric-name" style="color:#b14a4a;">▲ Требует внимания</div>
-            {{range .Worsened}}<div style="font-size:6.6pt;color:#3d5d59;line-height:1.5;">• {{.}}</div>{{end}}
-        </div>
-        {{end}}
-        {{if .Unchanged}}
-        <div class="card" style="margin-top:3px;">
-            <div class="metric-name">- Без изменений</div>
-            {{range .Unchanged}}<div style="font-size:6.6pt;color:#3d5d59;line-height:1.5;">• {{.}}</div>{{end}}
-        </div>
-        {{end}}
-        {{if .ToImprove}}
-        <div class="card card-warning" style="margin-top:3px;">
-            <div class="metric-name" style="color:#7a5a1f;">➜ Что улучшить</div>
-            {{range .ToImprove}}<div style="font-size:6.6pt;color:#3d5d59;line-height:1.5;">• {{.}}</div>{{end}}
-        </div>
-        {{end}}
-    </section>
-    {{end}}
-
     <div class="page-footer"><span>Prisma · общая картина</span><span>{{printf "%02d" $p}}</span></div>
 </section>
 
