@@ -72,6 +72,14 @@
 ## Деплой / прод
 - Прод: свой домен HTTPS + `WEBAPP_URL=https://<домен>/dashboard`; есть `analyzpro.service` (systemd, flock `/tmp/analyzpro.lock`).
 
+## Промокоды на Premium (команда /promo, добавлено 2026-08-20)
+- Одноразовая активация Premium на 365 дней. Список кодов - в env `PROMO_CODES` (через запятую), парсится в `config.PromoCodes []string` (`parseCSV`).
+- Команда `/promo <code>` зарегистрирована в `bot.go` (MatchTypePrefix) -> `Bot.handlePromo`. Логика: нормализация регистра -> проверка кода в `cfg.PromoCodes` -> `Users.IsPromoCodeUsed` (один раз на аккаунт) -> `paymentService.ActivatePremiumManually(chatID, "premium_yearly")` (источник истины Premium) + синхронизация `Users.UpdateUserPremiumStatus` (is_premium=1, expires=+1 год) + `Users.MarkPromoCodeUsed`.
+- Сообщения: `locales.MsgPromoActivated` / `MsgPromoAlreadyUsed` / `MsgPromoInvalid` / `MsgPromoUsage` (нет длинного тире).
+- Хранилище использованных кодов: таблица `used_promocodes (user_id, code, used_at, UNIQUE(user_id,code))` в `db.go` Migrate; методы `IsPromoCodeUsed`/`MarkPromoCodeUsed` добавлены в интерфейс `UserRepository` и реализованы во всех трёх бэкендах (sqlrepo/mock/file). Тест: `sqlrepo_smoke_test.go` `TestPromoCodes`.
+- ⚠️ Коды лежат ТОЛЬКО в `.env` (PROMO_CODES) - это env/секреты, править напрямую запрещено; при деплое добавлять строку туда вручную.
+
+
 ## Бот: ошибки обработки / UX
 - `sendAnalysisError` (пакет `upload`) — при провале анализа удаляет loading, `stateManager.Reset`, шлёт `MsgTextProcessingError` + `MainMenu()`.
 - Хаб разделов — ДВА сообщения: «якорь» (описание + reply `[Назад]`) и «блок» (inline-кнопки + «👇 Выберите действие:», без «Назад»).

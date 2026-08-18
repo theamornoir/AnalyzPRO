@@ -132,6 +132,8 @@ func New() (*App, error) {
 		cfg.WebAppURL,
 		cfg.DashboardURL,
 		cfg.HTTPAddr,
+		cfg.AppEnv,
+		cfg.PromoCodes,
 	)
 	if err != nil {
 		return nil, err

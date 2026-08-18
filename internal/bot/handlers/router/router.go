@@ -363,6 +363,25 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		return
 	}
 
+	// «← Назад» из раздела-хаба (inline-кнопка блока меню хаба): удаляем
+	// само сообщение и возвращаем пользователя в Главное меню.
+	if callbackData == "back_to_main" {
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "back_to_main")
+		if mm := update.CallbackQuery.Message; mm.Message != nil {
+			helpers.DeleteMessage(ctx, b, chatID, mm.Message.ID)
+		}
+		r.stateManager.SetState(chatID, states.StateIdle)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgBackToMainMenu,
+			ReplyMarkup: keyboards.MainMenu(),
+		})
+		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
+		return
+	}
+
 	// Под-действия из карточек разделов-хабов («Анализы», «Здоровье»,
 	// «Сервис»). Диспетчеризуем на существующие обработчики; сам
 	// callback-запрос отвечается в конце функции (спиннер кнопки).

@@ -33,6 +33,9 @@ type Config struct {
 	// PostHogAPIKey - Project API Key сервиса аналитики PostHog. Если пуст -
 	// события не отправляются (клиент posthog-go становится no-op).
 	PostHogAPIKey string
+	// PromoCodes - список одноразовых промокодов на активацию Premium.
+	// Читается из PROMO_CODES (через запятую). Пусто - промокоды отключены.
+	PromoCodes []string
 	// LogLevel - уровень логирования (DEBUG/INFO/WARN/ERROR). Читается из
 	// LOG_LEVEL; по умолчанию INFO. Применяется централизованно в logging.
 	LogLevel string
@@ -85,7 +88,25 @@ func Load() (*Config, error) {
 		DBPath:           getEnv("DB_PATH", "./data/analyzpro.db"),
 		PostHogAPIKey:    os.Getenv("POSTHOG_API_KEY"),
 		LogLevel:         getEnv("LOG_LEVEL", "INFO"),
+		PromoCodes:       parseCSV(os.Getenv("PROMO_CODES")),
 	}, nil
+}
+
+// parseCSV разбивает строку по запятым в срез, отбрасывая пустые
+// элементы и окружающие пробелы. Пустая строка -> nil (промокоды выключены).
+func parseCSV(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // defaultWebAppURL строит URL дашборда из адреса HTTP-сервера.

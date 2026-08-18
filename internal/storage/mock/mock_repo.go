@@ -11,16 +11,18 @@ import (
 
 // MockUserRepository - мок-реализация UserRepository.
 type MockUserRepository struct {
-	mu     sync.RWMutex
-	users  map[int64]*sm.User // key: TelegramID
-	nextID uint
+	mu        sync.RWMutex
+	users     map[int64]*sm.User // key: TelegramID
+	usedPromo map[int64]map[string]bool
+	nextID    uint
 }
 
 // NewMockUserRepository создаёт новый мок-репозиторий пользователей.
 func NewMockUserRepository() *MockUserRepository {
 	return &MockUserRepository{
-		users:  make(map[int64]*sm.User),
-		nextID: 1,
+		users:     make(map[int64]*sm.User),
+		usedPromo: make(map[int64]map[string]bool),
+		nextID:    1,
 	}
 }
 
@@ -96,6 +98,27 @@ func (m *MockUserRepository) UpdateUserLastActivity(ctx context.Context, userID 
 		}
 	}
 	return fmt.Errorf("user with ID %d not found", userID)
+}
+
+// IsPromoCodeUsed - проверяет, активировал ли пользователь промокод.
+func (m *MockUserRepository) IsPromoCodeUsed(ctx context.Context, userID int64, code string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if codes, ok := m.usedPromo[userID]; ok {
+		return codes[code]
+	}
+	return false
+}
+
+// MarkPromoCodeUsed - помечает промокод использованным (идемпотентно).
+func (m *MockUserRepository) MarkPromoCodeUsed(ctx context.Context, userID int64, code string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.usedPromo[userID] == nil {
+		m.usedPromo[userID] = make(map[string]bool)
+	}
+	m.usedPromo[userID][code] = true
+	return nil
 }
 
 // MockDiagnosisRepository - мок-реализация DiagnosisRepository.

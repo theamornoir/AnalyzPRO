@@ -29,13 +29,14 @@ type Store struct {
 }
 
 type fileData struct {
-	Users       map[int64]*sm.User      `json:"users"` // key: telegram_id
-	Diagnoses   []sm.Diagnosis          `json:"diagnoses"`
-	Cycles      []sm.Cycle              `json:"cycles"`
-	Preferences map[uint]*sm.Preference `json:"preferences"` // key: user_id
-	NextUserID  uint                    `json:"next_user_id"`
-	NextDiagID  uint                    `json:"next_diag_id"`
-	NextCycleID uint                    `json:"next_cycle_id"`
+	Users       map[int64]*sm.User        `json:"users"` // key: telegram_id
+	Diagnoses   []sm.Diagnosis            `json:"diagnoses"`
+	Cycles      []sm.Cycle                `json:"cycles"`
+	Preferences map[uint]*sm.Preference   `json:"preferences"`     // key: user_id
+	UsedPromo   map[int64]map[string]bool `json:"used_promocodes"` // key: user_id -> code -> true
+	NextUserID  uint                      `json:"next_user_id"`
+	NextDiagID  uint                      `json:"next_diag_id"`
+	NextCycleID uint                      `json:"next_cycle_id"`
 }
 
 // New открывает (или создаёт) JSON-файл хранилища и загружает данные.
@@ -194,6 +195,36 @@ func (s *Store) UpdateUserLastActivity(ctx context.Context, userID uint, t time.
 		}
 	}
 	return fmt.Errorf("user with ID %d not found", userID)
+}
+
+// IsPromoCodeUsed - проверяет, активировал ли пользователь промокод.
+func (s *Store) IsPromoCodeUsed(ctx context.Context, userID int64, code string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.data.UsedPromo == nil {
+		return false
+	}
+	if codes, ok := s.data.UsedPromo[userID]; ok {
+		return codes[code]
+	}
+	return false
+}
+
+// MarkPromoCodeUsed - помечает промокод использованным (идемпотентно).
+func (s *Store) MarkPromoCodeUsed(ctx context.Context, userID int64, code string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.data.UsedPromo == nil {
+		s.data.UsedPromo = make(map[int64]map[string]bool)
+	}
+	if s.data.UsedPromo[userID] == nil {
+		s.data.UsedPromo[userID] = make(map[string]bool)
+	}
+	s.data.UsedPromo[userID][code] = true
+	s.save()
+	return nil
 }
 
 // ---------------------------------------------------------------

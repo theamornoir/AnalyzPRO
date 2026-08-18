@@ -133,3 +133,44 @@ func TestCycleAndPreferences(t *testing.T) {
 		t.Errorf("prefs mismatch: %+v", p)
 	}
 }
+
+func TestPromoCodes(t *testing.T) {
+	ctx := context.Background()
+	r := newTestStorage(t)
+
+	const (
+		userA int64 = 123
+		userB int64 = 456
+		code        = "PRISMA2026"
+	)
+
+	// Изначально код не отмечен как использованный.
+	if r.IsPromoCodeUsed(ctx, userA, code) {
+		t.Fatal("код не должен быть использован до активации")
+	}
+
+	// Два разных пользователя могут активировать один и тот же код.
+	if err := r.MarkPromoCodeUsed(ctx, userA, code); err != nil {
+		t.Fatalf("mark used A: %v", err)
+	}
+	if err := r.MarkPromoCodeUsed(ctx, userB, code); err != nil {
+		t.Fatalf("mark used B: %v", err)
+	}
+	if !r.IsPromoCodeUsed(ctx, userA, code) {
+		t.Error("userA: код должен быть отмечен использованным")
+	}
+	if !r.IsPromoCodeUsed(ctx, userB, code) {
+		t.Error("userB: код должен быть отмечен использованным")
+	}
+
+	// Повторная отметка для того же пользователя не должна падать (UNIQUE +
+	// ON CONFLICT DO NOTHING).
+	if err := r.MarkPromoCodeUsed(ctx, userA, code); err != nil {
+		t.Fatalf("повторная mark used A: %v", err)
+	}
+
+	// Другой код для этого пользователя остаётся свободным.
+	if r.IsPromoCodeUsed(ctx, userA, "OTHERCODE") {
+		t.Error("другой код не должен считаться использованным")
+	}
+}

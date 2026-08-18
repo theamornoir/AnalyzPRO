@@ -10,18 +10,11 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// StartBioscanFlow - начало опроса для Bioscan.
+// StartBioscanFlow - начало опроса для Bioscan (используется кнопкой
+// «Начать заново» на экране подтверждения Bioscan PRO).
+// Проверка принятия соглашения выполняется вызывающим
+// (router через agreementStorage.IsAgreed), поэтому здесь она не дублируется.
 func StartBioscanFlow(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64) {
-	// Проверяем соглашение
-	if stateManager.GetUserData(chatID, "agreement_accepted") != "yes" {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgBioscanAgreementRequired,
-			ReplyMarkup: keyboards.StartMenu(),
-		})
-		return
-	}
-
 	// Сбрасываем предыдущие данные Bioscan
 	ResetBioscanData(stateManager, chatID)
 

@@ -133,6 +133,14 @@ func Migrate(conn *sql.DB) error {
 			entry_id INTEGER NOT NULL,
 			PRIMARY KEY (project_id, entry_id)
 		)`,
+		`CREATE TABLE IF NOT EXISTS used_promocodes (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			code TEXT NOT NULL,
+			used_at DATETIME NOT NULL,
+			UNIQUE(user_id, code)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_used_promocodes_user ON used_promocodes(user_id)`,
 	}
 
 	for _, stmt := range schema {

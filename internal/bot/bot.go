@@ -43,6 +43,12 @@ type Bot struct {
 	botToken         string
 	monitorRepo      monitoring.Repository
 	monitorSvc       *monitoring.Service
+	// appEnv - окружение (development/production). Пробрасывается в
+	// HTTP-обработчики дашборда, чтобы демо-режим (?demo=1) работал
+	// только в development.
+	appEnv string
+	// promoCodes - список действующих промокодов на активацию Premium.
+	promoCodes []string
 }
 
 func New(
@@ -61,6 +67,8 @@ func New(
 	webAppURL string,
 	dashboardURL string,
 	httpAddr string,
+	appEnv string,
+	promoCodes []string,
 ) (*Bot, error) {
 
 	if stateManager == nil {
@@ -94,6 +102,8 @@ func New(
 		botToken:         token,
 		monitorRepo:      monitorRepo,
 		monitorSvc:       monitoring.NewService(monitorRepo),
+		appEnv:           appEnv,
+		promoCodes:       promoCodes,
 	}
 
 	// Диагностика: логируем id бота из токена, чтобы при ошибках валидации
@@ -154,7 +164,7 @@ func (b *Bot) Start(ctx context.Context) {
 			// сессии → initData оказался бы пустым/чужим.
 			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 		})
-		dashHandler := dashboard.NewHandler(b.paymentService, b.botToken, b.monitorRepo, b.reportRenderer, b.pdfConverter)
+		dashHandler := dashboard.NewHandler(b.paymentService, b.botToken, b.monitorRepo, b.reportRenderer, b.pdfConverter, b.appEnv)
 		mux.HandleFunc("/dashboard/", dashHandler.ServeWebApp)
 		mux.HandleFunc("/api/metrics", dashHandler.Metrics)
 		mux.HandleFunc("/api/profile", dashHandler.SaveProfile)
@@ -256,6 +266,79 @@ func (b *Bot) SetupMenuButton(ctx context.Context) {
 	log.Printf("🔘 Menu Button: дефолтная (Мой профиль - только из меню бота).")
 }
 
+// handlePromo обрабатывает команду /promo <code>: одноразовая активация
+// Premium на 365 дней для текущего аккаунта. Каждый код можно использовать
+// только один раз на аккаунт (хранится в used_promocodes).
+func (b *Bot) handlePromo(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+	if update.Message == nil {
+		return
+	}
+	chatID := update.Message.Chat.ID
+	code := strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/promo"))
+
+	if code == "" {
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgPromoUsage,
+		})
+		return
+	}
+
+	// Нормализуем регистр и ищем в списке действующих кодов.
+	code = strings.ToUpper(code)
+	valid := false
+	for _, c := range b.promoCodes {
+		if strings.EqualFold(c, code) {
+			valid = true
+			code = c
+			break
+		}
+	}
+	if !valid {
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgPromoInvalid,
+		})
+		return
+	}
+
+	// Проверяем, не использовал ли пользователь этот код ранее.
+	used := b.appStorage.Users.IsPromoCodeUsed(ctx, chatID, code)
+	if used {
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgPromoAlreadyUsed,
+		})
+		return
+	}
+
+	// Активируем Premium (год) через сервис платежей - он источник истины
+	// для Premium-гейтов в дашборде/базе.
+	if err := b.paymentService.ActivatePremiumManually(chatID, "premium_yearly"); err != nil {
+		log.Printf("⚠️ не удалось активировать Premium по промокоду для chatID=%d: %v", chatID, err)
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgPromoInvalid,
+		})
+		return
+	}
+
+	// Синхронизируем флаг is_premium в БД (историческое поле).
+	if u, gerr := b.appStorage.Users.GetUserByTelegramID(ctx, chatID); gerr == nil {
+		_ = b.appStorage.Users.UpdateUserPremiumStatus(ctx, u.ID, true, time.Now().AddDate(1, 0, 0))
+	}
+
+	// Фиксируем использование кода (нельзя применить повторно).
+	if err := b.appStorage.Users.MarkPromoCodeUsed(ctx, chatID, code); err != nil {
+		log.Printf("⚠️ не удалось пометить промокод использованным для chatID=%d: %v", chatID, err)
+	}
+
+	_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: chatID,
+		Text:   locales.MsgPromoActivated,
+	})
+}
+
 func (b *Bot) registerHandlers() {
 
 	router := router.MessageRouter(
@@ -310,6 +393,17 @@ func (b *Bot) registerHandlers() {
 		"/reset_premium",
 		tgbot.MatchTypeExact,
 		resetHandler,
+	)
+
+	// Промокоды: /promo <code> активирует Premium на 365 дней (одноразово
+	// на аккаунт). Список действующих кодов задан в cfg.PromoCodes.
+	b.client.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		"/promo",
+		tgbot.MatchTypePrefix,
+		func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+			b.handlePromo(ctx, tb, update)
+		},
 	)
 
 	// Админ-команда анонса новой фичи: /announce <текст> рассылает

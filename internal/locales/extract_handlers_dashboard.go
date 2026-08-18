@@ -9,7 +9,7 @@ package locales
 // Log messages emitted by the dashboard HTTP handlers.
 const (
 	LogDashboardMetricsDemo    = "[DASHBOARD] /api/metrics (DEMO) отданы синтетические метрики"
-	LogDashboardMetrics        = "[DASHBOARD] /api/metrics отданы для user=%d (noData=%v)"
+	LogDashboardMetrics        = "[DASHBOARD] /api/metrics отданы для user=%s (noData=%v)"
 	LogDashboardReportsDemo    = "[DASHBOARD] /api/reports (DEMO) отданы синтетические отчёты"
 	LogDashboardDemoPDFUnavail = "[DASHBOARD] PDF недоступен для демо-отчёта (%v) - отдаю HTML"
 	LogDashboardDemoPDFSent    = "[DASHBOARD] демо PDF-отчёт отдан: %d байт"

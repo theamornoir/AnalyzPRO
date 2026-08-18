@@ -18,6 +18,12 @@ type UserRepository interface {
 	// UpdateUserLastActivity - обновляет дату последнего взаимодействия
 	// пользователя с ботом (нужно системе напоминаний об неактивности).
 	UpdateUserLastActivity(ctx context.Context, userID uint, t time.Time) error
+	// IsPromoCodeUsed - проверяет, активировал ли пользователь промокод.
+	// userID здесь - Telegram chat ID (int64), как во всём боте.
+	IsPromoCodeUsed(ctx context.Context, userID int64, code string) bool
+	// MarkPromoCodeUsed - помечает промокод использованным пользователем
+	// (идемпотентно: повторный вызов для того же userID+code не дублирует запись).
+	MarkPromoCodeUsed(ctx context.Context, userID int64, code string) error
 }
 
 // DiagnosisRepository - репозиторий диагнозов.

@@ -80,14 +80,6 @@ const (
 	LogPaymentConfirmSent      = "✅ [PREMIUM CONFIRM] подтверждение отправлено: chatID=%d, messageID=%d, кнопок=%d"
 	LogPaymentExpired          = "⏳ Premium истёк для user=%d"
 	LogPaymentServiceInit      = "💳 Сервис платежей инициализирован (Mock)"
-	LogOrchestratorProviderAdd = "🤖 AI Provider added: %s"
-	LogOrchestratorNoProvider  = "⚠️ No AI providers available (all API keys empty), using mock"
-	LogOrchestratorTotal       = "📊 Total AI providers registered: %d"
-
-	// Логи OpenRouter
-	LogOpenRouterModel       = "🌐 OpenRouter model: %s"
-	LogOpenRouterTrying      = "🔄 OpenRouter: пробуем модель %s"
-	LogOpenRouterModelFailed = "⚠️ OpenRouter: модель %s недоступна - %v"
 )
 
 // Ошибки для платежей.

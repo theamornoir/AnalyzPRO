@@ -95,12 +95,36 @@ type Handler struct {
 	repo           monitoring.Repository
 	reportRenderer *report.Renderer
 	pdfConverter   pdfservice.Converter
+	// appEnv - текущее окружение (development/production). Используется,
+	// чтобы демо-режим (?demo=1) работал только в development-отладке,
+	// а в production требовал реальной авторизации initData.
+	appEnv string
 }
 
 // NewHandler создаёт обработчик дашборда. reportRenderer/pdfConverter нужны,
 // чтобы по запросу отдавать сохранённые отчёты как PDF (/api/reports/file).
-func NewHandler(pay *payment.MockPaymentService, botToken string, repo monitoring.Repository, reportRenderer *report.Renderer, pdfConverter pdfservice.Converter) *Handler {
-	return &Handler{pay: pay, botToken: botToken, repo: repo, reportRenderer: reportRenderer, pdfConverter: pdfConverter}
+func NewHandler(pay *payment.MockPaymentService, botToken string, repo monitoring.Repository, reportRenderer *report.Renderer, pdfConverter pdfservice.Converter, appEnv string) *Handler {
+	return &Handler{pay: pay, botToken: botToken, repo: repo, reportRenderer: reportRenderer, pdfConverter: pdfConverter, appEnv: appEnv}
+}
+
+// demoMode возвращает true, только если запрошен демо-режим (?demo=1) И
+// окружение - development. В production демо-режим не работает: он отдаёт
+// синтетику БЕЗ проверки initData, что было бы латентной дырой (обход auth
+// и выдача данных без подписи Telegram). Локальная отладка в браузере
+// (AppEnv=development) остаётся рабочей.
+func (h *Handler) demoMode(r *http.Request) bool {
+	return r.URL.Query().Get("demo") == "1" && h.appEnv == "development"
+}
+
+// maskID маскирует Telegram chat ID в логах, чтобы не светить сырой PII
+// (идентификатор пользователя) в production-логах. Показывает первые и
+// последние 4 цифры, скрывая середину.
+func maskID(id int64) string {
+	s := strconv.FormatInt(id, 10)
+	if len(s) <= 8 {
+		return "***"
+	}
+	return s[:4] + "***" + s[len(s)-4:]
 }
 
 // assetVersionedRe - версионированные имена статических активов:
@@ -183,7 +207,7 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 	// чтобы можно было посмотреть графики Мой профиль без реальных
 	// анализов и без Premium. Работает и без валидного initData (удобно для
 	// локальной отладки в браузере). Премиум-гейт не применяется.
-	if r.URL.Query().Get("demo") == "1" {
+	if h.demoMode(r) {
 		log.Printf(locales.LogDashboardMetricsDemo)
 		_ = json.NewEncoder(w).Encode(h.buildDemoMetrics())
 		return
@@ -228,7 +252,7 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	log.Printf(locales.LogDashboardMetrics, telegramID, metrics.NoData)
+	log.Printf(locales.LogDashboardMetrics, maskID(telegramID), metrics.NoData)
 }
 
 // Reports - обработчик GET /api/reports. Возвращает последний и предыдущий
@@ -250,7 +274,7 @@ func (h *Handler) Reports(w http.ResponseWriter, r *http.Request) {
 	// Демо-режим (?demo=1): синтетические последний+предыдущий отчёты, чтобы
 	// можно было посмотреть карточки «Расширенные анализы» и «Bioscan PRO» и
 	// сравнение прогресса без реальных данных и без Premium.
-	if r.URL.Query().Get("demo") == "1" {
+	if h.demoMode(r) {
 		log.Printf("[DASHBOARD] /api/reports (DEMO) отданы синтетические отчёты")
 		_ = json.NewEncoder(w).Encode(h.buildDemoReports())
 		return
@@ -328,7 +352,7 @@ func (h *Handler) ReportFile(w http.ResponseWriter, r *http.Request) {
 	// ДЕМО-режим (?demo=1): отдаём синтетический отчёт БЕЗ проверки
 	// подлинности сессии и БЕЗ поиска записи в БД (в демо реальных
 	// отчётов нет). Позволяет открывать демо-отчёты прямо из Сводки.
-	if r.URL.Query().Get("demo") == "1" {
+	if h.demoMode(r) {
 		entryType := r.URL.Query().Get("type")
 		if entryType != "analysis" && entryType != "bioscan" {
 			http.Error(w, "bad type", http.StatusBadRequest)
@@ -434,7 +458,7 @@ func (h *Handler) ReportFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[DASHBOARD] PDF-отчёт id=%d отдан пользователю (user=%d): %d байт", entryID, telegramID, len(pdfBytes))
+	log.Printf("[DASHBOARD] PDF-отчёт id=%d отдан пользователю (user=%s): %d байт", entryID, maskID(telegramID), len(pdfBytes))
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename+".pdf"))
 	w.Write(pdfBytes)
@@ -455,7 +479,7 @@ func (h *Handler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 
 	// Демо-режим: синтетические отчёты не привязаны к БД, удалять нечего.
-	if r.URL.Query().Get("demo") == "1" {
+	if h.demoMode(r) {
 		http.Error(w, "demo mode: nothing to delete", http.StatusBadRequest)
 		return
 	}
@@ -491,12 +515,12 @@ func (h *Handler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.DeleteHistoryEntry(r.Context(), entryID); err != nil {
-		log.Printf("[DASHBOARD] не удалось удалить запись id=%d user=%d: %v", entryID, telegramID, err)
+		log.Printf("[DASHBOARD] не удалось удалить запись id=%d user=%s: %v", entryID, maskID(telegramID), err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal"})
 		return
 	}
-	log.Printf("[DASHBOARD] удалена запись id=%d user=%d type=%s", entryID, telegramID, entry.Type)
+	log.Printf("[DASHBOARD] удалена запись id=%d user=%s type=%s", entryID, maskID(telegramID), entry.Type)
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
@@ -813,12 +837,12 @@ func (h *Handler) SaveProfile(w http.ResponseWriter, r *http.Request) {
 		JsonData:   string(payloadBytes),
 	}
 	if err := h.repo.SaveResult(r.Context(), entry); err != nil {
-		log.Printf("[DASHBOARD] не удалось сохранить профиль user=%d: %v", telegramID, err)
+		log.Printf("[DASHBOARD] не удалось сохранить профиль user=%s: %v", maskID(telegramID), err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal"})
 		return
 	}
-	log.Printf("[DASHBOARD] профиль сохранён user=%d name=%q", telegramID, name)
+	log.Printf("[DASHBOARD] профиль сохранён user=%s name=%q", maskID(telegramID), "***")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }

@@ -171,6 +171,31 @@ func (r *Repo) UpdateUserLastActivity(ctx context.Context, userID uint, t time.T
 	return nil
 }
 
+// IsPromoCodeUsed проверяет, активировал ли пользователь промокод.
+// userID здесь - Telegram chat ID (int64).
+func (r *Repo) IsPromoCodeUsed(ctx context.Context, userID int64, code string) bool {
+	var dummy int
+	const q = `SELECT 1 FROM used_promocodes WHERE user_id = ? AND code = ? LIMIT 1`
+	// Запрос безопасен (SetMaxOpenConns(1)): QueryRowContext не держит
+	// несколько строк, поэтому закрывать rows вручную не нужно.
+	if err := r.db.QueryRowContext(ctx, q, userID, code).Scan(&dummy); err != nil {
+		return false
+	}
+	return true
+}
+
+// MarkPromoCodeUsed помечает промокод использованным (UNIQUE(user_id, code)
+// делает вставку идемпотентной - повторный вызов не дублирует запись).
+func (r *Repo) MarkPromoCodeUsed(ctx context.Context, userID int64, code string) error {
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO used_promocodes (user_id, code, used_at) VALUES (?, ?, ?)
+		 ON CONFLICT(user_id, code) DO NOTHING`,
+		userID, code, time.Now()); err != nil {
+		return fmt.Errorf("отметка промокода использованным: %w", err)
+	}
+	return nil
+}
+
 // ---------------------------------------------------------------
 // DiagnosisRepository
 // ---------------------------------------------------------------
