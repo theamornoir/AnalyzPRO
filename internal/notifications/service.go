@@ -898,13 +898,101 @@ func (s *Service) SendSubscriptionTest(ctx context.Context, chatID int64, daysBe
 // честного различения «нет анализов» и «анализы в норме»).
 var ErrNoAnalysisData = errors.New("no analysis data")
 
+// mockAnalysisJSON - демонстрационный анализ с отклонениями от нормы,
+// используемый ТОЛЬКО в development как образец уведомления об отклонениях,
+// когда у пользователя есть сохранённые анализы, но ни один не удалось
+// разобрать (например, сохранён AI-текст вместо структурированных
+// показателей). Позволяет разработчику предпросмотреть, как выглядит
+// уведомление (кнопки «Проверить»/«Отправить» в «🧪 Тест уведомлений»).
+// В продакшене не применяется (previewIndicators гейтит isDev).
+const mockAnalysisJSON = `{
+  "categories": [
+    {
+      "name": "Биохимический анализ крови",
+      "lab_systems": [
+        {
+          "name": "Обмен углеводов",
+          "indicators": [
+            {"name": "Глюкоза", "value": 7.2, "normal": "3.9-6.1", "unit": "ммоль/л"},
+            {"name": "Гликированный гемоглобин", "value": 6.8, "normal": "4.0-5.7", "unit": "%"}
+          ]
+        },
+        {
+          "name": "Липидный профиль",
+          "indicators": [
+            {"name": "Холестерин общий", "value": 6.5, "normal": "до 5.0", "unit": "ммоль/л"},
+            {"name": "ЛПНП", "value": 4.2, "normal": "до 3.0", "unit": "ммоль/л"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Клинический анализ крови",
+      "lab_systems": [
+        {
+          "name": "Гемограмма",
+          "indicators": [
+            {"name": "Гемоглобин", "value": 145, "normal": "135-175", "unit": "г/л"},
+            {"name": "Лейкоциты", "value": 11.8, "normal": "4.0-9.0", "unit": "10^9/л"}
+          ]
+        }
+      ]
+    }
+  ]
+}`
+
+// mockIndicators парсит демонстрационный анализ mockAnalysisJSON в список
+// показателей (переиспользует боевой парсер parseIndicators).
+func mockIndicators() []indicator {
+	return parseIndicators(mockAnalysisJSON)
+}
+
+// previewIndicators возвращает показатели для проверки/отправки уведомлений
+// об отклонениях: реальные (последний разборный анализ пользователя), либо,
+// в development, демонстрационные (mockAnalysisJSON), если у пользователя
+// есть сохранённые анализы, но ни один не удалось разобрать. Это позволяет
+// разработчику предпросмотреть уведомление об отклонениях (кнопки
+// «Проверить»/«Отправить» в «🧪 Тест уведомлений»), даже если его реальные
+// данные - в неподдерживаемом формате (например, AI-текст). Возвращает
+// (показатели, isMock, ok). isMock=true, если вернулись демо-данные (тогда
+// подавление на 14 дней в БД не применяется).
+func (s *Service) previewIndicators(ctx context.Context, chatID int64) ([]indicator, bool, bool) {
+	if inds, ok := s.latestAnalysisIndicators(ctx, chatID); ok && len(inds) > 0 {
+		return inds, false, true
+	}
+	if s.isDev {
+		// Есть ли у пользователя сохранённые анализы (пусть и в
+		// неразборном формате)? Если да - показываем mock как образец.
+		if has, _ := s.hasAnalysisHistory(ctx, chatID); has {
+			if mock := mockIndicators(); len(mock) > 0 {
+				return mock, true, true
+			}
+		}
+	}
+	return nil, false, false
+}
+
+// hasAnalysisHistory возвращает true, если у пользователя есть хотя бы одна
+// запись в истории анализов (независимо от того, удалось ли её разобрать).
+func (s *Service) hasAnalysisHistory(ctx context.Context, telegramID int64) (bool, error) {
+	if s.monitorRepo == nil {
+		return false, nil
+	}
+	entries, _, err := s.monitorRepo.ListHistory(ctx, telegramID, "", 1, 1)
+	if err != nil {
+		return false, err
+	}
+	return len(entries) > 0, nil
+}
+
 // RunAnalyticsDryRun проверяет сохранённые анализы пользователя и
 // возвращает список найденных отклонений БЕЗ реальной отправки и без записи
 // в БД. Используется dev-кнопкой «Проверить» (предпросмотр). Возвращает
-// ErrNoAnalysisData, если анализов нет; иначе - срез отклонений (возможно
-// пустой, если все показатели в норме).
+// ErrNoAnalysisData, если анализов нет совсем (в dev - только если их нет,
+// а не просто в неразборном формате: тогда показывается mock-образец);
+// иначе - срез отклонений (возможно пустой, если все показатели в норме).
 func (s *Service) RunAnalyticsDryRun(ctx context.Context, chatID int64) ([]AnalyticsFinding, error) {
-	inds, ok := s.latestAnalysisIndicators(ctx, chatID)
+	inds, _, ok := s.previewIndicators(ctx, chatID)
 	if !ok || len(inds) == 0 {
 		return nil, ErrNoAnalysisData
 	}
@@ -918,12 +1006,14 @@ func (s *Service) RunAnalyticsDryRun(ctx context.Context, chatID int64) ([]Analy
 }
 
 // SendAnalyticsTest выполняет реальную проверку и отправку уведомлений об
-// отклонениях для указанного пользователя (с учётом подавления на 14 дней).
+// отклонениях для указанного пользователя. Для реальных данных уважает
+// подавление на 14 дней; для dev-mock (неразборные данные пользователя)
+// подавление не применяется, чтобы не засорять БД демо-показателями.
 // Используется dev-кнопкой «Отправить». Возвращает число отправленных
-// уведомлений (0, если отклонений нет или все подавлены) и ErrNoAnalysisData,
-// если сохранённых анализов нет.
+// показателей (0, если отклонений нет или все подавлены) и ErrNoAnalysisData,
+// если сохранённых анализов нет совсем.
 func (s *Service) SendAnalyticsTest(ctx context.Context, chatID int64) (int, error) {
-	inds, ok := s.latestAnalysisIndicators(ctx, chatID)
+	inds, isMock, ok := s.previewIndicators(ctx, chatID)
 	if !ok || len(inds) == 0 {
 		return 0, ErrNoAnalysisData
 	}
@@ -933,8 +1023,10 @@ func (s *Service) SendAnalyticsTest(ctx context.Context, chatID int64) (int, err
 		if !isOutOfRange(ind) {
 			continue
 		}
-		if suppressed, _ := s.repo.isSuppressed(ctx, chatID, ind.Name, now); suppressed {
-			continue
+		if !isMock {
+			if suppressed, _ := s.repo.isSuppressed(ctx, chatID, ind.Name, now); suppressed {
+				continue
+			}
 		}
 		toNotify = append(toNotify, ind)
 	}
@@ -945,8 +1037,10 @@ func (s *Service) SendAnalyticsTest(ctx context.Context, chatID int64) (int, err
 	sent := 0
 	sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	if s.sendNotification(sendCtx, chatID, text) {
-		for _, ind := range toNotify {
-			_ = s.repo.suppress(ctx, chatID, ind.Name, now.Add(14*24*time.Hour))
+		if !isMock {
+			for _, ind := range toNotify {
+				_ = s.repo.suppress(ctx, chatID, ind.Name, now.Add(14*24*time.Hour))
+			}
 		}
 		sent = len(toNotify)
 	}

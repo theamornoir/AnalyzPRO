@@ -948,12 +948,14 @@ func (r *router) runTestNotification(ctx context.Context, b *tgbot.Bot, chatID i
 		case "sub_today":
 			days = 0
 		}
-		text, err := svc.SendSubscriptionTest(ctx, chatID, days)
-		if err != nil {
+		// ВАЖНО: SendSubscriptionTest САМ отправляет уведомление в Telegram
+		// (источник истины по отправке), поэтому здесь НЕ шлём text
+		// повторно - иначе пользователь получит одно и то же уведомление
+		// ДВАЖДЫ. Просто проверяем ошибку (неизвестный kind).
+		if _, err := svc.SendSubscriptionTest(ctx, chatID, days); err != nil {
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
 			return
 		}
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: text, ParseMode: "Markdown"})
 	case "analytics_check":
 		// Предпросмотр: показываем, какие отклонения нашлись, БЕЗ отправки.
 		findings, err := svc.RunAnalyticsDryRun(ctx, chatID)

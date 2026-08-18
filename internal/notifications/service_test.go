@@ -222,13 +222,13 @@ func TestParseIndicatorsAllFormats(t *testing.T) {
 // её отсутствии - не добавляется.
 func TestFormatDeviationWithUnits(t *testing.T) {
 	withUnit := formatDeviationText("Глюкоза", "7.2", "3.9-6.1", "ммоль/л")
-	want := "⚠️ Глюкоза: 7.2 ммоль/л при норме 3.9-6.1 ммоль/л. Рекомендуем обновить анализ."
+	want := "⚠️ Глюкоза: 7.2 ммоль/л при норме 3.9-6.1 ммоль/л. Рекомендуем обратиться к врачу и обновить анализ."
 	if withUnit != want {
 		t.Fatalf("с единицей:\nожидали %q\nполучили %q", want, withUnit)
 	}
 
 	noUnit := formatDeviationText("Глюкоза", "7.2", "3.9-6.1", "")
-	wantNo := "⚠️ Глюкоза: 7.2 при норме 3.9-6.1. Рекомендуем обновить анализ."
+	wantNo := "⚠️ Глюкоза: 7.2 при норме 3.9-6.1. Рекомендуем обратиться к врачу и обновить анализ."
 	if noUnit != wantNo {
 		t.Fatalf("без единицы:\nожидали %q\nполучили %q", wantNo, noUnit)
 	}
@@ -592,5 +592,64 @@ func TestAnalyticsNoDataError(t *testing.T) {
 	}
 	if n != 0 {
 		t.Fatalf("SendAnalyticsTest: ожидали 0 отправок, получили %d", n)
+	}
+}
+
+// RunAnalyticsDryRun / SendAnalyticsTest: у пользователя есть сохранённые
+// анализы, но в НЕРАЗБОРНОМ формате (например, AI-текст) -> в development
+// подставляется mock-образец отклонений, чтобы разработчик мог
+// предпросмотреть уведомление (кнопки «Проверить»/«Отправить» в
+// «🧪 Тест уведомлений»). В mock 5 показателей вне нормы (Глюкоза,
+// Гликированный гемоглобин, Холестерин общий, ЛПНП, Лейкоциты) и 1 в норме
+// (Гемоглобин).
+func TestAnalyticsMockPreview(t *testing.T) {
+	conn := openTestDB(t)
+	store := storage.NewSQLStorage(conn)
+	svc := NewService(conn, store, nil, monitoring_sqlrepo.New(conn), true)
+	ctx := context.Background()
+
+	insertUser(t, conn, 447, true, time.Now().Add(24*time.Hour))
+	// Неразборный формат (AI-текст вместо структурированных показателей).
+	insertAnalysis(t, conn, 447, `{"note":"Я — искусственный интеллект, а не врач..."}`)
+
+	findings, err := svc.RunAnalyticsDryRun(ctx, 447)
+	if err != nil {
+		t.Fatalf("RunAnalyticsDryRun (mock): %v", err)
+	}
+	if len(findings) != 5 {
+		t.Fatalf("ожидали 5 отклонений из mock-анализа, получили %d: %v", len(findings), findings)
+	}
+	byName := map[string]AnalyticsFinding{}
+	for _, f := range findings {
+		byName[f.Name] = f
+	}
+	for _, name := range []string{"Глюкоза", "Гликированный гемоглобин", "Холестерин общий", "ЛПНП", "Лейкоциты"} {
+		if _, ok := byName[name]; !ok {
+			t.Fatalf("в mock-отклонениях нет показателя %q: %v", name, findings)
+		}
+	}
+	if _, ok := byName["Гемоглобин"]; ok {
+		t.Fatal("Гемоглобин в норме не должен попадать в отклонения")
+	}
+
+	var sent []string
+	svc.sendFn = func(_ context.Context, _ int64, text string) bool {
+		sent = append(sent, text)
+		return true
+	}
+	n, err := svc.SendAnalyticsTest(ctx, 447)
+	if err != nil {
+		t.Fatalf("SendAnalyticsTest (mock): %v", err)
+	}
+	if n != 5 {
+		t.Fatalf("ожидали 5 отправленных показателей, получили %d", n)
+	}
+	// Объединённое сообщение - ровно одно.
+	if len(sent) != 1 {
+		t.Fatalf("ожидали 1 объединённое сообщение, получили %d: %v", len(sent), sent)
+	}
+	// Mock-предпросмотр НЕ пишет подавление в БД (не засоряем реальные данные).
+	if suppressed, _ := svc.repo.isSuppressed(ctx, 447, "Глюкоза", time.Now()); suppressed {
+		t.Fatal("mock-предпросмотр не должен писать подавление в БД")
 	}
 }

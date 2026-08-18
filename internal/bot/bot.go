@@ -429,12 +429,13 @@ func (b *Bot) handleDevTestCommand(ctx context.Context, tb *tgbot.Bot, update *m
 		case "sub_today":
 			days = 0
 		}
-		text, err := s.SendSubscriptionTest(ctx, chatID, days)
-		if err != nil {
+		// ВАЖНО: SendSubscriptionTest САМ отправляет уведомление в Telegram,
+		// поэтому здесь НЕ шлём text повторно - иначе пользователь
+		// получит одно и то же уведомление ДВАЖДЫ. Проверяем только ошибку.
+		if _, err := s.SendSubscriptionTest(ctx, chatID, days); err != nil {
 			_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
 			return
 		}
-		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: text, ParseMode: "Markdown"})
 	case "analytics_check":
 		findings, err := s.RunAnalyticsDryRun(ctx, chatID)
 		if errors.Is(err, notifications.ErrNoAnalysisData) {
