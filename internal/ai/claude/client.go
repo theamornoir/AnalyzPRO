@@ -15,11 +15,19 @@ import (
 	"time"
 
 	"github.com/theamornoir/analyzpro/internal/locales"
+	"golang.org/x/sync/semaphore"
 )
 
 // Model - модель Claude по умолчанию. Умеет vision (фото) и нативное чтение
 // PDF-документов через Messages API.
 const Model = "claude-3-5-sonnet-20241022"
+
+// sem ограничивает число одновременных исходящих запросов к Claude.
+// При 500 пользователях, разом загрузивших анализы, это предотвращает
+// массовые 429 от Anthropic и OOM по памяти (крупные PDF/фото держим в
+// памяти только для in-flight задач в рамках окна семафора, а не для всех
+// 500 сразу). Запросы, не попавшие в окно, честно ждут в очереди.
+var sem = semaphore.NewWeighted(8) // 8 одновременных AI-запросов
 
 // Attachment - одно вложение (изображение или PDF) для мультимодального запроса.
 type Attachment struct {
@@ -88,6 +96,14 @@ func (c *Client) GenerateWithFiles(ctx context.Context, systemPrompt, prompt str
 	if c.apiKey == "" {
 		return "", fmt.Errorf("ANTHROPIC_API_KEY not set")
 	}
+
+	// Ограничиваем конкурентность: не более 8 одновременных запросов к
+	// Claude. Лишние ждут в очереди (без блокировки бота - каждый вызов
+	// идёт в своей горутине), что защищает от лимитов RPM/TPM и перегрузки.
+	if err := sem.Acquire(ctx, 1); err != nil {
+		return "", err
+	}
+	defer sem.Release(1)
 
 	content := []any{
 		map[string]any{"type": "text", "text": prompt},

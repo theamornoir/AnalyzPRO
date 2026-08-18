@@ -45,7 +45,14 @@ func Open(dsn string) (*sql.DB, error) {
 		_ = conn.Close()
 		return nil, fmt.Errorf("не удалось подключиться к БД: %w", err)
 	}
-	conn.SetMaxOpenConns(1) // SQLite + один инстанс бота: сериализуем запись
+	// WAL-журнал (включён прагмой journal_mode(WAL)) разрешает
+	// конкурентные чтения + ровно одну запись одновременно. Поднимаем
+	// пул до 8 соединений: дашборд-чтения масштабируются ~в 4 раза (по
+	// нагрузочному тесту), а единственный writer SQLite всё равно
+	// сериализуется самой БД - записи не страдают. Бот в одном инстансе
+	// (flock в app.go), поэтому файл БД остаётся безопасным для прод-деплоя.
+	conn.SetMaxOpenConns(8)
+	conn.SetMaxIdleConns(8)
 	return conn, nil
 }
 
@@ -152,8 +159,8 @@ func Migrate(conn *sql.DB) error {
 	// Для уже существующих баз (до добавления онбординга) добавляем
 	// столбец onboarding_completed идемпотентно. Если столбец уже есть -
 	// SELECT завершится успешно и ALTER не выполнится. ВАЖНО: возвращаемый
-	// *sql.Rows обязательно закрываем, иначе соединение (SetMaxOpenConns(1))
-	// «утечёт» и следующая операция с БД зависнет (deadlock пула).
+	// *sql.Rows обязательно закрываем, иначе соединение «утечёт» и следующая
+	// операция с БД зависнет (deadlock пула).
 	rows, qerr := conn.Query("SELECT onboarding_completed FROM users LIMIT 0")
 	if qerr != nil {
 		if _, aerr := conn.Exec("ALTER TABLE users ADD COLUMN onboarding_completed INTEGER NOT NULL DEFAULT 0"); aerr != nil {

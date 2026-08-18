@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"strconv"
-	"strings"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -140,24 +139,11 @@ func HandleChangeTariff(
 
 // showPremiumMenu - показывает меню выбора тарифа.
 func showPremiumMenu(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64) {
-	var lines []string
-	lines = append(lines, "💎 Выберите тариф Premium:")
-	lines = append(lines, "")
-
-	for _, tariff := range payment.AvailableTariffs {
-		lines = append(lines, "📌 "+tariff.Name+"")
-		lines = append(lines, tariff.Description)
-		lines = append(lines, "💰 "+formatPrice(tariff.Price))
-		lines = append(lines, "")
-	}
-
-	lines = append(lines, "Выберите тариф кнопкой ниже:")
-
 	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
-		Text:        strings.Join(lines, "\n"),
+		Text:        locales.MsgPremiumSubscription,
 		ReplyMarkup: buildTariffKeyboard(),
-		ParseMode:   "Markdown",
+		ParseMode:   "HTML",
 	})
 	if msg != nil {
 		stateManager.SetUserData(chatID, premiumMsgKey, strconv.Itoa(msg.ID))
