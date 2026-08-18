@@ -10,19 +10,58 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/analytics"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/payment"
 )
 
-// Ключи user-data для экранов Premium (якорь с [Назад] и список тарифов).
+// Ключи для экранов Premium (якорь с [Назад] и список тарифов).
 // Используются обработчиком «Назад» для полного удаления экрана Premium
 // при возврате в Главное меню.
 const (
 	premiumAnchorKey = "premium_anchor_id"
 	premiumMsgKey    = "premium_msg_id"
 )
+
+// premiumScreenIDs - возвращает id якоря и списка/оплаты экрана Premium.
+// Читает СНАЧАЛА из выделенного premiumScreen-map (устойчив к Reset и
+// перезапуску), затем - из legacy user-data (миграция старых «висящих»
+// экранов, чьи id остались в m.data до этого фикса).
+func premiumScreenIDs(stateManager states.StateManager, chatID int64) (anchor, msg string) {
+	anchor = stateManager.GetPremiumScreenID(chatID, premiumAnchorKey)
+	msg = stateManager.GetPremiumScreenID(chatID, premiumMsgKey)
+	if anchor == "" {
+		anchor = stateManager.GetUserData(chatID, premiumAnchorKey)
+	}
+	if msg == "" {
+		msg = stateManager.GetUserData(chatID, premiumMsgKey)
+	}
+	return
+}
+
+// clearPremiumScreen - удаляет ранее показанные сообщения экрана Premium
+// (якорь с [Назад] и список тарифов/экран оплаты/подтверждения), чтобы при
+// повторном входе в раздел (повторное нажатие «💎 Premium» из главного меню,
+// либо смена тарифа активного Premium) не накапливались дублирующиеся
+// экраны. Безопасно при отсутствии сохранённых id (просто ничего не делает).
+//
+// Трекинг id (premiumScreen-map) переживает Reset и перезапуск бота, поэтому
+// экран гарантированно удаляется даже после /start или рестарта - старые
+// сообщения Premium больше не «висят» в чате навсегда.
+func clearPremiumScreen(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64) {
+	anchor, msg := premiumScreenIDs(stateManager, chatID)
+	for _, idStr := range []string{anchor, msg} {
+		if id, err := strconv.Atoi(idStr); err == nil && id > 0 {
+			helpers.DeleteMessage(ctx, b, chatID, id)
+		}
+	}
+	// Очищаем оба источника трекинга (новый map и legacy user-data).
+	stateManager.ClearPremiumScreenIDs(chatID)
+	stateManager.SetUserData(chatID, premiumAnchorKey, "0")
+	stateManager.SetUserData(chatID, premiumMsgKey, "0")
+}
 
 // sendPremiumAnchor - ставит внизу единую Reply-клавиатуру [Назад] перед
 // списком тарифов. Inline-кнопки тарифов несовместимы с Reply-клавиатурой в
@@ -36,7 +75,9 @@ func sendPremiumAnchor(ctx context.Context, b *tgbot.Bot, stateManager states.St
 		ParseMode:   "Markdown",
 	})
 	if err == nil && msg != nil {
-		stateManager.SetUserData(chatID, premiumAnchorKey, strconv.Itoa(msg.ID))
+		stateManager.SetPremiumScreenID(chatID, premiumAnchorKey, strconv.Itoa(msg.ID))
+	} else {
+		_ = err
 	}
 }
 
@@ -69,12 +110,20 @@ func PremiumHandler(
 		// Если Premium уже активен - показываем текущий тариф и опцию смены.
 		if paymentService.IsUserPremium(chatID) {
 			log.Printf(locales.LogPremiumChangeTariff, chatID)
+			// Запоминаем раздел независимо от точки входа (даже если
+			// PremiumHandler вызван мимо роутера) - чтобы кнопка «Назад»
+			// гарантированно вернула в Главное меню и почистила экран.
+			stateManager.SetUserData(chatID, "current_section", "premium")
+			clearPremiumScreen(ctx, b, stateManager, chatID)
 			sendPremiumAnchor(ctx, b, stateManager, chatID)
 			showPremiumCurrent(ctx, b, stateManager, chatID, paymentService)
 			return
 		}
 
 		// Иначе - меню выбора тарифа (выбор → экран оплаты → подтверждение).
+		// Запоминаем раздел независимо от точки входа (см. выше).
+		stateManager.SetUserData(chatID, "current_section", "premium")
+		clearPremiumScreen(ctx, b, stateManager, chatID)
 		sendPremiumAnchor(ctx, b, stateManager, chatID)
 		showPremiumMenu(ctx, b, stateManager, chatID)
 	}
@@ -107,7 +156,7 @@ func showPremiumCurrent(ctx context.Context, b *tgbot.Bot, stateManager states.S
 		ParseMode: "Markdown",
 	})
 	if msg != nil {
-		stateManager.SetUserData(chatID, premiumMsgKey, strconv.Itoa(msg.ID))
+		stateManager.SetPremiumScreenID(chatID, premiumMsgKey, strconv.Itoa(msg.ID))
 	}
 }
 
@@ -131,6 +180,9 @@ func HandleChangeTariff(
 		})
 
 		// Показываем то же меню выбора тарифа, что и при первой покупке.
+		// Запоминаем раздел независимо от точки входа (см. PremiumHandler).
+		stateManager.SetUserData(chatID, "current_section", "premium")
+		clearPremiumScreen(ctx, b, stateManager, chatID)
 		sendPremiumAnchor(ctx, b, stateManager, chatID)
 		showPremiumMenu(ctx, b, stateManager, chatID)
 		return true
@@ -145,7 +197,7 @@ func showPremiumMenu(ctx context.Context, b *tgbot.Bot, stateManager states.Stat
 		ReplyMarkup: buildTariffKeyboard(),
 	})
 	if msg != nil {
-		stateManager.SetUserData(chatID, premiumMsgKey, strconv.Itoa(msg.ID))
+		stateManager.SetPremiumScreenID(chatID, premiumMsgKey, strconv.Itoa(msg.ID))
 	}
 }
 

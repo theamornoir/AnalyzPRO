@@ -3,6 +3,7 @@ package menu
 import (
 	"context"
 	"log"
+	"strconv"
 	"strings"
 
 	tgbot "github.com/go-telegram/bot"
@@ -68,7 +69,7 @@ func HandlePremiumCallback(
 		priceText := formatPrice(tariff.Price)
 		featuresText := strings.Join(tariff.Features, "\n• ")
 
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,
 			Text: "💳 Оплата Premium\n\n" +
 				"📌 Тариф: " + tariff.Name + "\n" +
@@ -93,6 +94,13 @@ func HandlePremiumCallback(
 			},
 			ParseMode: "Markdown",
 		})
+		// Запоминаем id экрана оплаты под тем же ключом, что и список
+		// тарифов/экран активного Premium (premium_msg_key). При выходе из
+		// Premium (кнопка «Назад») backToParent удаляет именно последний
+		// экран - иначе экран оплаты «висел» бы в истории после ухода.
+		if msg != nil {
+			stateManager.SetPremiumScreenID(chatID, premiumMsgKey, strconv.Itoa(msg.ID))
+		}
 
 		return true
 	}
@@ -212,6 +220,10 @@ func HandlePremiumConfirm(
 			log.Printf(locales.LogPaymentConfirmSendErr, chatID, sendErr)
 		} else {
 			log.Printf(locales.LogPaymentConfirmSent, chatID, msgID, len(rows))
+			// Запоминаем id подтверждения Premium в выделенном premiumScreen-map
+			// (как и прочие экраны): при выходе из Premium (кнопка «Назад»)
+			// backToParent удаляет последний экран, и id переживает Reset.
+			stateManager.SetPremiumScreenID(chatID, premiumMsgKey, strconv.Itoa(msgID))
 		}
 		return true
 	}

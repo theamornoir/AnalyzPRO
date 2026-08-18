@@ -80,9 +80,6 @@ func AnalysisHubMenu() models.InlineKeyboardMarkup {
 				{Text: locales.BtnBioscanExtended, CallbackData: "section_bioscan_extended"},
 				{Text: locales.BtnBioscanExtendedDemo, CallbackData: "section_bioscan_extended_demo"},
 			},
-			{
-				{Text: "← Назад", CallbackData: "back_to_main"},
-			},
 		},
 	}
 }
@@ -98,7 +95,6 @@ func HealthHubMenu() models.InlineKeyboardMarkup {
 			{{Text: locales.BtnHealthSummary, CallbackData: "section_health_summary"}},
 			{{Text: locales.BtnConsultation, CallbackData: "section_consult_start"}},
 			{{Text: locales.BtnHealthSummaryDemo, CallbackData: "section_health_summary_demo"}},
-			{{Text: "← Назад", CallbackData: "back_to_main"}},
 		},
 	}
 }
@@ -113,7 +109,6 @@ func ServiceHubMenu() models.InlineKeyboardMarkup {
 			{{Text: locales.BtnFeedback, CallbackData: "section_feedback_start"}},
 			{{Text: locales.BtnAbout, CallbackData: "section_about"}},
 			{{Text: locales.BtnTestNotify, CallbackData: "section_test_notify"}},
-			{{Text: "← Назад", CallbackData: "back_to_main"}},
 		},
 	}
 }

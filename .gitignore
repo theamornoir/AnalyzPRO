@@ -14,7 +14,7 @@ uploads/
 *.pkg
 bin/
 analyzpro
-bot
+/bot
 
 # macOS
 .DS_Store

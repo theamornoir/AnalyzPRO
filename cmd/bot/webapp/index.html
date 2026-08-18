@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Prisma - Дашборд</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="dashboard">
+        <!-- HEADER -->
+        <header class="header">
+            <div class="header-top">
+                <div class="brand">PRISMA</div>
+                <div id="premiumBadge" class="premium-badge">💎 Premium</div>
+            </div>
+            <h1 id="userName">Алексей</h1>
+            <p class="header-subtitle" id="userAge">32 года</p>
+        </header>
+
+        <!-- TABS -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="overview">🔍 Обзор</button>
+            <button class="tab-btn" data-tab="blood">🩸 Кровь</button>
+            <button class="tab-btn" data-tab="nutrition">🥗 Питание</button>
+            <button class="tab-btn" data-tab="muscles">💪 Мышцы</button>
+        </div>
+
+        <!-- MAIN CONTENT -->
+        <main class="main">
+            <!-- TAB: OVERVIEW -->
+            <div id="tab-overview" class="tab-content active">
+                <!-- Индексы -->
+                <section class="card">
+                    <h2>Индексы здоровья</h2>
+                    <div class="indices-grid">
+                        <div class="index-card">
+                            <div class="index-value" id="healthIndex">78</div>
+                            <div class="index-label">Здоровье</div>
+                        </div>
+                        <div class="index-card">
+                            <div class="index-value" id="energyLevel">82%</div>
+                            <div class="index-label">Энергия</div>
+                        </div>
+                        <div class="index-card">
+                            <div class="index-value" id="stressLevel">45%</div>
+                            <div class="index-label">Стресс↓</div>
+                        </div>
+                        <div class="index-card">
+                            <div class="index-value" id="sleepHours">7.2ч</div>
+                            <div class="index-label">Сон</div>
+                        </div>
+                        <div class="index-card">
+                            <div class="index-value" id="waterLiters">2.1л</div>
+                            <div class="index-label">Вода</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Круговая диаграмма -->
+                <section class="card">
+                    <h2>Профиль здоровья</h2>
+                    <div class="chart-container-small">
+                        <canvas id="chartHealth"></canvas>
+                    </div>
+                </section>
+
+                <!-- Динамика с фильтрами -->
+                <section class="card">
+                    <div class="section-header">
+                        <h2>Динамика</h2>
+                        <div class="filter-group">
+                            <button class="filter-btn active" data-period="6months">6М</button>
+                            <button class="filter-btn" data-period="month">Мес</button>
+                            <button class="filter-btn" data-period="year">Год</button>
+                        </div>
+                    </div>
+                    <div class="chart-full">
+                        <canvas id="chartTrend"></canvas>
+                    </div>
+                </section>
+
+                <!-- Риски -->
+                <section class="card risks-section">
+                    <h2>⚠️ Зоны внимания</h2>
+                    <div id="riskList"></div>
+                </section>
+
+                <!-- Рекомендации -->
+                <section class="card recommendations">
+                    <h2>💡 Рекомендации</h2>
+                    <ul id="recList" class="rec-list"></ul>
+                </section>
+            </div>
+
+            <!-- TAB: BLOOD -->
+            <div id="tab-blood" class="tab-content">
+                <section class="card">
+                    <h2>🩸 Анализ крови - Радар</h2>
+                    <div class="chart-container-medium">
+                        <canvas id="chartBlood"></canvas>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <h2>Показатели крови</h2>
+                    <div class="indicators-grid">
+                        <div class="indicator-card">
+                            <div class="ind-name">Гемоглобин</div>
+                            <div class="ind-value">145 <span class="ind-unit">г/л</span></div>
+                            <span class="ind-status ind-normal">Норма</span>
+                            <div class="ind-normal">Норма: 130-170</div>
+                        </div>
+                        <div class="indicator-card">
+                            <div class="ind-name">Лейкоциты</div>
+                            <div class="ind-value">6.2 <span class="ind-unit">×10⁹/л</span></div>
+                            <span class="ind-status ind-normal">Норма</span>
+                            <div class="ind-normal">Норма: 4.0-9.0</div>
+                        </div>
+                        <div class="indicator-card">
+                            <div class="ind-name">Тромбоциты</div>
+                            <div class="ind-value">250 <span class="ind-unit">×10⁹/л</span></div>
+                            <span class="ind-status ind-normal">Норма</span>
+                            <div class="ind-normal">Норма: 150-400</div>
+                        </div>
+                        <div class="indicator-card">
+                            <div class="ind-name">Глюкоза</div>
+                            <div class="ind-value">5.8 <span class="ind-unit">ммоль/л</span></div>
+                            <span class="ind-status ind-warning">Внимание</span>
+                            <div class="ind-normal">Норма: 3.9-5.5</div>
+                        </div>
+                        <div class="indicator-card">
+                            <div class="ind-name">Холестерин</div>
+                            <div class="ind-value">5.4 <span class="ind-unit">ммоль/л</span></div>
+                            <span class="ind-status ind-warning">Внимание</span>
+                            <div class="ind-normal">Норма: 3.0-5.2</div>
+                        </div>
+                        <div class="indicator-card">
+                            <div class="ind-name">Креатинин</div>
+                            <div class="ind-value">88 <span class="ind-unit">мкмоль/л</span></div>
+                            <span class="ind-status ind-normal">Норма</span>
+                            <div class="ind-normal">Норма: 62-115</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- TAB: NUTRITION -->
+            <div id="tab-nutrition" class="tab-content">
+                <section class="card">
+                    <h2>🥗 Питание - Текущее vs Цель</h2>
+                    <div class="chart-container-medium">
+                        <canvas id="chartNutrition"></canvas>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <h2>Активность</h2>
+                    <div class="chart-container-small">
+                        <canvas id="chartActivity"></canvas>
+                    </div>
+                    <div class="activity-details">
+                        <div class="activity-row">
+                            <span>🚶 Шаги</span>
+                            <span>8 500 / 10 000</span>
+                        </div>
+                        <div class="activity-row">
+                            <span>🔥 Калории</span>
+                            <span>2 200 / 2 500</span>
+                        </div>
+                        <div class="activity-row">
+                            <span>🏋️ Тренировка</span>
+                            <span>45 / 60 мин</span>
+                        </div>
+                        <div class="activity-row">
+                            <span>😴 Сон</span>
+                            <span>7.2 / 8 ч</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- TAB: MUSCLES -->
+            <div id="tab-muscles" class="tab-content">
+                <section class="card">
+                    <h2>💪 Мышечный баланс</h2>
+                    <div class="chart-container-medium">
+                        <canvas id="chartMuscles"></canvas>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <h2>Детализация</h2>
+                    <div id="muscleList"></div>
+                </section>
+            </div>
+        </main>
+
+        <!-- FOOTER -->
+        <footer class="footer">
+            <span>Prisma Dashboard v2.0</span>
+            <span id="lastUpdate">Обновлено: --</span>
+        </footer>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

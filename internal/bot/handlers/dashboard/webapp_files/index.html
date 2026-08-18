@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Prisma - Мой профиль</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="style.v39.css">
+</head>
+<body>
+    <div class="dashboard">
+        <header class="header">
+            <div class="header-top">
+                <div class="brand">PRISMA</div>
+                <div id="premiumBadge" class="premium-badge">💎 Premium</div>
+            </div>
+            <h1 id="userName">Мой профиль</h1>
+            <p class="header-subtitle" id="analysisDate">-</p>
+        </header>
+
+        <main class="main">
+            <!-- Неблокирующая подсказка про Premium (видна, когда данные уже
+                 показаны, но подписка не оформлена). Скрыта в app.js. -->
+            <div class="premium-banner" id="premiumBanner" style="display:none;">
+                💎 Глубокий анализ-досье и Bioscan PRO доступны на Premium. Оформите подписку в боте (кнопка «💎 Premium» в меню).
+            </div>
+
+            <!-- Вкладки: Обзор / Анализы / Bioscan PRO -->
+            <nav class="tabs" role="tablist">
+                <button class="tab-btn active" type="button" data-tab="overview" onclick="showTab('overview')">🔍 Обзор</button>
+                <button class="tab-btn" type="button" data-tab="analysis" onclick="showTab('analysis')">📊 Анализы</button>
+                <button class="tab-btn" type="button" data-tab="bioscan" onclick="showTab('bioscan')">📸 Bioscan</button>
+                <button class="tab-btn" type="button" data-tab="monitoring" onclick="showTab('monitoring')">💉 Мониторинг</button>
+            </nav>
+
+            <!-- Вкладка «Обзор»: индексы, динамика, кровь, рекомендации -->
+            <section class="tab-panel active" id="tab-overview">
+                <!-- Индексы -->
+                <section class="card">
+                    <h2>Индекс здоровья</h2>
+                    <div class="indices-grid">
+                        <div class="index-card">
+                            <div class="index-value" id="healthIndex">-</div>
+                            <div class="index-label">Здоровье</div>
+                        </div>
+                        <div class="index-card">
+                            <div class="index-value" id="energyLevel">-</div>
+                            <div class="index-label">Энергия</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Динамика -->
+                <section class="card" id="trendCard">
+                    <h2>Динамика</h2>
+                    <div class="trend-current">
+                        <div class="trend-value" id="trendValue">-</div>
+                        <div class="trend-caption">Индекс здоровья · <span id="trendDate"></span></div>
+                        <div class="trend-scale">
+                            <div class="trend-scale-fill" id="trendScaleFill"></div>
+                        </div>
+                        <div class="trend-hint" id="trendHint"></div>
+                    </div>
+                    <div class="chart-container" id="trendChartWrap" style="display:none;">
+                        <canvas id="chartTrend"></canvas>
+                    </div>
+                </section>
+
+                <!-- Показатели из анализов и биосканов (адаптивные блоки).
+                     Заполняется из data.groups: категории последнего анализа
+                     (кровь/биохимия/гормоны/...) + блок тела Bioscan PRO. -->
+                <div id="metricGroups" class="metric-groups"></div>
+
+                <!-- Заглушки-тизеры: показываются, когда нет Premium, чтобы
+                     пользователь видел, какие карточки с анализами и прогрессом
+                     появятся после оформления подписки. Скрыты в app.js. -->
+                <div id="premiumStubs" class="metric-groups" style="display:none;">
+                    <section class="card stub-card">
+                        <span class="stub-tag">💎 Premium</span>
+                        <div class="placeholder-icon">📊</div>
+                        <h2>Показатели анализов</h2>
+                        <p class="hint">Здесь появятся блоки с вашими результатами: кровь, биохимия, иммуноглобулины - с подсветкой нормы и отклонений.</p>
+                    </section>
+                    <section class="card stub-card">
+                        <span class="stub-tag">💎 Premium</span>
+                        <div class="placeholder-icon">📈</div>
+                        <h2>Динамика прогресса</h2>
+                        <p class="hint">График изменения индекса здоровья по вашим отчётам покажет, как меняются показатели со временем.</p>
+                    </section>
+                    <section class="card stub-card">
+                        <span class="stub-tag">💎 Premium</span>
+                        <div class="placeholder-icon">✨</div>
+                        <h2>Bioscan PRO</h2>
+                        <p class="hint">Осанка, зоны тела и программа тренировок.</p>
+                    </section>
+                </div>
+
+                <!-- Рекомендации -->
+                <section class="card recommendations" id="recommendationsCard">
+                    <h2>💡 Рекомендации</h2>
+                    <ul id="recList" class="rec-list"></ul>
+                </section>
+            </section>
+
+            <!-- Вкладка «Анализы»: расширенные анализы (последний отчёт + графики + архив) -->
+            <section class="tab-panel" id="tab-analysis">
+                <!-- Плашка-заглушка: видна, пока нет ни одного отчёта.
+                     Скрывается в renderReportGroup, когда появляются данные. -->
+                <section class="card placeholder-card" id="analysisPlaceholder">
+                    <div class="placeholder-icon">📊</div>
+                    <h2>Расширенные анализы</h2>
+                    <p class="hint">Здесь появятся результаты ваших анализов - кровь, биохимия, гормоны - и расширенного анализа. Сделайте анализ в боте (кнопка «🧪 Анализы» в меню), и здесь отобразятся показатели и динамика.</p>
+                </section>
+
+                <section class="card report-card" id="analysisReportCard" style="display:none;">
+                    <h2 id="analysisReportHeader">📊 Расширенные анализы</h2>
+                    <!-- Плашка-подсказка: показывается на главном месте
+                         раздела «Анализы», когда загружен только один
+                         отчёт (сравнить и построить динамику не с чем). -->
+                    <div class="trend-placeholder" id="analysisTrendPlaceholder" style="display:none;">
+                        <div class="trend-placeholder-icon">📊</div>
+                        <p class="trend-placeholder-text" id="analysisTrendPlaceholderText"></p>
+                        <span class="trend-placeholder-sub" id="analysisTrendPlaceholderSub"></span>
+                    </div>
+                    <div class="report-head" id="analysisReportHead">
+                        <div>
+                            <div class="report-title" id="analysisReportTitle">-</div>
+                            <div class="report-date" id="analysisReportDate">-</div>
+                        </div>
+                        <div class="report-right">
+                            <div class="report-score" id="analysisReportScore">-</div>
+                        </div>
+                    </div>
+                    <div class="chart-container reports" id="analysisChartWrap" style="display:none;">
+                        <canvas id="chartAnalysis"></canvas>
+                    </div>
+                    <div class="ind-list" id="analysisIndicators"></div>
+                    <div class="archive" id="analysisArchive" style="display:none;">
+                        <div class="archive-title">📚 История отчётов</div>
+                        <div class="archive-list" id="analysisArchiveList"></div>
+                    </div>
+                    <p class="hint" id="analysisHint"></p>
+                </section>
+            </section>
+
+            <!-- Вкладка «Bioscan»: Bioscan PRO (последний отчёт + графики + архив) -->
+            <section class="tab-panel" id="tab-bioscan">
+                <!-- Плашка-заглушка: видна, пока нет ни одного отчёта.
+                     Скрывается в renderReportGroup, когда появляются данные. -->
+                <section class="card placeholder-card" id="bioscanPlaceholder">
+                    <div class="placeholder-icon">✨</div>
+                    <h2>Bioscan PRO</h2>
+                    <p class="hint">Здесь появятся результаты сканирования тела - осанка, зоны тела, программа тренировок. Сделайте Bioscan PRO в боте (кнопка «✨ Bioscan» в меню), и здесь отобразятся ваши данные с динамикой.</p>
+                </section>
+
+                <section class="card report-card" id="bioscanReportCard" style="display:none;">
+                    <h2 id="bioscanReportHeader">✨ Bioscan PRO</h2>
+                    <div class="report-head" id="bioscanReportHead">
+                        <div>
+                            <div class="report-title" id="bioscanReportTitle">-</div>
+                            <div class="report-date" id="bioscanReportDate">-</div>
+                        </div>
+                        <div class="report-right">
+                            <div class="report-score" id="bioscanReportScore">-</div>
+                        </div>
+                    </div>
+                    <div class="chart-container reports" id="bioscanChartWrap" style="display:none;">
+                        <canvas id="chartBioscan"></canvas>
+                    </div>
+                    <div class="zone-grid" id="bioscanZones"></div>
+                    <div class="archive" id="bioscanArchive" style="display:none;">
+                        <div class="archive-title">📚 История отчётов</div>
+                        <div class="archive-list" id="bioscanArchiveList"></div>
+                    </div>
+                    <p class="hint" id="bioscanHint"></p>
+                </section>
+            </section>
+
+            <!-- Вкладка «Мониторинг»: встроенное веб-приложение мониторинга внутри единого «Моего профиля». Грузится лениво при первом открытии вкладки (см. loadMonitoringFrame в app.js). -->
+            <section class="tab-panel" id="tab-monitoring">
+                <iframe id="monitoringFrame" class="monitoring-frame" title="Мониторинг" frameborder="0"></iframe>
+            </section>
+
+            <!-- Состояния (всегда видимы, вне вкладок) -->
+            <section class="card message-card" id="messageCard" style="display:none;">
+                <p id="messageText"></p>
+            </section>
+
+            <!-- Регистрация профиля (показывается, когда нет данных) -->
+            <section class="card register-card" id="registerCard">
+                <h2>👤 Заполните профиль</h2>
+                <p class="hint">Укажите базовые данные о себе - и ваш профиль оживёт (индекс, рекомендации, динамика).</p>
+                <div class="form">
+                    <label class="form-field">
+                        <span>Имя</span>
+                        <input type="text" id="regName" placeholder="Как вас зовут?" maxlength="50" autocomplete="name">
+                    </label>
+                    <div class="form-row">
+                        <label class="form-field">
+                            <span>Возраст</span>
+                            <input type="number" id="regAge" placeholder="30" min="5" max="90">
+                        </label>
+                        <label class="form-field">
+                            <span>Пол</span>
+                            <select id="regGender">
+                                <option value="">-</option>
+                                <option value="Мужской">Мужской</option>
+                                <option value="Женский">Женский</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label class="form-field">
+                            <span>Рост, см</span>
+                            <input type="number" id="regHeight" placeholder="175" min="50" max="210">
+                        </label>
+                        <label class="form-field">
+                            <span>Вес, кг</span>
+                            <input type="number" id="regWeight" placeholder="70" min="30" max="200">
+                        </label>
+                    </div>
+                    <label class="form-field">
+                        <span>Цель</span>
+                        <input type="text" id="regGoal" placeholder="Похудение, энергия, восстановление…" maxlength="120">
+                    </label>
+                    <p class="form-error" id="regError" style="display:none;"></p>
+                    <button class="btn-primary" id="regSubmit" type="button">Сохранить профиль</button>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <span>Prisma - Мой профиль</span>
+            <span id="lastUpdate">Обновлено: -</span>
+        </footer>
+    </div>
+
+    <!-- Встроенный просмотрщик отчёта: открывает PDF/HTML прямо внутри
+         Mini App (iframe), без зависимости от блокировки попапов WebView.
+         Показывается по клику на «📄 PDF» карточки или строку истории. -->
+    <div class="report-viewer" id="reportViewer" style="display:none;">
+        <div class="report-viewer-bar">
+            <span class="report-viewer-title">📄 Просмотр отчёта</span>
+            <button class="report-viewer-close" id="reportViewerClose" type="button">✕ Закрыть</button>
+        </div>
+        <iframe class="report-viewer-frame" id="reportViewerFrame" title="Отчёт" frameborder="0"></iframe>
+    </div>
+
+    <script defer src="app.v39.js"></script>
+</body>
+</html>

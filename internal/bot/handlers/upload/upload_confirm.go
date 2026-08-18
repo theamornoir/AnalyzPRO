@@ -30,7 +30,11 @@ func CancelUpload(
 	stateManager.SetUserData(chatID, "uploaded_files", "")
 	stateManager.SetUserData(chatID, "file_count", "")
 	stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
-	helpers.SendAndDelete(ctx, b, tgbot.SendMessageParams{
+	// Персистентное (не самоудаляющееся) сообщение: иначе после удаления
+	// кнопки по глобальному правилу внизу чата осталось бы «пустое дно».
+	// Тот же ключ трекинга, что и у главного меню (helpers.MainMenuMsgKey) -
+	// при возврате в меню/входе в раздел старое сообщение подчистится.
+	helpers.ShowPersistentMessage(ctx, b, stateManager, chatID, helpers.MainMenuMsgKey, tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgUploadCancelled,
 		ReplyMarkup: keyboards.MainMenu(),
@@ -79,7 +83,9 @@ func handleUploadConfirm(
 		stateManager.SetUserData(chatID, "file_count", "")
 		stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
 
-		helpers.SendAndDelete(ctx, b, tgbot.SendMessageParams{
+		// Персистентное (не самоудаляющееся) сообщение - см. обоснование в
+		// CancelUpload. Тот же ключ трекинга, что и у главного меню.
+		helpers.ShowPersistentMessage(ctx, b, stateManager, chatID, helpers.MainMenuMsgKey, tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgUploadCancelled,
 			ReplyMarkup: keyboards.MainMenu(),

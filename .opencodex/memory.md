@@ -24,25 +24,37 @@
 
 ## AI-слой (единый Claude-клиент)
 - `internal/ai/claude/client.go`: `Client`, `NewClient()` (ключ `ANTHROPIC_API_KEY`; пустой → вызовы возвращают ошибку, бот стартует). Метод `GenerateWithFiles(ctx, systemPrompt, prompt, files []Attachment, maxTokens)` — промпт + ВСЕ файлы в ОДНО сообщение (image-блок/PDF document-блок). Модель `claude-3-5-sonnet-20241022`, таймаут 120с, прокси `HTTP(S)_PROXY`.
-- **AI-СЕМАФОР (2026-08-20):** `var sem = semaphore.NewWeighted(8)` (golang.org/x/sync, в go.mod). В начале `GenerateWithFiles`: `sem.Acquire(ctx,1)` + `defer sem.Release(1)`. Лимит 8 одновременных запросов к Claude — защита от 429 и OOM при 500+ юзерах.
+- **AI-СЕМАФОР:** `var sem = semaphore.NewWeighted(8)` (golang.org/x/sync). В начале `GenerateWithFiles`: `sem.Acquire(ctx,1)` + `defer sem.Release(1)`. Лимит 8 одновременных запросов к Claude — защита от 429 и OOM.
 
 ## Аналитика (PostHog)
-- `github.com/posthog/posthog-go` (в go.mod). Ключ `POSTHOG_API_KEY`; пустой → no-op. Глобальный `InitPostHog`/`Track`/`ClosePostHog` (async Enqueue, не блокирует ответ). Имя события = русская подпись (labels.go), тех. ключ в `action`/`source`. Подключено в `router.handle` (каждый clickstream) + предметные события.
+- `github.com/posthog/posthog-go`. Ключ `POSTHOG_API_KEY`; пустой → no-op. Глобальный `InitPostHog`/`Track`/`ClosePostHog` (async Enqueue). Имя события = русская подпись (labels.go), тех. ключ в `action`/`source`. Подключено в `router.handle` (каждый clickstream) + предметные события.
 
 ## Деплой / прод
 - Прод: свой домен HTTPS + `WEBAPP_URL=https://<домен>/dashboard`; `analyzpro.service` (systemd, flock `/tmp/analyzpro.lock`).
 
-## Промокоды на Premium (команда /promo, 2026-08-20)
-- Одноразовая активация на 365 дней. Коды в env `PROMO_CODES` (через запятую) → `config.PromoCodes []string` (`parseCSV`). `/promo <code>` (MatchTypePrefix) → `Bot.handlePromo`: нормализация → проверка в списке → `Users.IsPromoCodeUsed` → `paymentService.ActivatePremiumManually(chatID, "premium_yearly")` + `UpdateUserPremiumStatus`(is_premium=1, +1 год) + `MarkPromoCodeUsed`. Таблица `used_promocodes (user_id, code, used_at, UNIQUE(user_id,code))`; методы во всех 3 бэкендах. ⚠️ Коды ТОЛЬКО в `.env` (секреты, не править напрямую).
+## Промокоды на Premium (команда /promo)
+- Одноразовая активация на 365 дней. Коды в env `PROMO_CODES` (через запятую) → `config.PromoCodes []string`. `/promo <code>` (MatchTypePrefix) → `Bot.handlePromo`: нормализация → проверка в списке → `Users.IsPromoCodeUsed` → `paymentService.ActivatePremiumManually(chatID, "premium_yearly")` + `UpdateUserPremiumStatus`(is_premium=1, +1 год) + `MarkPromoCodeUsed`. Таблица `used_promocodes (user_id, code, used_at, UNIQUE(user_id,code))`. ⚠️ Коды ТОЛЬКО в `.env`.
 
 ## Бот: ошибки / UX
 - `sendAnalysisError` (upload): удаляет loading, `stateManager.Reset`, `MsgTextProcessingError` + `MainMenu()`.
 - Хаб разделов — ДВА сообщения: «якорь» (описание + reply `[Назад]`) и «блок» (inline-кнопки, без «Назад»). Кнопка «← Назад» (`back_to_main`) возвращает в главное меню.
 
+## Навигация Premium (важно при правке!)
+- Экран Premium — ДВА сообщения: `premium_anchor_id` («якорь» 💎 Premium + reply `[Назад]`) и `premium_msg_id` (список тарифов / экран оплаты / подтверждение).
+- **ТРЕКИНГ id экрана Premium ВЫНЕСЕН в ОТДЕЛЬНЫЙ map `MemoryStateManager.premiumScreen` (методы `Set/Get/ClearPremiumScreenID` в интерфейсе `StateManager`), персистится в `states.json` и пишется СИНХРОННО.** НЕ лежит в `m.data` (user-data), потому что `stateManager.Reset` целиком стирает `m.data`, а запись user-data — асинхронная (`go m.save()`), терялась при kill/перезапуске. Отдельный map переживает `Reset` И перезапуск бота → старое сообщение Premium в чате больше не «висит» навсегда. Это РЕАЛЬНЫЙ корень «висящего Premium».
+- Очистка — `clearPremiumScreen` (`internal/bot/handlers/menu/premium.go`): читает id СНАЧАЛА из нового map, затем fallback из legacy user-data (миграция старых висящих экранов), удаляет оба сообщения, затем `ClearPremiumScreenIDs` + сброс legacy-ключей. Вызывается ПЕРЕД каждым показом (вход/PremiumHandler, смена тарифа HandleChangeTariff, confirm) и из `backToParent`/`start.go`/`reset.go`.
+- Кнопка `💎 Premium` идёт ТОЛЬКО через роутер (`router_menu.go` case BtnPremium) → `current_section="premium"` + убирает закреплённое меню. НЕЛЬЗЯ регистрировать как отдельный `RegisterHandler` (иначе current_section не выставляется → «Назад» оставляет экран висеть).
+- На выходе «Назад»: `backToParent` (`router_back.go`) чистит экран Premium по `premiumScreenTracked()` (факт отслеживания id в новом map ИЛИ legacy user-data) — устойчиво к рассинхронизации. Затем `showMainMenuMessage`.
+- `/start` (`StartHandler`) и `/resetme` (`ResetHandler`) вызывают `clearPremiumScreen` СТРОГО ПЕРЕД `stateManager.Reset`. Теперь id в отдельном map, так что даже при нарушении порядка они не теряются, но порядок сохранён для надёжности.
+- **ТЕСТЫ навигации:**
+  - `router_premium_test.go` — интеграционный (реальный `tgbot.New` + httptest mock Telegram, sendMessage отдаёт инкрементный message_id, deleteMessage запоминает удалённые id): 💎 Premium → premium_<id> → premium_confirm_<id> → 💎 Premium → premium_change → Назад. `go test ./internal/bot/handlers/router/ -run TestPremiumScreenCleanedOnBack -v`.
+  - `router_premium_delete_test.go` — юнит `backToParent` удаляет якорь+список (mock парсит multipart-форму для deleteMessage, иначе MessageID=0 и тест ложно падает).
+  - `internal/bot/states/manager_test.go` — `TestPremiumScreenSurvivesReset` (id переживают `Reset`) и `TestPremiumScreenPersistedAcrossReload` (id переживают перезапуск/файл).
+
 ## Готчи при правке
 - ⚠️ `internal/locales/messages.go` может быть ПОВРЕЖДЁН в рабочем дереве (обрезанный литерал) → `git checkout -- internal/locales/messages.go`.
 - ⚠️ Демо-правки `dashboard.go` живут ТОЛЬКО в рабочем дереве — **НЕ `git checkout -- internal/bot/handlers/dashboard/dashboard.go`**.
-- ⚠️ `internal/db/db.go` `Migrate` использует WAL + `busy_timeout(5000)` + `synchronous(NORMAL)`; пул поднят до `SetMaxOpenConns(8)`/`SetMaxIdleConns(8)` (нагрузочный тест: чтения ×4, записи не страдают). ПРАВИЛО: в миграциях `conn.Query(...)` БЕЗ `rows.Close()` → утечка соединения → deadlock. Либо `QueryRow().Scan()`, либо `rows.Close()`.
+- ⚠️ `internal/db/db.go` `Migrate` использует WAL + `busy_timeout(5000)` + `synchronous(NORMAL)`; пул `SetMaxOpenConns(8)`/`SetMaxIdleConns(8)`. ПРАВИЛО: в миграциях `conn.Query(...)` БЕЗ `rows.Close()` → утечка соединения → deadlock. Либо `QueryRow().Scan()`, либо `rows.Close()`.
 - ⚠️ `WebAppAssetsVersion`/`WithWebAppVersion`/`OpenHealthSummaryButton` — в пакете `keyboards` (не в router_menu_actions).
 
 ## Стиль пользовательского текста
@@ -53,7 +65,7 @@
 - Расширенный анализ (Premium): 20 вопросов `internal/bot/handlers/userdata/`. Bioscan PRO (Premium): 18 вопросов `bioscan_questionnaire.go`. Базовый Bioscan/обычный анализ опросники НЕ используют.
 
 ## Premium-плашка в Сводке (Mini App, без кнопок)
-- Нет Premium → `#messageCard`/`#messageText` (функция `showPremiumRequired`): «💎 Для просмотра «Мой профиль» нужна Premium-подписка. Оформите её в боте - нажмите кнопку «💎 Premium» в меню.» Без deep-link `/start premium` (удалён).
+- Нет Premium → `#messageCard`/`#messageText` (функция `showPremiumRequired`): «💎 Для просмотра «Мой профиль» нужна Premium-выподска. Оформите её в боте - нажмите кнопку «💎 Premium» в меню.» Без deep-link `/start premium`.
 
 ## Напоминания (internal/bot/reminders)
 - `RunReminderLoop` (goroutine в app.Run, раз в 6ч) по `users.last_activity_date`: ≥10 дней неактивности → `GetRandomReminder()` из пула `locales.Reminders` (≤200 символов); ставит `last_activity_date=now` (дебаунс). Уважает `Preferences.NotificationsEnabled`. `BroadcastFeature` — одноразовая рассылка.

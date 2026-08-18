@@ -56,6 +56,9 @@ func (r *router) handleMenuButtons(ctx context.Context, b *tgbot.Bot, chatID int
 
 	case locales.BtnPremium:
 		log.Printf(locales.LogRouterMenuPremium, chatID)
+		// Уходим из главного меню в экран Premium - убираем закреплённое
+		// сообщение главного меню, чтобы оно не висело над экраном тарифов.
+		r.deleteMainMenuMessage(ctx, b, chatID)
 		r.setCurrentSection(chatID, "premium")
 		menu.PremiumHandler(r.stateManager, r.paymentService)(ctx, b, update)
 		return true

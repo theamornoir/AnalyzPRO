@@ -365,13 +365,15 @@ func (b *Bot) registerHandlers() {
 		menu.StartHandler(b.stateManager, b.agreementStorage, b.appStorage),
 	)
 
-	// Premium - кнопка меню
-	b.client.RegisterHandler(
-		tgbot.HandlerTypeMessageText,
-		locales.BtnPremium,
-		tgbot.MatchTypeExact,
-		menu.PremiumHandler(b.stateManager, b.paymentService),
-	)
+	// Примечание: кнопка меню 💎 Premium НЕ регистрируется здесь как
+	// отдельный обработчик. Если бы она шла напрямую в menu.PremiumHandler,
+	// это обходило бы router.handle и, как следствие, ветку
+	// router_menu.go «case BtnPremium» - единственное место, где ставится
+	// current_section="premium" и убирается закреплённое сообщение главного
+	// меню. Без current_section="premium" кнопка «Назад» позже не попадала
+	// бы в премиум-ветку backToParent (экран тарифов «висел» бы в чате).
+	// Поэтому кнопка 💎 Premium идёт через общий роутер (обработчик "" ниже)
+	// и попадает в handleMenuButtons → BtnPremium правильным путём.
 
 	// Админ-команда сброса Premium/онбординга (только для ADMIN_CHAT_ID).
 	// Доступна по двум алиасам: /resetme и /reset_premium.

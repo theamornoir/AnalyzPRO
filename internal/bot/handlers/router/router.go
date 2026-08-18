@@ -201,6 +201,10 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 	// пропускаем - их обрабатывают шаги потока/загрузки.
 	if text != "" && r.isMainMenuButton(text) {
 		if r.handleMenuButtons(ctx, b, chatID, text, update) {
+			// Правило «кнопка/выбор удаляется после ответа»: нажата
+			// reply-кнопка меню (хаб Анализы/Здоровье/Сервис/Premium или
+			// под-действие) - убираем текстовое сообщение пользователя.
+			r.deleteUserMessageAfterReply(ctx, b, update)
 			return
 		}
 	}
@@ -212,11 +216,17 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 
 	// Обработка кнопки "Назад"
 	if r.handleBack(ctx, b, chatID, text) {
+		// Правило «кнопка/выбор удаляется после ответа»: убираем сообщение
+		// пользователя с кнопкой «⬅️ Назад».
+		r.deleteUserMessageAfterReply(ctx, b, update)
 		return
 	}
 
 	// Обработка кнопки "Отмена" внутри анкеты/опросника (выход без сохранения)
 	if r.handleCancel(ctx, b, chatID, text) {
+		// Правило «кнопка/выбор удаляется после ответа»: убираем сообщение
+		// пользователя с кнопкой «❌ Отмена».
+		r.deleteUserMessageAfterReply(ctx, b, update)
 		return
 	}
 
@@ -232,11 +242,72 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 
 	// Обработка кнопок меню
 	if r.handleMenuButtons(ctx, b, chatID, text, update) {
+		// Правило «кнопка/выбор удаляется после ответа»: резервный вызов
+		// (не main-menu-кнопка, но всё же кнопка меню) - убираем сообщение.
+		r.deleteUserMessageAfterReply(ctx, b, update)
 		return
 	}
 
 	// Обработка обычного текста
 	r.handleText(ctx, b, chatID, text)
+}
+
+// deleteUserMessageAfterReply - реализует глобальное правило «кнопка/выбор
+// удаляется после того, как бот ответил» для нажатий reply-кнопок меню
+// (включая под-действия разделов), «⬅️ Назад» и «❌ Отмена». Удаляет
+// текстовое сообщение пользователя с кнопкой спустя небольшую задержку
+// (чтобы он успел увидеть свой выбор), не засоряя историю чата.
+//
+// Фото/документы/вложения не трогаем (у них Text пустой) - их удаление могло
+// бы помешать обработке загрузки или оставить пользователя без видимого
+// следа отправленного файла.
+func (r *router) deleteUserMessageAfterReply(ctx context.Context, b *tgbot.Bot, update *models.Update) {
+	m := update.Message
+	if m == nil || m.ID == 0 {
+		return
+	}
+	if strings.TrimSpace(m.Text) == "" {
+		return
+	}
+	helpers.DeleteAfterReply(ctx, b, m.Chat.ID, m.ID)
+}
+
+// deleteCallbackMessageAfterReply - реализует глобальное правило «кнопка/
+// выбор удаляется после того, как бот ответил» для inline-нажатий, где бот
+// отправляет НОВОЕ сообщение (а не редактирует текущее). Удаляет исходное
+// сообщение с inline-клавиатурой спустя небольшую задержку после ответа.
+//
+// Используется для семейства Premium (выбор тарифа / подтверждение оплаты /
+// смена тарифа) - во всех этих случаях бот шлёт новое сообщение, а старое с
+// кнопками становится «мусором» в истории.
+//
+// НЕ применяется там, где хендлер РЕДАКТИРУЕТ то же сообщение (переключение
+// вкладок хаба, подтверждение загрузки/биоскана) - там удалять нельзя, иначе
+// исчезнет сам ответ.
+func (r *router) deleteCallbackMessageAfterReply(ctx context.Context, b *tgbot.Bot, update *models.Update) {
+	cq := update.CallbackQuery
+	if cq == nil || cq.Message.Message == nil {
+		return
+	}
+	m := cq.Message.Message
+	if m.ID == 0 {
+		return
+	}
+	helpers.DeleteAfterReply(ctx, b, cq.From.ID, m.ID)
+}
+
+// isHubTabSwitch - true для inline-кнопок переключения вкладок раздела-хаба
+// (Анализы/Здоровье/Сервис). Эти хендлеры РЕДАКТИРУЮТ исходное сообщение на
+// месте (renderHub → editHubPair), поэтому его нельзя удалять по глобальному
+// правилу «кнопка/выбор удаляется после ответа» - иначе исчезнет сам ответ.
+// Все прочие inline-нажатия отправляют НОВОЕ сообщение, и их исходное
+// сообщение с клавиатурой должно быть убрано.
+func isHubTabSwitch(callbackData string) bool {
+	switch callbackData {
+	case "section_analysis", "section_health", "section_service":
+		return true
+	}
+	return false
 }
 
 // handleOnboarding обрабатывает callback-запросы онбординга (префикс
@@ -296,6 +367,17 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// ChatID пользователя совпадает с ID отправителя.
 	chatID := update.CallbackQuery.From.ID
 
+	// Глобальное правило «кнопка/выбор удаляется после ответа»: после того
+	// как бот ответил на inline-нажатие, исходное сообщение с inline-
+	// клавиатурой убирается из чата (не плодит «мусор» в истории).
+	// Исключение - переключение вкладок хаба (section_analysis/health/
+	// service): эти хендлеры РЕДАКТИРУЮТ то же сообщение на месте
+	// (renderHub → editHubPair), поэтому удалять его нельзя - иначе
+	// исчезнет сам ответ.
+	if !isHubTabSwitch(callbackData) {
+		r.deleteCallbackMessageAfterReply(ctx, b, update)
+	}
+
 	log.Printf(locales.LogRouterCallback, dashboard.MaskID(chatID), callbackData)
 
 	// Ловим панику в обработчике: tgbot иногда «глотает» панику, и тогда
@@ -320,6 +402,8 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// после отрезания префикса «premium_» дадут «confirm_<tariffID>».
 	if strings.HasPrefix(callbackData, "premium_confirm_") {
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "premium_confirm")
+		// Исходное сообщение со ссылкой на оплату убирается общим правилом
+		// «кнопка/выбор удаляется после ответа» (см. начало handleCallback).
 		menu.HandlePremiumConfirm(r.stateManager, r.paymentService, r.webAppURL, r.dashboardURL)(ctx, b, update, callbackData)
 		log.Printf(locales.LogRouterCallbackDone, dashboard.MaskID(chatID), callbackData)
 		return
@@ -329,6 +413,8 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// общего «premium_», иначе «premium_change» попал бы в выбор тарифа.
 	if callbackData == "premium_change" {
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "premium_change")
+		// Экран активного Premium убирается общим правилом «кнопка/выбор
+		// удаляется после ответа» (см. начало handleCallback).
 		if menu.HandleChangeTariff(r.stateManager, r.paymentService)(ctx, b, update, callbackData) {
 			log.Printf(locales.LogRouterCallbackDone, dashboard.MaskID(chatID), callbackData)
 		}
@@ -338,6 +424,8 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// Premium callback (выбор тарифа → экран оплаты)
 	if strings.HasPrefix(callbackData, "premium_") {
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "premium")
+		// Исходное сообщение со списком тарифов убирается общим правилом
+		// «кнопка/выбор удаляется после ответа» (см. начало handleCallback).
 		menu.HandlePremiumCallback(r.stateManager, r.paymentService)(ctx, b, update, callbackData)
 		log.Printf(locales.LogRouterCallbackDone, dashboard.MaskID(chatID), callbackData)
 		return
@@ -372,11 +460,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 			helpers.DeleteMessage(ctx, b, chatID, mm.Message.ID)
 		}
 		r.stateManager.SetState(chatID, states.StateIdle)
-		helpers.SendAndDelete(ctx, b, tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgBackToMainMenu,
-			ReplyMarkup: keyboards.MainMenu(),
-		})
+		r.showMainMenuMessage(ctx, b, chatID, locales.MsgBackToMainMenu)
 		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
 			CallbackQueryID: update.CallbackQuery.ID,
 		})

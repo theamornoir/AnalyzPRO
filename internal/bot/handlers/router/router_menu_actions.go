@@ -44,6 +44,19 @@ const hubAnchorKey = "hub_anchor_id"
 // именно текущее сообщение раздела перед возвратом в главное меню.
 const lastMsgKey = "last_msg_id"
 
+// mainMenuMsgKey - ключ в user-data для message_id «закреплённого» сообщения
+// главного меню. Когда пользователь возвращается в главное меню (кнопка
+// «Назад» / «Отмена» / выход из Premium), бот оставляет ПЕРСИСТЕНТНОЕ
+// сообщение меню, а не самоудаляющееся уведомление. Иначе после удаления
+// кнопок по глобальному правилу «кнопка/выбор удаляется после ответа» внизу
+// чата образуется «пустое дно». Старое закреплённое сообщение удаляется
+// перед показом нового, чтобы не плодить дубли.
+//
+// Ключ вынесен в пакет helpers (helpers.MainMenuMsgKey), чтобы его мог
+// переиспользовать и пакет upload (router импортирует upload, прямой импорт
+// наоборот дал бы цикл).
+const mainMenuMsgKey = helpers.MainMenuMsgKey
+
 // hubSection описывает содержимое одного раздела-хаба.
 type hubSection struct {
 	text    string
@@ -80,6 +93,11 @@ func (r *router) renderHub(ctx context.Context, b *tgbot.Bot, chatID int64, sect
 
 	// Запоминаем текущий раздел для иерархического «Назад» (подшаг -> хаб).
 	r.setCurrentSection(chatID, section)
+
+	// Уходим из главного меню в раздел-хаб - убираем закреплённое
+	// сообщение главного меню (в т.ч. приветствие /start), чтобы оно
+	// не висело над хабом. Безопасно, если такого сообщения нет.
+	r.deleteMainMenuMessage(ctx, b, chatID)
 
 	anchorID := r.hubAnchorID(chatID)
 	msgID := r.hubMessageID(chatID)
@@ -167,6 +185,10 @@ func (r *router) deleteHubBlock(ctx context.Context, b *tgbot.Bot, chatID int64)
 	}
 	r.setHubAnchorID(chatID, 0)
 	r.setHubMessageID(chatID, 0)
+	// Также убираем «висячее» закреплённое сообщение главного меню: оно
+	// могло остаться, если пользователь ушёл из главного меню в раздел/флоу
+	// (например, нажал «Анализы»). Безопасно при отсутствии.
+	r.deleteMainMenuMessage(ctx, b, chatID)
 }
 
 // hubMessageID / setHubMessageID - чтение/запись message_id текущего блока-хаба.
@@ -208,6 +230,49 @@ func (r *router) lastMsgID(chatID int64) int {
 
 func (r *router) setLastMsg(chatID int64, msgID int) {
 	r.stateManager.SetUserData(chatID, lastMsgKey, strconv.Itoa(msgID))
+}
+
+// mainMenuMsgID / setMainMenuMsgID - чтение/запись message_id закреплённого
+// сообщения главного меню.
+func (r *router) mainMenuMsgID(chatID int64) int {
+	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, mainMenuMsgKey))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
+
+func (r *router) setMainMenuMsgID(chatID int64, msgID int) {
+	r.stateManager.SetUserData(chatID, mainMenuMsgKey, strconv.Itoa(msgID))
+}
+
+// deleteMainMenuMessage - удаляет закреплённое сообщение главного меню (если
+// есть) и сбрасывает его id. Безопасно при отсутствии.
+func (r *router) deleteMainMenuMessage(ctx context.Context, b *tgbot.Bot, chatID int64) {
+	if id := r.mainMenuMsgID(chatID); id > 0 {
+		helpers.DeleteMessage(ctx, b, chatID, id)
+		r.setMainMenuMsgID(chatID, 0)
+	}
+}
+
+// showMainMenuMessage - показывает ПЕРСИСТЕНТНОЕ сообщение главного меню
+// (text + Reply-клавиатура MainMenu) и закрепляет его id в user-data,
+// предварительно удалив предыдущее закреплённое сообщение. Используется
+// вместо helpers.SendAndDelete(MsgBackToMainMenu): по глобальному правилу
+// «кнопка/выбор удаляется после ответа» исходные сообщения с кнопками
+// (включая «Назад») исчезают, поэтому возврат в главное меню должен оставить
+// видимое меню, а не самоудаляющуюся запись - иначе внизу чата образуется
+// «пустое дно».
+func (r *router) showMainMenuMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
+	r.deleteMainMenuMessage(ctx, b, chatID)
+	msg, err := b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        text,
+		ReplyMarkup: keyboards.MainMenu(),
+	})
+	if err == nil && msg != nil {
+		r.setMainMenuMsgID(chatID, msg.ID)
+	}
 }
 
 // handleFeedbackStart - запускает режим ввода отзыва/предложения: описывает

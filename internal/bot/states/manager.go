@@ -92,6 +92,16 @@ type StateManager interface {
 	SetUserData(chatID int64, key, value string)
 	GetUserData(chatID int64, key string) string
 	GetAllUserData(chatID int64) map[string]string
+	// Premium-экран: отдельные методы трекинга id сообщений экрана Premium
+	// (якорь + список/оплата/подтверждение). Намеренно ВЫНЕСЕНЫ из общего
+	// user-data (m.data), потому что stateManager.Reset(chatID) очищает
+	// m.data целиком - иначе id экрана Premium терялись бы при /start и
+	// сообщение навсегда «висело» в чате. Здесь же запись синхронная
+	// (без go), чтобы id гарантированно попал на диск ДО возможного
+	// перезапуска бота (асинхронный go m.save() мог не успеть при kill).
+	SetPremiumScreenID(chatID int64, key, value string)
+	GetPremiumScreenID(chatID int64, key string) string
+	ClearPremiumScreenIDs(chatID int64)
 }
 
 type MemoryStateManager struct {
@@ -99,21 +109,27 @@ type MemoryStateManager struct {
 	filePath string
 	states   map[int64]State
 	data     map[int64]map[string]string
+	// premiumScreen - отдельное хранилище id сообщений экрана Premium.
+	// Не очищается Reset (в отличие от m.data), персистится и пишется
+	// синхронно - см. обоснование в интерфейсе StateManager.
+	premiumScreen map[int64]map[string]string
 }
 
 // persistedState - структура для сохранения состояния на диск
 type persistedState struct {
-	States map[int64]State             `json:"states"`
-	Data   map[int64]map[string]string `json:"data"`
+	States  map[int64]State             `json:"states"`
+	Data    map[int64]map[string]string `json:"data"`
+	Premium map[int64]map[string]string `json:"premium"`
 }
 
 // NewMemoryStateManager создаёт in-memory менеджер состояний.
 // Если filePath не пуст, состояния будут персистентно сохраняться на диск.
 func NewMemoryStateManager(filePath string) *MemoryStateManager {
 	m := &MemoryStateManager{
-		filePath: filePath,
-		states:   make(map[int64]State),
-		data:     make(map[int64]map[string]string),
+		filePath:      filePath,
+		states:        make(map[int64]State),
+		data:          make(map[int64]map[string]string),
+		premiumScreen: make(map[int64]map[string]string),
 	}
 	if filePath != "" {
 		m.load()
@@ -141,12 +157,21 @@ func (m *MemoryStateManager) load() {
 	if ps.Data != nil {
 		m.data = ps.Data
 	}
+	if ps.Premium != nil {
+		m.premiumScreen = ps.Premium
+	}
 }
 
 func (m *MemoryStateManager) save() {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	m.saveLocked()
+}
 
+// saveLocked - записывает состояние на диск. ВЫЗЫВАТЬ ТОЛЬКО УЖЕ ДЕРЖА
+// m.mu (под RLock или Lock) - сама блокировку НЕ берёт (иначе deadlock при
+// вызове из-под Lock в SetPremiumScreenID/ClearPremiumScreenIDs).
+func (m *MemoryStateManager) saveLocked() {
 	if m.filePath == "" {
 		return
 	}
@@ -162,8 +187,9 @@ func (m *MemoryStateManager) save() {
 	defer file.Close()
 
 	ps := persistedState{
-		States: m.states,
-		Data:   m.data,
+		States:  m.states,
+		Data:    m.data,
+		Premium: m.premiumScreen,
 	}
 	_ = json.NewEncoder(file).Encode(ps)
 }
@@ -228,4 +254,41 @@ func (m *MemoryStateManager) GetAllUserData(chatID int64) map[string]string {
 		return result
 	}
 	return make(map[string]string)
+}
+
+// --- Трекинг id сообщений экрана Premium (якорь + список/оплата/
+// подтверждение). Хранится в ОТДЕЛЬНОМ map (premiumScreen), который НЕ
+// очищается Reset, и пишется СИНХРОННО (без go), чтобы id экрана
+// гарантированно попал на диск до перезапуска бота. Это устраняет
+// «висящий» экран Premium, который ранее не удалялся после /start или
+// перезапуска, потому что его id терялся (Reset стирал m.data, а
+// асинхронный save мог не успеть при kill).
+
+func (m *MemoryStateManager) SetPremiumScreenID(chatID int64, key, value string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.premiumScreen[chatID]; !ok {
+		m.premiumScreen[chatID] = make(map[string]string)
+	}
+	m.premiumScreen[chatID][key] = value
+	// Синхронно - id критично сохранить до возможного перезапуска.
+	m.saveLocked()
+}
+
+func (m *MemoryStateManager) GetPremiumScreenID(chatID int64, key string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if d, ok := m.premiumScreen[chatID]; ok {
+		if v, ok := d[key]; ok {
+			return v
+		}
+	}
+	return ""
+}
+
+func (m *MemoryStateManager) ClearPremiumScreenIDs(chatID int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.premiumScreen, chatID)
+	m.saveLocked()
 }
