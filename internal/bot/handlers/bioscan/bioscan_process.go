@@ -215,5 +215,3 @@ func ProcessBioscanWithPhotos(
 	// кнопку для мгновенного открытия (все типы биосканов хранятся там).
 	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
 }
-
-

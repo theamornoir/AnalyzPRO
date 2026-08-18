@@ -27,7 +27,6 @@ type Report struct {
 	Progress       Progress        `json:"progress"`
 }
 
-
 type Profile struct {
 	Name              string `json:"name"`
 	Date              string `json:"date"`

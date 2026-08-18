@@ -143,7 +143,6 @@ func showPremiumMenu(ctx context.Context, b *tgbot.Bot, stateManager states.Stat
 		ChatID:      chatID,
 		Text:        locales.MsgPremiumSubscription,
 		ReplyMarkup: buildTariffKeyboard(),
-		ParseMode:   "HTML",
 	})
 	if msg != nil {
 		stateManager.SetUserData(chatID, premiumMsgKey, strconv.Itoa(msg.ID))
