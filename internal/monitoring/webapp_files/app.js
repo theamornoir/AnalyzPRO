@@ -196,6 +196,9 @@ document.addEventListener('DOMContentLoaded', () => {
     initCreateForm();
     initProjectTabs();
     initModal();
+    // Заглушка Мониторинга (Free) становится кликабельной: клик закрывает
+    // Mini App и открывает раздел Premium в боте (конверсия на подписку).
+    bindFreeStub();
     loadProjects();
     // Возврат из бота после оплаты Premium: обновляем список проектов,
     // если была попытка оплаты (защита от «мёртвого конца»). sessionStorage
@@ -279,6 +282,48 @@ function drawFreeStubChart() {
             scales: { y: { beginAtZero: false }, x: { grid: { display: false } } },
         },
     });
+}
+
+// ------------------------------------------------------------
+// Заглушка Мониторинга для Free: кликабельная плашка.
+// Клик открывает раздел Premium в боте (где пользователь может оформить
+// подписку) и закрывает Mini App. Логика совпадает с openPremium() дашборда:
+// приоритет - ссылка из /api/monitoring/status (premiumLink), иначе
+// дефолтный deep-link start=premium. Фиксируем попытку в sessionStorage,
+// чтобы дашборд при возврате предложил проверить статус.
+//
+// ВАЖНО про порядок: по документации Telegram WebApp openTelegramLink САМ
+// переключает на чат с ботом и закрывает Mini App. Поэтому вызываем его
+// ПЕРВЫМ, пока контекст жив; close() ниже - страховка на случай, если
+// openTelegramLink недоступен/не сработал (иначе контекст убит до вызова).
+// ------------------------------------------------------------
+function openPremiumFromMonitoringStub() {
+    try { sessionStorage.setItem("payment_attempt", "true"); } catch (e) {}
+    var link = __premiumLink || "https://t.me/PrismaBot?start=premium";
+    var opened = false;
+    if (tg && typeof tg.openTelegramLink === "function") {
+        try { tg.openTelegramLink(link); opened = true; } catch (e) {}
+    }
+    if (tg && typeof tg.close === "function") {
+        try { tg.close(); } catch (e) {}
+    }
+    if (!opened) {
+        showToast("Откройте бота Prisma и нажмите кнопку «💎 Premium» в меню.");
+    }
+}
+
+// Навешивает обработчик клика на плашку (и на любой элемент с классом
+// .free-stub-clickable - на случай отдельной кнопки «💎 Открыть Мониторинг»).
+function bindFreeStub() {
+    var plaque = $("freeStubPlaque");
+    if (plaque) {
+        plaque.addEventListener("click", openPremiumFromMonitoringStub);
+    }
+    try {
+        document.querySelectorAll(".free-stub-clickable").forEach(function (el) {
+            el.addEventListener("click", openPremiumFromMonitoringStub);
+        });
+    } catch (e) {}
 }
 
 // ------------------------------------------------------------

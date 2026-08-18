@@ -189,6 +189,22 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 		return
 	}
 
+	// Deep-link из Mini App: /start premium открывает раздел Premium
+	// (тот же путь, что кнопка меню «💎 Premium»). Используется заглушкой
+	// Мониторинга для Free: клик по плашке закрывает Mini App и шлёт
+	// start=premium, бот должен показать тарифы/оплату. Идём СТРОГО через
+	// тот же код, что case BtnPremium в router_menu.go: выставляем
+	// current_section="premium" (нужен для «Назад» и очистки висящего
+	// экрана) и вызываем menu.PremiumHandler. Не регистрируем как
+	// отдельный RegisterHandler - иначе current_section не выставится и
+	// экран Premium «висел» бы при выходе.
+	if strings.TrimSpace(text) == "/start premium" {
+		r.deleteMainMenuMessage(ctx, b, chatID)
+		r.setCurrentSection(chatID, "premium")
+		menu.PremiumHandler(r.stateManager, r.paymentService)(ctx, b, update)
+		return
+	}
+
 	// Режим «Быстрая консультация (с ИИ)»: перехватываем ЛЮБОЕ сообщение
 	// пользователя (текстовый вопрос или фото), чтобы отправить его ИИ.
 	// Перехват идёт ДО режима отзыва и ДО обычной загрузки файлов (иначе
