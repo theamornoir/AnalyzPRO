@@ -7,6 +7,7 @@ func PromptForBioscan(contextInfo string) string {
 Верни ТОЛЬКО JSON.
 Без markdown.
 Без комментариев.
+Не используй символы форматирования, разделители или эмодзи. Верни только JSON.
 
 Формат:
 

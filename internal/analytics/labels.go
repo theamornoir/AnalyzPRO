@@ -24,8 +24,8 @@ var callbackLabels = map[string]string{
 	"section_bioscan_extended_demo":  "Открыл Демо: Bioscan PRO",
 	"section_diag_extended_demo2":    "Открыл Демо: повтор. анализ",
 	"section_bioscan_extended_demo2": "Открыл Демо: повтор. Bioscan",
-	"section_health_summary":         "Открыл Сводку здоровья",
-	"section_health_summary_demo":    "Открыл Демо-Сводку",
+	"section_health_summary":         "Открыл Мой профиль",
+	"section_health_summary_demo":    "Открыл демо-профиль",
 	"section_health_monitoring":      "Открыл Мониторинг",
 	"section_health_monitoring_demo": "Открыл Демо-Мониторинг",
 	"section_consult_start":          "Открыл Быструю консультацию",
@@ -64,7 +64,7 @@ var buttonLabels = map[string]string{
 
 // semanticEventLabels - подписи для предметных событий (ключ → русская
 // подпись). Трекаются в конкретных хендлерах (старт, анализ, биоскан,
-// премиум, сводка, покупка премиум). Название события в PostHog = русская
+// премиум, профиль, покупка премиум). Название события в PostHog = русская
 // подпись, поэтому в дашборде видно сразу понятный текст, а не ключ.
 var semanticEventLabels = map[string]string{
 	"user_started":       "Запустил бота",
@@ -72,7 +72,7 @@ var semanticEventLabels = map[string]string{
 	"bioscan_completed":  "Bioscan завершён",
 	"premium_view":       "Открыл Premium",
 	"premium_purchased":  "Купил Premium",
-	"dashboard_opened":   "Открыл Сводку здоровья",
+	"dashboard_opened":   "Открыл Мой профиль",
 }
 
 // interactionLabel возвращает человекочитаемую русскую подпись события

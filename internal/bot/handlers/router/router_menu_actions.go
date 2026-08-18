@@ -21,8 +21,8 @@ import (
 
 // WebAppAssetsVersion и WithWebAppVersion вынесены в пакет keyboards
 // (keyboards.WebAppAssetsVersion / keyboards.WithWebAppVersion), чтобы их
-// могли переиспользовать и другие пакеты (например, кнопка «Открыть Сводку
-// здоровья» после выдачи отчёта). Здесь оставлен только комментарий-якорь.
+// могли переиспользовать и другие пакеты (например, кнопка «Открыть Мой
+// профиль» после выдачи отчёта). Здесь оставлен только комментарий-якорь.
 
 // hubMessageKey - ключ в user-data, в котором хранится message_id текущего
 // «блока-хаба» (раздел Анализы/Здоровье/Сервис). Блок редактируется на месте
@@ -520,7 +520,7 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 	if !isPremium {
 		// Полный доступ к показателям - по Premium, но профиль заполнить
 		// можно бесплатно (онбординг доступен всем).
-		text += "📝 Профиль можно заполнить бесплатно - после этого сводка оживёт. " +
+		text += "📝 Профиль можно заполнить бесплатно - после этого Мой профиль оживёт. " +
 			"Полный доступ к показателям крови и динамике - по Premium-подписке.\n\n"
 	}
 
@@ -544,91 +544,6 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 		log.Printf(locales.LogDashboardSendErr, chatID, sendErr)
 	} else {
 		log.Printf(locales.LogDashboardSent, chatID, msgID, webAppTarget, len(rows))
-	}
-	return true
-}
-
-// monitoringWebAppURL подменяет суффикс /dashboard на /monitoring в базовом
-// URL, сохраняя хост/протокол (туннель и локальный сервер обслуживают оба
-// пути). Если суффикса нет - возвращает URL как есть.
-func monitoringWebAppURL(base string) string {
-	if base == "" {
-		return ""
-	}
-	const dash = "/dashboard"
-	if i := strings.LastIndex(base, dash); i >= 0 {
-		return base[:i] + "/monitoring" + base[i+len(dash):]
-	}
-	return base
-}
-
-// handleMonitoring - открывает веб-приложение «Мониторинг». Если
-// demo=true - добавляет ?demo=1 к URL, открывая синтетические проекты
-// (без реальных записей и без Premium) для предпросмотра графиков.
-func (r *router) handleMonitoring(ctx context.Context, b *tgbot.Bot, chatID int64, demo bool) bool {
-	log.Printf("[MONITORING] открытие для chatID=%d (demo=%v)", chatID, demo)
-
-	// Выбрано под-действие - убираем блок-хаб.
-	r.deleteHubBlock(ctx, b, chatID)
-	r.setCurrentSection(chatID, "health")
-
-	// Демо-режим пропускает проверку Premium: открываем синтетические
-	// проекты для предпросмотра графиков.
-	if !demo {
-		isPremium := r.paymentService.IsUserPremium(chatID)
-		if !isPremium {
-			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-				ChatID:      chatID,
-				Text:        locales.MsgMonitoringPremiumRequired,
-				ReplyMarkup: keyboards.BackMenu(),
-				ParseMode:   "Markdown",
-			})
-			return true
-		}
-	}
-
-	// Версия в URL сбрасывает кэш Telegram WebView (см. keyboards.WebAppAssetsVersion).
-	webAppTarget := keyboards.WithWebAppVersion(monitoringWebAppURL(r.webAppURL))
-	if demo {
-		if strings.Contains(webAppTarget, "?") {
-			webAppTarget += "&demo=1"
-		} else {
-			webAppTarget += "?demo=1"
-		}
-	}
-	if webAppTarget == "" {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        "⚠️ URL мониторинга не настроен. Задайте WEBAPP_URL или запустите `make mini`.",
-			ReplyMarkup: keyboards.BackMenu(),
-			ParseMode:   "Markdown",
-		})
-		return true
-	}
-
-	text := "📊 Мониторинг\n\n" +
-		"Создавайте проекты и отслеживайте показатели во времени: курсы препаратов, диабет, похудение, здоровье."
-
-	// Только Mini App - без ссылок и «открыть в браузере».
-	rows := [][]models.InlineKeyboardButton{
-		{
-			{Text: "Открыть", WebApp: &models.WebAppInfo{URL: webAppTarget}},
-		},
-		{
-			{Text: locales.BtnBack, CallbackData: "msg_back"},
-		},
-	}
-
-	msgID, sendErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        text,
-		ReplyMarkup: models.InlineKeyboardMarkup{InlineKeyboard: rows},
-		ParseMode:   "Markdown",
-	})
-	if sendErr != nil {
-		log.Printf("[MONITORING] ошибка отправки chatID=%d: %v", chatID, sendErr)
-	} else {
-		log.Printf("[MONITORING] сообщение отправлено chatID=%d msgID=%d url=%s кнопок=%d", chatID, msgID, webAppTarget, len(rows))
 	}
 	return true
 }

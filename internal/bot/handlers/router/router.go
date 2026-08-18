@@ -395,12 +395,6 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	case "section_health_summary_demo":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_summary_demo")
 		r.handleDashboard(ctx, b, chatID, true)
-	case "section_health_monitoring":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_monitoring")
-		r.handleMonitoring(ctx, b, chatID, false)
-	case "section_health_monitoring_demo":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_monitoring_demo")
-		r.handleMonitoring(ctx, b, chatID, true)
 	case "section_consult_start":
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_consult_start")
 		r.handleConsultationStart(ctx, b, chatID)

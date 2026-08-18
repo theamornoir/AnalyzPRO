@@ -39,7 +39,7 @@ func StartAnalysis(
 // startAnalysis - запускает анализ всех накопленных файлов.
 // saver сохраняет результат в историю (для Мониторинга).
 // appStorage персистит результат как Diagnosis.
-// webAppURL используется для кнопки «Открыть Сводку здоровья» после отчёта.
+// webAppURL используется для кнопки «Открыть Мой профиль» после отчёта.
 func startAnalysis(
 	ctx context.Context,
 	b *tgbot.Bot,

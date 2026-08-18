@@ -146,7 +146,7 @@ func renderAndSendReport(
 
 	sendAnalysisCompleteNote(ctx, b, stateManager, chatID, buildReportNote(jsonResult))
 
-	// Сообщаем, что результат сохранён в «Сводку здоровья», и даём
+	// Сообщаем, что результат сохранён в «Мой профиль», и даём
 	// кнопку для мгновенного открытия (все типы анализов хранятся там).
 	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
 }
@@ -284,7 +284,7 @@ func renderAndSendDossier(
 
 	sendAnalysisCompleteNote(ctx, b, stateManager, chatID, buildReportNote(jsonResult))
 
-	// Сообщаем, что результат сохранён в «Сводку здоровья», и даём
+	// Сообщаем, что результат сохранён в «Мой профиль», и даём
 	// кнопку для мгновенного открытия (все типы анализов хранятся там).
 	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
 }

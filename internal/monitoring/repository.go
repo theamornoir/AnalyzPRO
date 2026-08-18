@@ -37,7 +37,7 @@ type Repository interface {
 	GetHistoryEntry(ctx context.Context, id int64) (*HistoryEntry, error)
 	// DeleteHistoryEntry - удаляет запись истории по ID (с очисткой
 	// привязок в проектах). Позволяет пользователю удалять свои
-	// анализы/отчёты/профиль прямо из «Сводки здоровья».
+	// анализы/отчёты/профиль прямо из «Мой профиль».
 	DeleteHistoryEntry(ctx context.Context, id int64) error
 }
 

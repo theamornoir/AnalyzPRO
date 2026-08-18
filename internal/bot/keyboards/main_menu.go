@@ -41,7 +41,7 @@ func StartMenu() models.ReplyKeyboardMarkup {
 // Каждый хаб при входе даёт описание и под-действия. 💎 Premium оставлен
 // плоской кнопкой (это точка продажи, её важно держать на виду), остальные
 // функции сгруппированы: «Анализы» (лаб. анализы + Bioscan), «Здоровье»
-// (Сводка/Мониторинг/Консультация ИИ), «Сервис» (Отзывы/О сервисе).
+// (Мой профиль/Мониторинг/Консультация ИИ), «Сервис» (Отзывы/О сервисе).
 func MainMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
@@ -89,16 +89,16 @@ func AnalysisHubMenu() models.InlineKeyboardMarkup {
 }
 
 // HealthHubMenu - раздел-хаб «Здоровье»: под-действия
-// (Сводка здоровья / Мониторинг / Консультация ИИ). Кнопка «Назад в меню»
+// (Мой профиль / Консультация ИИ). Кнопка «Назад в меню»
 // не нужна: основное меню (reply-клавиатура) и так всегда видно внизу.
+// Мониторинг теперь встроен прямо в «Мой профиль» (4-я вкладка
+// внутри того же Web App), отдельной кнопки больше нет.
 func HealthHubMenu() models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
 			{{Text: locales.BtnHealthSummary, CallbackData: "section_health_summary"}},
-			{{Text: locales.BtnMonitoring, CallbackData: "section_health_monitoring"}},
 			{{Text: locales.BtnConsultation, CallbackData: "section_consult_start"}},
 			{{Text: locales.BtnHealthSummaryDemo, CallbackData: "section_health_summary_demo"}},
-			{{Text: locales.BtnMonitoringDemo, CallbackData: "section_health_monitoring_demo"}},
 		},
 	}
 }

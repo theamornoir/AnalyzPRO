@@ -19,7 +19,7 @@ import (
 // UploadHandler - главный обработчик загрузки файлов и запуска анализа.
 // saver сохраняет готовый результат в историю пользователя (для Мониторинга).
 // appStorage персистит результат анализа как Diagnosis (Storage).
-// webAppURL используется для кнопки «Открыть Сводку здоровья» после отчёта.
+// webAppURL используется для кнопки «Открыть Мой профиль» после отчёта.
 func UploadHandler(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,

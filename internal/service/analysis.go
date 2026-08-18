@@ -30,7 +30,7 @@ type AnalysisService interface {
 	// premium HTML-отчёт Body Intelligence (из фото + опросника). Один вызов
 	// ИИ: JSON -> models.BodyScanReport -> HTML (для документа и истории/профиля).
 	// Возвращает также jsonReport - «чистый» JSON отчёта, который сохраняется
-	// в историю (для графиков дашборда «Сводка здоровья») и используется при
+	// в историю (для графиков дашборда «Мой профиль») и используется при
 	// сравнительном повторном анализе.
 	HandleBioscanPro(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (html string, jsonReport string, err error)
 	// Методы для работы с JSON

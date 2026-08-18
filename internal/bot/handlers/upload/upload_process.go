@@ -24,14 +24,14 @@ import (
 
 // savePlainResult сохраняет «неструктурированный» результат (обычный анализ
 // текстом или базовый Bioscan) в историю пользователя как запись типа
-// entryType, чтобы он появился в «Сводке здоровья» вместе с прочими
+// entryType, чтобы он появился в «Мой профиль» вместе с прочими
 // результатами. Формирует аккуратный HTML-документ (ReportHTML), чтобы
 // кнопка «📄 PDF» в Сводке открывала именно этот результат без ошибки рендера.
 //
 // indicatorsJSON - опциональный структурированный JSON отчёта (sections/
 // categories с indicators), полученный от ИИ. Если непустой и валидный - его
-// группы показателей вливаются в JsonData записи, чтобы дашборд «Сводка
-// здоровья» мог строить блоки (кровь/биохимия и т.п.) и заполнять карточки
+// группы показателей вливаются в JsonData записи, чтобы дашборд «Мой
+// профиль» мог строить блоки (кровь/биохимия и т.п.) и заполнять карточки
 // крови/питания/активности из РЕАЛЬНЫХ показателей обычного анализа.
 func savePlainResult(ctx context.Context, saver monitoring.Repository, chatID int64, entryType, title, note, indicatorsJSON string) {
 	if saver == nil || strings.TrimSpace(note) == "" {
@@ -75,7 +75,7 @@ func savePlainResult(ctx context.Context, saver monitoring.Repository, chatID in
 // stripJSONFences убирает markdown-ограждения (```json ... ```) и случайный
 // текст вокруг JSON, которые модель иногда добавляет даже при явном запросе
 // «строго JSON». Без этого json.Unmarshal падает, и структурированные
-// показатели не попадают в «Сводка здоровья» (блоки не строятся даже при
+// показатели не попадают в «Мой профиль» (блоки не строятся даже при
 // активной Premium).
 func stripJSONFences(s string) string {
 	s = strings.TrimSpace(s)
@@ -241,13 +241,13 @@ func processSingleFile(
 	// Не критично: при ошибке сохраняем только текст (текущее поведение).
 	indicatorsJSON, _ := analysisService.HandleAnalysisFromFileJSON(ctx, fileData, file.MimeType, contextInfo)
 
-	// Сохраняем ОБЫЧНЫЙ анализ в «Сводку здоровья» (история пользователя),
+	// Сохраняем ОБЫЧНЫЙ анализ в «Мой профиль» (история пользователя),
 	// чтобы он был доступен там вместе с прочими результатами. Вместе с
 	// текстом сохраняем структурированные показатели для блоков дашборда.
 	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, result, indicatorsJSON)
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
 
-	// Сообщаем, что результат сохранён в «Сводку здоровья», и даём
+	// Сообщаем, что результат сохранён в «Мой профиль», и даём
 	// кнопку для мгновенного открытия.
 	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
 }
@@ -327,20 +327,19 @@ func processMultipleFiles(
 
 	finalResult := fmt.Sprintf(locales.MsgUploadResultFiles, len(files), combinedPayload)
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:    chatID,
-		Text:      finalResult,
-		ParseMode: "HTML",
+		ChatID: chatID,
+		Text:   finalResult,
 	})
 
 	// Структурированные показатели (объединяем по всем файлам) для блоков
-	// «Сводки здоровья».
+	// «Мой профиль».
 	indicatorsJSON := mergeIndicatorGroups(collectedIndicators)
 
-	// Сохраняем ОБЫЧНЫЙ анализ (несколько файлов) в «Сводку здоровья».
+	// Сохраняем ОБЫЧНЫЙ анализ (несколько файлов) в «Мой профиль».
 	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, finalResult, indicatorsJSON)
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
 
-	// Сообщаем, что результат сохранён в «Сводку здоровья», и даём
+	// Сообщаем, что результат сохранён в «Мой профиль», и даём
 	// кнопку для мгновенного открытия.
 	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
 }
@@ -379,7 +378,7 @@ func sendAnalysisComplete(ctx context.Context, b *tgbot.Bot, stateManager states
 // sendAnalysisCompleteNote - как sendAnalysisComplete, но дописывает блок
 // дополнительной информации (extra). Используется для расширенного анализа/
 // досье: в extra передаём запроса на сравнение с предыдущим отчётом и
-// напоминание, что динамику видно в «Сводке здоровья».
+// напоминание, что динамику видно в «Мой профиль».
 func sendAnalysisCompleteNote(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64, extra string) {
 	stateManager.Reset(chatID)
 	text := locales.MsgAnalysisComplete

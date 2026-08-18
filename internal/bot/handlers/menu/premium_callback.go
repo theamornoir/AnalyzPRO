@@ -197,7 +197,7 @@ func HandlePremiumConfirm(
 		if expiry != "" {
 			confirmText += "\nДействует до: " + expiry
 		}
-		confirmText += "\n\nТеперь вам доступна 💡 Сводка здоровья - откройте её кнопкой ниже " +
+		confirmText += "\n\nТеперь вам доступна 📊 Мой профиль - откройте её кнопкой ниже " +
 			"или из главного меню."
 
 		msgID, sendErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
