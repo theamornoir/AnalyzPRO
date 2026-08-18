@@ -371,7 +371,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 			helpers.DeleteMessage(ctx, b, chatID, mm.Message.ID)
 		}
 		r.stateManager.SetState(chatID, states.StateIdle)
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		helpers.SendAndDelete(ctx, b, tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBackToMainMenu,
 			ReplyMarkup: keyboards.MainMenu(),

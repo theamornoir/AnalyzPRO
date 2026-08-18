@@ -76,7 +76,7 @@ func (r *router) handleCancel(ctx context.Context, b *tgbot.Bot, chatID int64, t
 	r.stateManager.SetUserData(chatID, "analysis_subtype", "")
 	r.setCurrentSection(chatID, "analysis")
 	r.deleteHubBlock(ctx, b, chatID)
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+	helpers.SendAndDelete(ctx, b, tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgBackToAnalysisType,
 		ReplyMarkup: keyboards.MainMenu(),
@@ -118,7 +118,7 @@ func (r *router) backToParent(ctx context.Context, b *tgbot.Bot, chatID int64) {
 			}
 		}
 		r.setLastMsg(chatID, 0)
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		helpers.SendAndDelete(ctx, b, tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBackToMainMenu,
 			ReplyMarkup: keyboards.MainMenu(),
@@ -129,7 +129,7 @@ func (r *router) backToParent(ctx context.Context, b *tgbot.Bot, chatID int64) {
 	// Безопасность: нет ни хаба, ни последнего сообщения - пользователь уже
 	// в Главном меню (кнопки «Назад» там нет, но на всякий случай - меню).
 	if currentState == states.StateIdle && r.hubMessageID(chatID) == 0 && r.lastMsgID(chatID) == 0 {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		helpers.SendAndDelete(ctx, b, tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBackToMainMenu,
 			ReplyMarkup: keyboards.MainMenu(),
@@ -144,7 +144,7 @@ func (r *router) backToParent(ctx context.Context, b *tgbot.Bot, chatID int64) {
 			helpers.DeleteMessage(ctx, b, chatID, id)
 			r.setLastMsg(chatID, 0)
 		}
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		helpers.SendAndDelete(ctx, b, tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBackToMainMenu,
 			ReplyMarkup: keyboards.MainMenu(),

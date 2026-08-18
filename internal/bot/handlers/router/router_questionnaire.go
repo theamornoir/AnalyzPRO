@@ -7,6 +7,7 @@ import (
 	tgbot "github.com/go-telegram/bot"
 
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/userdata"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
@@ -200,7 +201,7 @@ func (r *router) backQuestionnaire(ctx context.Context, b *tgbot.Bot, chatID int
 		r.stateManager.SetUserData(chatID, "analysis_subtype", "")
 		r.setCurrentSection(chatID, "analysis")
 		r.deleteHubBlock(ctx, b, chatID)
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		helpers.SendAndDelete(ctx, b, tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBackToAnalysisType,
 			ReplyMarkup: keyboards.MainMenu(),
@@ -222,7 +223,7 @@ func (r *router) backBioscanQuestionnaire(ctx context.Context, b *tgbot.Bot, cha
 		r.stateManager.SetState(chatID, states.StateIdle)
 		r.setCurrentSection(chatID, "analysis")
 		r.deleteHubBlock(ctx, b, chatID)
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		helpers.SendAndDelete(ctx, b, tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBackToAnalysisType,
 			ReplyMarkup: keyboards.MainMenu(),

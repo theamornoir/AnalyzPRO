@@ -8,6 +8,7 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -29,7 +30,7 @@ func CancelUpload(
 	stateManager.SetUserData(chatID, "uploaded_files", "")
 	stateManager.SetUserData(chatID, "file_count", "")
 	stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+	helpers.SendAndDelete(ctx, b, tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgUploadCancelled,
 		ReplyMarkup: keyboards.MainMenu(),
@@ -78,7 +79,7 @@ func handleUploadConfirm(
 		stateManager.SetUserData(chatID, "file_count", "")
 		stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
 
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		helpers.SendAndDelete(ctx, b, tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgUploadCancelled,
 			ReplyMarkup: keyboards.MainMenu(),
