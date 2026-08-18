@@ -48,6 +48,18 @@ func (m *MockUserRepository) GetUserByTelegramID(ctx context.Context, telegramID
 	return nil, fmt.Errorf("user not found")
 }
 
+// GetAllUsers возвращает всех пользователей (для напоминаний).
+func (m *MockUserRepository) GetAllUsers(ctx context.Context) ([]*sm.User, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]*sm.User, 0, len(m.users))
+	for _, u := range m.users {
+		cp := *u
+		out = append(out, &cp)
+	}
+	return out, nil
+}
+
 func (m *MockUserRepository) UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -67,6 +79,19 @@ func (m *MockUserRepository) UpdateUserOnboardingStatus(ctx context.Context, use
 	for _, user := range m.users {
 		if user.ID == userID {
 			user.OnboardingCompleted = completed
+			return nil
+		}
+	}
+	return fmt.Errorf("user with ID %d not found", userID)
+}
+
+// UpdateUserLastActivity обновляет дату последнего взаимодействия.
+func (m *MockUserRepository) UpdateUserLastActivity(ctx context.Context, userID uint, t time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, user := range m.users {
+		if user.ID == userID {
+			user.LastActivityDate = t
 			return nil
 		}
 	}

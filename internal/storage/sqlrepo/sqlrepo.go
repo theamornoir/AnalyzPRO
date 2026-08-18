@@ -51,11 +51,14 @@ func (r *Repo) CreateUser(ctx context.Context, user *sm.User) error {
 	if user.CreatedAt.IsZero() {
 		user.CreatedAt = time.Now()
 	}
+	if user.LastActivityDate.IsZero() {
+		user.LastActivityDate = time.Now()
+	}
 
-	const q = `INSERT INTO users (telegram_id, name, is_premium, premium_expires_at, onboarding_completed, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+	const q = `INSERT INTO users (telegram_id, name, is_premium, premium_expires_at, onboarding_completed, last_activity_date, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(telegram_id) DO UPDATE SET name=excluded.name, onboarding_completed=excluded.onboarding_completed`
-	if _, err := r.db.ExecContext(ctx, q, user.TelegramID, user.Name, boolToInt(user.IsPremium), nullTime(user.PremiumExpiresAt), boolToInt(user.OnboardingCompleted), user.CreatedAt); err != nil {
+	if _, err := r.db.ExecContext(ctx, q, user.TelegramID, user.Name, boolToInt(user.IsPremium), nullTime(user.PremiumExpiresAt), boolToInt(user.OnboardingCompleted), nullTime(user.LastActivityDate), user.CreatedAt); err != nil {
 		return fmt.Errorf("создание пользователя: %w", err)
 	}
 	var id int64
@@ -67,13 +70,14 @@ func (r *Repo) CreateUser(ctx context.Context, user *sm.User) error {
 }
 
 func (r *Repo) GetUserByTelegramID(ctx context.Context, telegramID int64) (*sm.User, error) {
-	const q = `SELECT id, telegram_id, name, is_premium, premium_expires_at, onboarding_completed, created_at
+	const q = `SELECT id, telegram_id, name, is_premium, premium_expires_at, onboarding_completed, last_activity_date, created_at
 		FROM users WHERE telegram_id = ?`
 	var u sm.User
 	var isPremium int
 	var expires sql.NullTime
 	var onboardingCompleted int
-	if err := r.db.QueryRowContext(ctx, q, telegramID).Scan(&u.ID, &u.TelegramID, &u.Name, &isPremium, &expires, &onboardingCompleted, &u.CreatedAt); err != nil {
+	var lastActivity sql.NullTime
+	if err := r.db.QueryRowContext(ctx, q, telegramID).Scan(&u.ID, &u.TelegramID, &u.Name, &isPremium, &expires, &onboardingCompleted, &lastActivity, &u.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("user not found")
 		}
@@ -84,7 +88,45 @@ func (r *Repo) GetUserByTelegramID(ctx context.Context, telegramID int64) (*sm.U
 		u.PremiumExpiresAt = expires.Time
 	}
 	u.OnboardingCompleted = onboardingCompleted != 0
+	if lastActivity.Valid {
+		u.LastActivityDate = lastActivity.Time
+	}
 	return &u, nil
+}
+
+// GetAllUsers возвращает всех пользователей (для периодических
+// напоминаний/рассылок). Используется системой уведомлений.
+func (r *Repo) GetAllUsers(ctx context.Context) ([]*sm.User, error) {
+	const q = `SELECT id, telegram_id, name, is_premium, premium_expires_at, onboarding_completed, last_activity_date, created_at
+		FROM users ORDER BY id`
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("чтение пользователей: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]*sm.User, 0)
+	for rows.Next() {
+		var u sm.User
+		var isPremium int
+		var expires sql.NullTime
+		var onboardingCompleted int
+		var lastActivity sql.NullTime
+		if err := rows.Scan(&u.ID, &u.TelegramID, &u.Name, &isPremium, &expires, &onboardingCompleted, &lastActivity, &u.CreatedAt); err != nil {
+			return nil, fmt.Errorf("сканирование пользователя: %w", err)
+		}
+		u.IsPremium = isPremium != 0
+		if expires.Valid {
+			u.PremiumExpiresAt = expires.Time
+		}
+		u.OnboardingCompleted = onboardingCompleted != 0
+		if lastActivity.Valid {
+			u.LastActivityDate = lastActivity.Time
+		}
+		cp := u
+		out = append(out, &cp)
+	}
+	return out, rows.Err()
 }
 
 func (r *Repo) UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time) error {
@@ -107,6 +149,21 @@ func (r *Repo) UpdateUserOnboardingStatus(ctx context.Context, userID uint, comp
 		boolToInt(completed), userID)
 	if err != nil {
 		return fmt.Errorf("обновление статуса онбординга: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("user with ID %d not found", userID)
+	}
+	return nil
+}
+
+// UpdateUserLastActivity обновляет дату последнего взаимодействия
+// пользователя с ботом (система напоминаний об неактивности).
+func (r *Repo) UpdateUserLastActivity(ctx context.Context, userID uint, t time.Time) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE users SET last_activity_date = ? WHERE id = ?`,
+		nullTime(t), userID)
+	if err != nil {
+		return fmt.Errorf("обновление даты активности: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("user with ID %d not found", userID)

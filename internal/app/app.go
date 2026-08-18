@@ -14,6 +14,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/ai/orchestrator"
 	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/bot"
+	"github.com/theamornoir/analyzpro/internal/bot/reminders"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/config"
 	"github.com/theamornoir/analyzpro/internal/db"
@@ -204,6 +205,12 @@ func (a *App) Run(parent context.Context) {
 	}
 
 	log.Printf(locales.LogBotRunning)
+
+	// Фоновая система ненавязчивых уведомлений: напоминание о повторном
+	// анализе при >30 дней неактивности и мягкие мотивационные сообщения.
+	// Запускается в горутине и завершается вместе с ctx (остановка бота).
+	go reminders.RunReminderLoop(ctx, a.bot.Client(), a.bot.Storage(), a.bot.MonitorRepo())
+
 	a.bot.Start(ctx)
 }
 

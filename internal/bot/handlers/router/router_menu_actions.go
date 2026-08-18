@@ -6,6 +6,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -15,6 +16,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/userdata"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
+	"github.com/theamornoir/analyzpro/internal/bot/reminders"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
@@ -796,4 +798,62 @@ func sendLongMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text strin
 			ReplyMarkup: kb,
 		})
 	}
+}
+
+// ============================================================================
+// Тест уведомлений (раздел «Сервис» → 🧪 Тест уведомлений)
+// ============================================================================
+
+// testNotifyDelay - через сколько секунд приходит ТЕСТОВОЕ уведомление после
+// нажатия кнопки в под-меню «Сервис → 🧪 Тест уведомлений». Сделано малым,
+// чтобы разработчик мог быстро проверить систему уведомлений «вживую».
+const testNotifyDelay = 30 * time.Second
+
+// handleTestNotifyMenu - открывает под-меню проверки уведомлений (раздел
+// «Сервис»): поясняет, что нажатие кнопки пришлёт реальный образец
+// уведомления через 30 секунд.
+func (r *router) handleTestNotifyMenu(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf("[TEST-NOTIFY] открытие меню для chatID=%d", chatID)
+
+	// Выбрано под-действие - убираем блок-хаб.
+	r.deleteHubBlock(ctx, b, chatID)
+	r.setCurrentSection(chatID, "service")
+
+	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        locales.MsgTestNotifyIntro,
+		ReplyMarkup: keyboards.TestNotifyMenu(),
+		ParseMode:   "Markdown",
+	})
+	if msg != nil {
+		r.setLastMsg(chatID, msg.ID)
+	}
+	return true
+}
+
+// handleTestNotifyAction - планирует отправку ТЕСТОВОГО уведомления указанного
+// типа (reminder/motivation/feature) через 30 секунд и подтверждает это
+// пользователю, оставляя открытым тестовое меню (можно проверить иные типы).
+func (r *router) handleTestNotifyAction(ctx context.Context, b *tgbot.Bot, chatID int64, kind string) bool {
+	log.Printf("[TEST-NOTIFY] планирование уведомления kind=%s для chatID=%d", kind, chatID)
+
+	// Используем фоновый контекст: контекст апдейта отменяется сразу после
+	// ответа, а уведомление должно прийти спустя 30 секунд.
+	go func() {
+		select {
+		case <-time.After(testNotifyDelay):
+			reminders.SendTestNotification(context.Background(), b, chatID, kind)
+		}
+	}()
+
+	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        locales.MsgTestNotifyScheduled,
+		ReplyMarkup: keyboards.TestNotifyMenu(),
+		ParseMode:   "Markdown",
+	})
+	if msg != nil {
+		r.setLastMsg(chatID, msg.ID)
+	}
+	return true
 }

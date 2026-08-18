@@ -155,5 +155,17 @@ func Migrate(conn *sql.DB) error {
 		rows.Close()
 	}
 
+	// Для баз, созданных до появления системы уведомлений, добавляем
+	// столбец last_activity_date идемпотентно (тот же паттерн с
+	// обязательным rows.Close()).
+	rows2, qerr2 := conn.Query("SELECT last_activity_date FROM users LIMIT 0")
+	if qerr2 != nil {
+		if _, aerr := conn.Exec("ALTER TABLE users ADD COLUMN last_activity_date DATETIME"); aerr != nil {
+			return fmt.Errorf("ошибка миграции (last_activity_date): %w", aerr)
+		}
+	} else {
+		rows2.Close()
+	}
+
 	return nil
 }

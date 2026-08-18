@@ -11,8 +11,13 @@ import (
 type UserRepository interface {
 	CreateUser(ctx context.Context, user *sm.User) error
 	GetUserByTelegramID(ctx context.Context, telegramID int64) (*sm.User, error)
+	// GetAllUsers - все пользователи (для периодических рассылок/напоминаний).
+	GetAllUsers(ctx context.Context) ([]*sm.User, error)
 	UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time) error
 	UpdateUserOnboardingStatus(ctx context.Context, userID uint, completed bool) error
+	// UpdateUserLastActivity - обновляет дату последнего взаимодействия
+	// пользователя с ботом (нужно системе напоминаний об неактивности).
+	UpdateUserLastActivity(ctx context.Context, userID uint, t time.Time) error
 }
 
 // DiagnosisRepository - репозиторий диагнозов.

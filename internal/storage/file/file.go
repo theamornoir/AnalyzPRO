@@ -136,6 +136,22 @@ func (s *Store) GetUserByTelegramID(ctx context.Context, telegramID int64) (*sm.
 	return &cp, nil
 }
 
+// GetAllUsers возвращает всех пользователей (для напоминаний).
+func (s *Store) GetAllUsers(ctx context.Context) ([]*sm.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]*sm.User, 0, len(s.data.Users))
+	for _, u := range s.data.Users {
+		if u == nil {
+			continue
+		}
+		cp := *u
+		out = append(out, &cp)
+	}
+	return out, nil
+}
+
 func (s *Store) UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -158,6 +174,21 @@ func (s *Store) UpdateUserOnboardingStatus(ctx context.Context, userID uint, com
 	for _, u := range s.data.Users {
 		if u.ID == userID {
 			u.OnboardingCompleted = completed
+			s.save()
+			return nil
+		}
+	}
+	return fmt.Errorf("user with ID %d not found", userID)
+}
+
+// UpdateUserLastActivity обновляет дату последнего взаимодействия.
+func (s *Store) UpdateUserLastActivity(ctx context.Context, userID uint, t time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, u := range s.data.Users {
+		if u.ID == userID {
+			u.LastActivityDate = t
 			s.save()
 			return nil
 		}

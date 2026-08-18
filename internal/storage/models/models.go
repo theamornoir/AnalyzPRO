@@ -11,8 +11,12 @@ type User struct {
 	PremiumExpiresAt time.Time `json:"premium_expires_at"`
 	// OnboardingCompleted - пройден ли онбординг (слайдер + соглашение) для
 	// пользователя. Новые пользователи проходят онбординг при первом /start.
-	OnboardingCompleted bool      `json:"onboarding_completed"`
-	CreatedAt           time.Time `json:"created_at"`
+	OnboardingCompleted bool `json:"onboarding_completed"`
+	// LastActivityDate - дата последнего взаимодействия пользователя с ботом
+	// (любое сообщение/нажатие кнопки). Используется системой уведомлений
+	// для определения периода неактивности (напоминание о повторном анализе).
+	LastActivityDate time.Time `json:"last_activity_date"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 // Diagnosis - модель диагноза/анализа.

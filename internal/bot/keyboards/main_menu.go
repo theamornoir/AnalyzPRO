@@ -104,13 +104,29 @@ func HealthHubMenu() models.InlineKeyboardMarkup {
 }
 
 // ServiceHubMenu - раздел-хаб «Сервис»: под-действия
-// (Отзывы и предложения / О сервисе). Кнопка «Назад в меню» не нужна:
-// основное меню (reply-клавиатура) и так всегда видно внизу экрана.
+// (Отзывы и предложения / О сервисе / 🧪 Тест уведомлений). Кнопка
+// «Назад в меню» не нужна: основное меню (reply-клавиатура) и так всегда
+// видно внизу экрана.
 func ServiceHubMenu() models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
 			{{Text: locales.BtnFeedback, CallbackData: "section_feedback_start"}},
 			{{Text: locales.BtnAbout, CallbackData: "section_about"}},
+			{{Text: locales.BtnTestNotify, CallbackData: "section_test_notify"}},
+		},
+	}
+}
+
+// TestNotifyMenu - под-меню проверки уведомлений (раздел «Сервис»):
+// кнопки планируют отправку реального образца уведомления через 30 секунд,
+// а также «Назад» - возврат в хаб «Сервис».
+func TestNotifyMenu() models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{{Text: locales.BtnTestReminder, CallbackData: "test_notify_reminder"}},
+			{{Text: locales.BtnTestMotivation, CallbackData: "test_notify_motivation"}},
+			{{Text: locales.BtnTestFeature, CallbackData: "test_notify_feature"}},
+			{{Text: locales.BtnBack, CallbackData: "test_notify_back"}},
 		},
 	}
 }

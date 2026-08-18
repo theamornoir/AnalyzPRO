@@ -33,6 +33,8 @@ func StartHandler(
 				// Не фатально - онбординг продолжается.
 				_ = err
 			}
+			// Фиксируем активность (нужно системе напоминаний).
+			_ = appStorage.TouchActivity(ctx, chatID)
 		}
 		analytics.EmitEvent(ctx, analytics.Event{
 			Type:       analytics.EventStart,

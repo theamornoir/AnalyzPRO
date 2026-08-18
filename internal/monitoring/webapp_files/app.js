@@ -159,8 +159,10 @@ function showView(id) {
 }
 
 function setHeader(title, sub) {
-    $('headerTitle').textContent = title;
-    $('headerSub').textContent = sub || '';
+    const t = $('headerTitle');
+    const s = $('headerSub');
+    if (t) t.textContent = title;
+    if (s) s.textContent = sub || '';
 }
 
 function showToast(msg) {

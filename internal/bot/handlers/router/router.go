@@ -97,6 +97,22 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 		}
 	}()
 
+	// Обновляем дату последнего взаимодействия (нужно системе напоминаний
+	// об неактивности - напоминание о повторном анализе). Делаем до
+	// основной обработки, чтобы любое сообщение/нажатие кнопки считалось
+	// активностью. Ошибки не фатальны - просто логируем.
+	if r.appStorage != nil {
+		var activityChatID int64
+		if update.CallbackQuery != nil {
+			activityChatID = update.CallbackQuery.From.ID
+		} else if update.Message != nil {
+			activityChatID = update.Message.Chat.ID
+		}
+		if activityChatID != 0 {
+			_ = r.appStorage.TouchActivity(ctx, activityChatID)
+		}
+	}
+
 	// Аналитика PostHog: фиксируем КАЖДОЕ взаимодействие пользователя как
 	// событие «interaction» (нажатие inline/reply-кнопки, команда, сообщение).
 	// Это гарантирует полный clickstream в дашборде, независимо от того,
@@ -330,8 +346,9 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// вроде Сводки/Мониторинга). Удаляем само сообщение с inline-кнопкой, а
 	// дальше - иерархический возврат (на уровень выше: в хаб раздела, либо из
 	// хаба - в Главное меню). Поведение совпадает с reply-кнопкой «⬅️ Назад»
-	// (handleBack) - единый UX на всех этапах.
-	if callbackData == "hub_back" || callbackData == "msg_back" {
+	// (handleBack) - единый UX на всех этапах. "test_notify_back" - «Назад»
+	// из под-меню теста уведомлений (возврат в хаб «Сервис»).
+	if callbackData == "hub_back" || callbackData == "msg_back" || callbackData == "test_notify_back" {
 		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, callbackData)
 
 		// Удаляем именно это сообщение (id сообщения под-действия).
@@ -407,6 +424,21 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		r.deleteHubBlock(ctx, b, chatID)
 		r.setCurrentSection(chatID, "service")
 		menu.AboutHandler()(ctx, b, update)
+
+	// Под-меню теста уведомлений (раздел «Сервис» → 🧪 Тест уведомлений):
+	// вывод меню и планирование тестовых уведомлений через 30 секунд.
+	case "section_test_notify":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_test_notify")
+		r.handleTestNotifyMenu(ctx, b, chatID)
+	case "test_notify_reminder":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "test_notify_reminder")
+		r.handleTestNotifyAction(ctx, b, chatID, "reminder")
+	case "test_notify_motivation":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "test_notify_motivation")
+		r.handleTestNotifyAction(ctx, b, chatID, "motivation")
+	case "test_notify_feature":
+		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "test_notify_feature")
+		r.handleTestNotifyAction(ctx, b, chatID, "feature")
 
 	// Подтверждение загрузки файлов (inline-кнопки «Обработать/Отмена»).
 	case "upload_process":

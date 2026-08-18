@@ -59,6 +59,26 @@ func (s *Storage) IsOnboardingCompleted(ctx context.Context, telegramID int64) b
 	return u.OnboardingCompleted
 }
 
+// TouchActivity обновляет дату последнего взаимодействия пользователя с
+// ботом. Используется системой уведомлений, чтобы определять период
+// неактивности и напоминать о повторном анализе. Пользователь создаётся
+// при необходимости (аналогично EnsureUser).
+func (s *Storage) TouchActivity(ctx context.Context, telegramID int64) error {
+	u, err := s.Users.GetUserByTelegramID(ctx, telegramID)
+	if err != nil {
+		u, err = s.EnsureUser(ctx, telegramID)
+		if err != nil {
+			return err
+		}
+	}
+	return s.Users.UpdateUserLastActivity(ctx, u.ID, time.Now())
+}
+
+// GetAllUsers возвращает всех пользователей (для периодических рассылок).
+func (s *Storage) GetAllUsers(ctx context.Context) ([]*sm.User, error) {
+	return s.Users.GetAllUsers(ctx)
+}
+
 // SaveDiagnosisForUser сохраняет результат анализа/биоскана, привязывая
 // к пользователю по TelegramID (создаёт пользователя при необходимости).
 func (s *Storage) SaveDiagnosisForUser(

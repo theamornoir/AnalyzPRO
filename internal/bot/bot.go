@@ -14,6 +14,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/dashboard"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/router"
+	"github.com/theamornoir/analyzpro/internal/bot/reminders"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
@@ -109,6 +110,24 @@ func New(
 	return botInstance, nil
 }
 
+// Client возвращает низкоуровневый Telegram-клиент. Используется
+// вспомогательными модулями (например, системой напоминаний), которым нужно
+// слать служебные сообщения вне обычного потока обработки апдейтов.
+func (b *Bot) Client() *tgbot.Bot {
+	return b.client
+}
+
+// Storage возвращает хранилище пользователей/предпочтений (для напоминаний).
+func (b *Bot) Storage() *storage.Storage {
+	return b.appStorage
+}
+
+// MonitorRepo возвращает репозиторий истории мониторинга (для проверки
+// наличия сохранённых данных у пользователя в мотивационных напоминаниях).
+func (b *Bot) MonitorRepo() monitoring.Repository {
+	return b.monitorRepo
+}
+
 func (b *Bot) Start(ctx context.Context) {
 	listenAddr := b.httpAddr
 	if listenAddr == "" {
@@ -201,6 +220,7 @@ func (b *Bot) setupCommands(ctx context.Context) {
 		{Command: "start", Description: "Запустить бота / открыть главное меню"},
 		{Command: "resetme", Description: "Сбросить Premium и онбординг (тест, только для админа)"},
 		{Command: "reset_premium", Description: "Алиас /resetme - сброс статуса (тест)"},
+		{Command: "announce", Description: "Анонс новой фичи всем пользователям (только для админа)"},
 	}
 	if _, err := b.client.SetMyCommands(ctx, &tgbot.SetMyCommandsParams{
 		Commands: commands,
@@ -290,6 +310,40 @@ func (b *Bot) registerHandlers() {
 		"/reset_premium",
 		tgbot.MatchTypeExact,
 		resetHandler,
+	)
+
+	// Админ-команда анонса новой фичи: /announce <текст> рассылает
+	// одноразовое уведомление всем пользователям, не отключившим
+	// уведомления. Работает только для ADMIN_CHAT_ID.
+	b.client.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		"/announce",
+		tgbot.MatchTypePrefix,
+		func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+			if update.Message == nil {
+				return
+			}
+			if update.Message.Chat.ID != b.adminChatID {
+				return
+			}
+			text := strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/announce"))
+			if text == "" {
+				_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+					ChatID: update.Message.Chat.ID,
+					Text:   "Укажите текст после /announce, например:\n/announce Добавили графики тренировок в Мой профиль!",
+				})
+				return
+			}
+			sent, err := reminders.BroadcastFeature(ctx, tb, b.appStorage, text)
+			reply := fmt.Sprintf("📣 Анонс разослан: %d пользователей.", sent)
+			if err != nil {
+				reply += fmt.Sprintf("\n⚠️ Ошибка: %v", err)
+			}
+			_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   reply,
+			})
+		},
 	)
 
 	// Обычный текст
