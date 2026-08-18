@@ -11,6 +11,7 @@ import (
 
 	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/dashboard"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/onboarding"
@@ -93,7 +94,7 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 	}
 	defer func() {
 		if rec := recover(); rec != nil {
-			log.Printf("🔥 PANIC in handle (chatID=%d): %v", panicChatID, rec)
+			log.Printf("🔥 PANIC in handle (chatID=%s): %v", dashboard.MaskID(panicChatID), rec)
 		}
 	}()
 
@@ -159,7 +160,7 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 	analysisSubtype := r.stateManager.GetUserData(chatID, "analysis_subtype")
 
 	log.Printf(locales.LogDiagnosticInfo,
-		chatID, text, currentState, agreed, analysisType, analysisSubtype)
+		dashboard.MaskID(chatID), text, currentState, agreed, analysisType, analysisSubtype)
 
 	// Проверка соглашения
 	if r.handleAgreement(ctx, b, chatID, text) {
@@ -295,13 +296,13 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// ChatID пользователя совпадает с ID отправителя.
 	chatID := update.CallbackQuery.From.ID
 
-	log.Printf(locales.LogRouterCallback, chatID, callbackData)
+	log.Printf(locales.LogRouterCallback, dashboard.MaskID(chatID), callbackData)
 
 	// Ловим панику в обработчике: tgbot иногда «глотает» панику, и тогда
 	// сообщение не отправляется, а в логах - тишина. Логируем явно.
 	defer func() {
 		if rec := recover(); rec != nil {
-			log.Printf("🔥 PANIC in handleCallback (chatID=%d, data=%q): %v", chatID, callbackData, rec)
+			log.Printf("🔥 PANIC in handleCallback (chatID=%s, data=%q): %v", dashboard.MaskID(chatID), callbackData, rec)
 		}
 	}()
 
@@ -318,27 +319,27 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// «premium_confirm_<tariffID>» попадут в HandlePremiumCallback и
 	// после отрезания префикса «premium_» дадут «confirm_<tariffID>».
 	if strings.HasPrefix(callbackData, "premium_confirm_") {
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "premium_confirm")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "premium_confirm")
 		menu.HandlePremiumConfirm(r.stateManager, r.paymentService, r.webAppURL, r.dashboardURL)(ctx, b, update, callbackData)
-		log.Printf(locales.LogRouterCallbackDone, chatID, callbackData)
+		log.Printf(locales.LogRouterCallbackDone, dashboard.MaskID(chatID), callbackData)
 		return
 	}
 
 	// Premium change tariff (для уже активного Premium) - проверяем ДО
 	// общего «premium_», иначе «premium_change» попал бы в выбор тарифа.
 	if callbackData == "premium_change" {
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "premium_change")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "premium_change")
 		if menu.HandleChangeTariff(r.stateManager, r.paymentService)(ctx, b, update, callbackData) {
-			log.Printf(locales.LogRouterCallbackDone, chatID, callbackData)
+			log.Printf(locales.LogRouterCallbackDone, dashboard.MaskID(chatID), callbackData)
 		}
 		return
 	}
 
 	// Premium callback (выбор тарифа → экран оплаты)
 	if strings.HasPrefix(callbackData, "premium_") {
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "premium")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "premium")
 		menu.HandlePremiumCallback(r.stateManager, r.paymentService)(ctx, b, update, callbackData)
-		log.Printf(locales.LogRouterCallbackDone, chatID, callbackData)
+		log.Printf(locales.LogRouterCallbackDone, dashboard.MaskID(chatID), callbackData)
 		return
 	}
 
@@ -349,7 +350,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// (handleBack) - единый UX на всех этапах. "test_notify_back" - «Назад»
 	// из под-меню теста уведомлений (возврат в хаб «Сервис»).
 	if callbackData == "hub_back" || callbackData == "msg_back" || callbackData == "test_notify_back" {
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, callbackData)
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, callbackData)
 
 		// Удаляем именно это сообщение (id сообщения под-действия).
 		if mm := update.CallbackQuery.Message; mm.Message != nil {
@@ -366,7 +367,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// «← Назад» из раздела-хаба (inline-кнопка блока меню хаба): удаляем
 	// само сообщение и возвращаем пользователя в Главное меню.
 	if callbackData == "back_to_main" {
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "back_to_main")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "back_to_main")
 		if mm := update.CallbackQuery.Message; mm.Message != nil {
 			helpers.DeleteMessage(ctx, b, chatID, mm.Message.ID)
 		}
@@ -387,52 +388,52 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// callback-запрос отвечается в конце функции (спиннер кнопки).
 	switch callbackData {
 	case "section_analysis":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_analysis")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_analysis")
 		r.renderHub(ctx, b, chatID, "analysis")
 	case "section_health":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_health")
 		r.renderHub(ctx, b, chatID, "health")
 	case "section_service":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_service")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_service")
 		r.renderHub(ctx, b, chatID, "service")
 	case "section_diag_regular":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_regular")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_diag_regular")
 		r.handleRegularAnalysis(ctx, b, chatID)
 	case "section_diag_extended":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_extended")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_diag_extended")
 		r.handleExtendedAnalysis(ctx, b, chatID)
 	case "section_bioscan_basic":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan_basic")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_bioscan_basic")
 		r.handleBioscanBasicStart(ctx, b, chatID)
 	case "section_bioscan_extended":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan_extended")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_bioscan_extended")
 		r.handleBioscanExtendedStart(ctx, b, chatID)
 	case "section_diag_regular_demo":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_regular_demo")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_diag_regular_demo")
 		r.handleRegularAnalysisDemo(ctx, b, chatID)
 	case "section_diag_extended_demo":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_diag_extended_demo")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_diag_extended_demo")
 		r.handleExtendedAnalysisDemo(ctx, b, chatID)
 	case "section_bioscan_basic_demo":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan_basic_demo")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_bioscan_basic_demo")
 		r.handleBioscanBasicDemo(ctx, b, chatID)
 	case "section_bioscan_extended_demo":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_bioscan_extended_demo")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_bioscan_extended_demo")
 		r.handleBioscanExtendedDemo(ctx, b, chatID)
 	case "section_health_summary":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_summary")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_health_summary")
 		r.handleDashboard(ctx, b, chatID, false)
 	case "section_health_summary_demo":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_health_summary_demo")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_health_summary_demo")
 		r.handleDashboard(ctx, b, chatID, true)
 	case "section_consult_start":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_consult_start")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_consult_start")
 		r.handleConsultationStart(ctx, b, chatID)
 	case "section_feedback_start":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_feedback_start")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_feedback_start")
 		r.handleFeedbackStart(ctx, b, chatID)
 	case "section_about":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_about")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_about")
 		// Выбрано под-действие - убираем блок-хаб.
 		r.deleteHubBlock(ctx, b, chatID)
 		r.setCurrentSection(chatID, "service")
@@ -441,32 +442,32 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// Под-меню теста уведомлений (раздел «Сервис» → 🧪 Тест уведомлений):
 	// вывод меню и планирование тестовых уведомлений через 30 секунд.
 	case "section_test_notify":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "section_test_notify")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_test_notify")
 		r.handleTestNotifyMenu(ctx, b, chatID)
 	case "test_notify_reminder":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "test_notify_reminder")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "test_notify_reminder")
 		r.handleTestNotifyAction(ctx, b, chatID, "reminder")
 	case "test_notify_motivation":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "test_notify_motivation")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "test_notify_motivation")
 		r.handleTestNotifyAction(ctx, b, chatID, "motivation")
 	case "test_notify_feature":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "test_notify_feature")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "test_notify_feature")
 		r.handleTestNotifyAction(ctx, b, chatID, "feature")
 
 	// Подтверждение загрузки файлов (inline-кнопки «Обработать/Отмена»).
 	case "upload_process":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "upload_process")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "upload_process")
 		upload.StartAnalysis(ctx, b, r.stateManager, r.analysisService, r.reportRenderer, r.pdfConverter, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo, r.webAppURL)
 	case "upload_cancel":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "upload_cancel")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "upload_cancel")
 		upload.CancelUpload(ctx, b, r.stateManager, chatID)
 
 	// Подтверждение/перезапуск Bioscan (inline-кнопки на экране фото).
 	case "bioscan_confirm":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "bioscan_confirm")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_confirm")
 		bioscan.ProcessBioscanWithPhotos(ctx, b, r.stateManager, r.analysisService, r.pdfConverter, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo, r.webAppURL)
 	case "bioscan_restart":
-		log.Printf(locales.LogRouterCallbackDispatch, chatID, callbackData, "bioscan_restart")
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_restart")
 		bioscan.StartBioscanFlow(ctx, b, r.stateManager, chatID)
 	}
 

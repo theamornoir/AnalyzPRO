@@ -116,10 +116,12 @@ func (h *Handler) demoMode(r *http.Request) bool {
 	return r.URL.Query().Get("demo") == "1" && h.appEnv == "development"
 }
 
-// maskID маскирует Telegram chat ID в логах, чтобы не светить сырой PII
+// MaskID маскирует Telegram chat ID в логах, чтобы не светить сырой PII
 // (идентификатор пользователя) в production-логах. Показывает первые и
-// последние 4 цифры, скрывая середину.
-func maskID(id int64) string {
+// последние 4 цифры, скрывая середину. Экспортирована (заглавная буква),
+// чтобы переиспользоваться в других пакетах обработчиков (например,
+// router), где тоже логируется сырой chatID.
+func MaskID(id int64) string {
 	s := strconv.FormatInt(id, 10)
 	if len(s) <= 8 {
 		return "***"
@@ -252,7 +254,7 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	log.Printf(locales.LogDashboardMetrics, maskID(telegramID), metrics.NoData)
+	log.Printf(locales.LogDashboardMetrics, MaskID(telegramID), metrics.NoData)
 }
 
 // Reports - обработчик GET /api/reports. Возвращает последний и предыдущий
@@ -458,7 +460,7 @@ func (h *Handler) ReportFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[DASHBOARD] PDF-отчёт id=%d отдан пользователю (user=%s): %d байт", entryID, maskID(telegramID), len(pdfBytes))
+	log.Printf("[DASHBOARD] PDF-отчёт id=%d отдан пользователю (user=%s): %d байт", entryID, MaskID(telegramID), len(pdfBytes))
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename+".pdf"))
 	w.Write(pdfBytes)
@@ -515,12 +517,12 @@ func (h *Handler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.DeleteHistoryEntry(r.Context(), entryID); err != nil {
-		log.Printf("[DASHBOARD] не удалось удалить запись id=%d user=%s: %v", entryID, maskID(telegramID), err)
+		log.Printf("[DASHBOARD] не удалось удалить запись id=%d user=%s: %v", entryID, MaskID(telegramID), err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal"})
 		return
 	}
-	log.Printf("[DASHBOARD] удалена запись id=%d user=%s type=%s", entryID, maskID(telegramID), entry.Type)
+	log.Printf("[DASHBOARD] удалена запись id=%d user=%s type=%s", entryID, MaskID(telegramID), entry.Type)
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
@@ -837,12 +839,12 @@ func (h *Handler) SaveProfile(w http.ResponseWriter, r *http.Request) {
 		JsonData:   string(payloadBytes),
 	}
 	if err := h.repo.SaveResult(r.Context(), entry); err != nil {
-		log.Printf("[DASHBOARD] не удалось сохранить профиль user=%s: %v", maskID(telegramID), err)
+		log.Printf("[DASHBOARD] не удалось сохранить профиль user=%s: %v", MaskID(telegramID), err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal"})
 		return
 	}
-	log.Printf("[DASHBOARD] профиль сохранён user=%s name=%q", maskID(telegramID), "***")
+	log.Printf("[DASHBOARD] профиль сохранён user=%s name=%q", MaskID(telegramID), "***")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }

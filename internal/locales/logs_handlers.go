@@ -52,9 +52,9 @@ const (
 	LogDashboardPremiumCheck   = "🔍 [DASHBOARD] проверка Premium: chatID=%d, isPremium=%v"
 	LogDashboardNotPremiumSent = "🔍 [DASHBOARD] отправлено «Premium требуется»: chatID=%d"
 	LogDashboardSent           = "✅ [DASHBOARD] сообщение отправлено: chatID=%d, messageID=%d, link=%s, кнопок=%d"
-	LogRouterCallback          = "📩 Callback: chatID=%d, data=%s"
-	LogRouterCallbackDispatch  = "🔀 [CALLBACK] диспетчеризация: chatID=%d, data=%s -> %s"
-	LogRouterCallbackDone      = "✅ [CALLBACK] обработка завершена: chatID=%d, data=%s"
+	LogRouterCallback          = "📩 Callback: chatID=%s, data=%s"
+	LogRouterCallbackDispatch  = "🔀 [CALLBACK] диспетчеризация: chatID=%s, data=%s -> %s"
+	LogRouterCallbackDone      = "✅ [CALLBACK] обработка завершена: chatID=%s, data=%s"
 	LogAPIEncodeError          = "❌ Ошибка кодирования JSON: %v"
 )
 

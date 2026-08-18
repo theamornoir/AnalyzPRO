@@ -14,7 +14,7 @@ const (
 	LogMockMode                     = "   - Mock Mode: %v"
 	LogAdminChatID                  = "   - Admin Chat ID: %d"
 	LogBotRunning                   = "🚀 Bot is running..."
-	LogDiagnosticInfo               = "🔍 [ДИАГНОСТИКА] chatID=%d, text=%q, state=%s, agreed=%v, analysis_type=%q, analysis_subtype=%q"
+	LogDiagnosticInfo               = "🔍 [ДИАГНОСТИКА] chatID=%s, text=%q, state=%s, agreed=%v, analysis_type=%q, analysis_subtype=%q"
 	LogAgreementNotAccepted         = "📝 Соглашение НЕ принято для chatID=%d"
 	LogShowingAgreementText         = "📝 Показываем текст соглашения"
 	LogProcessingBioscanName        = "📸 Обработка StateWaitingBioscanName для chatID=%d"
