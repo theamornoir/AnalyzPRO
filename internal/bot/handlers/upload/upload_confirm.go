@@ -27,6 +27,10 @@ func CancelUpload(
 	stateManager states.StateManager,
 	chatID int64,
 ) {
+	// Удаляем реальные файлы с диска: при отмене загрузки они больше не
+	// нужны, иначе «висели» бы на диске навсегда (утечка места). Делаем ДО
+	// очистки ссылок в состоянии, чтобы прочитать список файлов.
+	cleanupUploadedFilesByChat(stateManager, chatID)
 	stateManager.SetUserData(chatID, "uploaded_files", "")
 	stateManager.SetUserData(chatID, "file_count", "")
 	stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
@@ -79,6 +83,9 @@ func handleUploadConfirm(
 
 	if text == locales.BtnCancelLower || text == locales.BtnCancelLowerShort {
 		log.Printf(locales.LogUploadCancel)
+		// Удаляем реальные файлы с диска (см. обоснование в CancelUpload),
+		// затем очищаем ссылки на них в состоянии.
+		cleanupUploadedFilesByChat(stateManager, chatID)
 		stateManager.SetUserData(chatID, "uploaded_files", "")
 		stateManager.SetUserData(chatID, "file_count", "")
 		stateManager.SetState(chatID, states.StateWaitingAnalysisFile)

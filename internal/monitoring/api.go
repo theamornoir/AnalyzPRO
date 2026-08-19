@@ -256,6 +256,12 @@ func (h *APIHandler) handleListHistory(ctx context.Context, w http.ResponseWrite
 	if pageSize <= 0 {
 		pageSize = 20
 	}
+	// Defense-in-depth: жёстко ограничиваем размер страницы сверху, чтобы
+	// произвольный клиент не мог запросить огромную выборку (нагрузка на БД
+	// и память) через параметры пагинации.
+	if pageSize > 100 {
+		pageSize = 100
+	}
 	resp, err := h.svc.ListHistory(ctx, telegramID, entryType, page, pageSize)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())

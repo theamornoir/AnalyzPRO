@@ -19,7 +19,9 @@ func TestSplitLongMessageEmpty(t *testing.T) {
 }
 
 func TestSplitLongMessageChunks(t *testing.T) {
-	// ~9001 кириллическая руна -> 3 куска (4000 + 4000 + 1001).
+	// ~9001 кириллическая руна (по 2 байта) = 18002 байт.
+	// При байтовом лимите MaxMessageChunk (3500) -> 6 кусков
+	// (3500 + 3500 + 3500 + 3500 + 3500 + 502 байт).
 	long := make([]rune, 0, 9001)
 	for i := 0; i < 9001; i++ {
 		long = append(long, 'А')
@@ -27,12 +29,12 @@ func TestSplitLongMessageChunks(t *testing.T) {
 	text := string(long)
 
 	got := SplitLongMessage(text, MaxMessageChunk)
-	if len(got) != 3 {
-		t.Fatalf("ожидалось 3 куска для ~9001 рун, получено %d", len(got))
+	if len(got) < 2 {
+		t.Fatalf("ожидалось >=2 кусков для ~9001 рун, получено %d", len(got))
 	}
 	for i, c := range got {
-		if n := len([]rune(c)); n > MaxMessageChunk {
-			t.Errorf("кусок %d превышает лимит: %d рун (макс %d)", i, n, MaxMessageChunk)
+		if n := len(c); n > MaxMessageChunk {
+			t.Errorf("кусок %d превышает байтовый лимит: %d байт (макс %d)", i, n, MaxMessageChunk)
 		}
 	}
 

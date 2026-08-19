@@ -3,6 +3,7 @@ package reminders
 import (
 	"context"
 	"log"
+	"strings"
 	"time"
 
 	tgbot "github.com/go-telegram/bot"
@@ -38,6 +39,11 @@ const (
 	// reminderInactiveThreshold - порог неактивности для напоминания о
 	// повторном анализе (более 30 дней без взаимодействия).
 	reminderInactiveThreshold = 30 * 24 * time.Hour
+
+	// broadcastThrottle - минимальная пауза между отправками сообщений в
+	// циклах рассылки (напоминания/анонсы), чтобы не превышать лимит
+	// Telegram (~30 msg/s). 50ms => ~20 msg/s с запасом.
+	broadcastThrottle = 50 * time.Millisecond
 )
 
 // RunReminderLoop запускает фоновый цикл уведомлений. Блокирующая
@@ -114,12 +120,14 @@ func runChecks(ctx context.Context, b *tgbot.Bot, store *storage.Storage, monito
 				// Дебаунс: после отправки считаем активность «обновлённой»,
 				// чтобы следующее уведомление пришло не раньше чем через ~10 дней.
 				_ = store.Users.UpdateUserLastActivity(ctx, u.ID, now)
+				time.Sleep(broadcastThrottle)
 			}
 		case inactive >= motivationInactiveThreshold && userHasData(ctx, monitorRepo, u.TelegramID):
 			// Пользователь с сохранёнными данными не заходил ~10 дней -
 			// шлём случайное короткое напоминание (графики / действие / мотивация).
 			if send(ctx, b, u.TelegramID, locales.GetRandomReminder()) {
 				_ = store.Users.UpdateUserLastActivity(ctx, u.ID, now)
+				time.Sleep(broadcastThrottle)
 			}
 		}
 	}
@@ -152,17 +160,46 @@ func userHasData(ctx context.Context, monitorRepo monitoring.Repository, telegra
 // меню (чтобы сразу можно было перейти в «Мой профиль»). Возвращает true,
 // если сообщение успешно отправлено.
 func send(ctx context.Context, b *tgbot.Bot, chatID int64, text string) bool {
-	_, err := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        text,
-		ParseMode:   "Markdown",
-		ReplyMarkup: keyboards.MainMenu(),
-	})
-	if err != nil {
-		log.Printf("[REMINDERS] не удалось отправить уведомление chatID=%d: %v", chatID, err)
+	const maxAttempts = 4
+	backoff := 250 * time.Millisecond
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		_, err := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        text,
+			ParseMode:   "Markdown",
+			ReplyMarkup: keyboards.MainMenu(),
+		})
+		if err == nil {
+			return true
+		}
+		if !isTooManyRequests(err) {
+			log.Printf("[REMINDERS] не удалось отправить уведомление chatID=%d: %v", chatID, err)
+			return false
+		}
+		// Telegram 429 (Too Many Requests) - экспоненциальный backoff,
+		// уважаем отмену ctx, чтобы не блокировать завершение бота.
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+	}
+	log.Printf("[REMINDERS] исчерпаны попытки отправки chatID=%d (429)", chatID)
+	return false
+}
+
+// isTooManyRequests - true, если ошибка Telegram означает превышение лимита
+// запросов (HTTP 429). Библиотека tgbot возвращает ошибку со строкой вида
+// "Too Many Requests: retry after N".
+func isTooManyRequests(err error) bool {
+	if err == nil {
 		return false
 	}
-	return true
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "too many requests") ||
+		strings.Contains(msg, "retry after") ||
+		strings.Contains(msg, "429")
 }
 
 // BroadcastFeature рассылает одноразовое уведомление о новой функции всем
@@ -190,6 +227,7 @@ func BroadcastFeature(ctx context.Context, b *tgbot.Bot, store *storage.Storage,
 		}
 		if send(ctx, b, u.TelegramID, text) {
 			sent++
+			time.Sleep(broadcastThrottle)
 		}
 	}
 	return sent, nil

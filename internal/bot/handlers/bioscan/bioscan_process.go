@@ -78,7 +78,7 @@ func ProcessBioscanWithPhotos(
 	photosData := make([][]byte, 0, len(photoIDs))
 
 	for _, photoID := range photoIDs {
-		photoData, _, err := helpers.DownloadFileByID(ctx, b, photoID, uploadDir)
+		photoData, _, err := helpers.DownloadFileByID(ctx, b, photoID)
 		if err != nil {
 			helpers.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
 			sm.SetState(chatID, states.StateIdle)

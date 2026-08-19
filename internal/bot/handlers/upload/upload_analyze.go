@@ -8,6 +8,7 @@ import (
 	tgbot "github.com/go-telegram/bot"
 
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
+	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
@@ -33,6 +34,20 @@ func StartAnalysis(
 	saver monitoring.Repository,
 	webAppURL string,
 ) {
+	// Защита от устаревших/повторных нажатий inline-кнопки «Обработать»:
+	// кнопка действует только если пользователь всё ещё на шаге
+	// подтверждения загрузки. Иначе (например, нажатие на старую кнопку из
+	// истории после сброса состояния или выхода из раздела) - сообщаем, что
+	// кнопка устарела, и предлагаем начать заново, вместо того чтобы
+	// запускать анализ с пустым/чужим списком файлов.
+	if stateManager.GetState(chatID) != states.StateWaitingUploadConfirm {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgUploadStaleButton,
+			ReplyMarkup: keyboards.MainMenu(),
+		})
+		return
+	}
 	startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, appStorage, saver, webAppURL)
 }
 

@@ -10,13 +10,15 @@ import (
 	"testing"
 
 	tgbot "github.com/go-telegram/bot"
+
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 )
 
 // longChunkCapture - минимальный мок Telegram Bot API: запоминает все
 // отправленные sendMessage и их текст. Позволяет детерминированно проверить,
-// что sendLongMessagePlain при длинном результате ИИ разбивает текст на
-// несколько сообщений (каждое <= 4000), а не шлёт один "огромный" кусок,
-// который Telegram отбросил бы с 400.
+// что SendLongMessagePlain при длинном результате ИИ разбивает текст на
+// несколько сообщений (каждое <= 3500 байт), а не шлёт один "огромный"
+// кусок, который Telegram отбросил бы с 400.
 type longChunkCapture struct {
 	mu    sync.Mutex
 	texts []string
@@ -61,19 +63,20 @@ func TestSendLongMessagePlainChunks(t *testing.T) {
 		t.Fatalf("не удалось создать бота: %v", err)
 	}
 
-	// Текст длиннее лимита Telegram (4096): 4500 кириллических рун.
+	// Текст длиннее лимита Telegram (4096 байт): 4500 кириллических рун
+	// = 9000 байт. При байтовом лимите 3500 -> ровно 3 сообщения.
 	long := strings.Repeat("А", 4500)
-	sendLongMessagePlain(context.Background(), b, 1, long)
+	helpers.SendLongMessagePlain(context.Background(), b, 1, long)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if len(m.texts) != 2 {
-		t.Fatalf("ожидалось 2 сообщения для текста в 4500 рун, получено %d", len(m.texts))
+	if len(m.texts) != 3 {
+		t.Fatalf("ожидалось 3 сообщения для текста в 4500 рун, получено %d", len(m.texts))
 	}
 	for i, txt := range m.texts {
-		if n := len([]rune(txt)); n > 4000 {
-			t.Errorf("кусок %d превышает 4000 рун: %d", i, n)
+		if n := len(txt); n > helpers.MaxMessageChunk {
+			t.Errorf("кусок %d превышает байтовый лимит %d: %d байт", i, helpers.MaxMessageChunk, n)
 		}
 	}
 

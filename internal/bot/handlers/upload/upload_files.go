@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log"
 	"path/filepath"
 	"strconv"
@@ -49,7 +50,7 @@ func handleFileUpload(
 		return
 	}
 
-	fileData, mimeType, err := helpers.DownloadFileByID(ctx, b, document.FileID, uploadDir)
+	fileData, mimeType, err := helpers.DownloadFileByID(ctx, b, document.FileID)
 	if err != nil {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,
@@ -67,7 +68,11 @@ func handleFileUpload(
 		FileName: fileName,
 	})
 
-	safeFileName := strings.NewReplacer("&", "&", "<", "<", ">", ">").Replace(fileName)
+	// Экранируем имя файла перед вставкой в HTML-сообщение (ParseMode: HTML),
+	// чтобы имена вроде «<b>x</b>» или «<a href=...>» не интерпретировались
+	// Telegram как разметка (бесполезный identity-replacer раньше этого не
+	// делал - форматирование ломалось на спецсимволах).
+	safeFileName := html.EscapeString(fileName)
 
 	messageText := fmt.Sprintf(locales.MsgUploadFileAdded,
 		safeFileName, len(uploadedFiles))
@@ -98,7 +103,7 @@ func handlePhotoUpload(
 ) {
 	photo := photos[len(photos)-1]
 
-	fileData, mimeType, err := helpers.DownloadFileByID(ctx, b, photo.FileID, uploadDir)
+	fileData, mimeType, err := helpers.DownloadFileByID(ctx, b, photo.FileID)
 	if err != nil {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,

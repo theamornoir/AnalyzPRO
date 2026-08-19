@@ -70,7 +70,7 @@ func HandleBioscanBasicPhoto(
 
 	loadingMsg, textMsg := helpers.SendLoadingMessages(ctx, b, chatID, stickerID, nil)
 
-	data, _, dlErr := helpers.DownloadFileByID(ctx, b, photo.FileID, uploadDir)
+	data, _, dlErr := helpers.DownloadFileByID(ctx, b, photo.FileID)
 	if dlErr != nil {
 		helpers.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
 		sm.SetState(chatID, states.StateIdle)
@@ -98,8 +98,9 @@ func HandleBioscanBasicPhoto(
 	helpers.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
 
 	// Результат - ОБЫЧНОЕ сообщение БЕЗ форматирования (без ParseMode).
-	// Может превышать лимит Telegram (4096) - дробим на куски <= 4000
-	// символов, иначе сообщение не дойдёт, хотя бот пошлёт «Готово».
+	// Может превышать лимит Telegram (4096 байт) - дробим на куски <= 3500
+	// байт через helpers.SendLongMessagePlain, иначе сообщение не дойдёт,
+	// хотя бот пошлёт «Готово».
 	if strings.TrimSpace(result) != "" {
 		helpers.SendLongMessagePlain(ctx, b, chatID, result)
 	}

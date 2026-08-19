@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -57,12 +56,13 @@ func detectMimeType(fileName string) string {
 	}
 }
 
-// DownloadFileByID - скачивает файл по file_id.
+// DownloadFileByID - скачивает файл по file_id. Возвращает содержимое и
+// реальный MIME-тип (по magic numbers). Файл НЕ пишется на диск - вызывающий
+// сам решает, сохранять ли его (см. saveUploadedFile в пакете upload).
 func DownloadFileByID(
 	ctx context.Context,
 	b *tgbot.Bot,
 	fileID string,
-	uploadDir string,
 ) ([]byte, string, error) {
 	file, err := b.GetFile(ctx, &tgbot.GetFileParams{FileID: fileID})
 	if err != nil {
@@ -81,11 +81,6 @@ func DownloadFileByID(
 	}
 
 	mimeType := detectRealMimeType(data, "file")
-
-	if uploadDir != "" {
-		_ = os.MkdirAll(uploadDir, 0o755)
-		_ = os.WriteFile(filepath.Join(uploadDir, "photo.jpg"), data, 0o644)
-	}
 
 	return data, mimeType, nil
 }

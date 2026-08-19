@@ -197,7 +197,7 @@ func processSingleFile(
 
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
-	sendLongMessagePlain(ctx, b, chatID, result)
+	helpers.SendLongMessagePlain(ctx, b, chatID, result)
 
 	// Сохраняем ОБЫЧНЫЙ анализ в «Мой профиль» (история пользователя),
 	// чтобы он был доступен там вместе с прочими результатами. Тот же
@@ -300,7 +300,7 @@ func processMultipleFiles(
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
 	finalResult := fmt.Sprintf(locales.MsgUploadResultFiles, len(files), rendered)
-	sendLongMessagePlain(ctx, b, chatID, finalResult)
+	helpers.SendLongMessagePlain(ctx, b, chatID, finalResult)
 
 	// Сохраняем ОБЫЧНЫЙ анализ (несколько файлов) в «Мой профиль».
 	// Тот же структурированный JSON наполняет блоки дашборда РЕАЛЬНЫМИ
@@ -311,43 +311,6 @@ func processMultipleFiles(
 	// Сообщаем, что результат сохранён в «Мой профиль», и даём
 	// кнопку для мгновенного открытия.
 	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
-}
-
-// sendLongMessagePlain отправляет текст, разбивая его на куски <= 4000
-// символов по границам строк, чтобы не упереться в лимит Telegram (4096).
-// Клавиатура не крепится - меню присылается отдельным сообщением после
-// сохранения результата. Без этого длинные отчёты ИИ (4000-6000 выходных
-// токенов на кириллице - это ~6-10k символов) не доставлялись бы в чат
-// (Telegram вернул бы 400), хотя и сохранялись бы в «Мой профиль».
-func sendLongMessagePlain(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
-	const maxChunk = 4000
-	runes := []rune(text)
-	n := len(runes)
-	if n <= maxChunk {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: text})
-		return
-	}
-
-	chunks := []string{}
-	for start := 0; start < n; {
-		end := start + maxChunk
-		if end > n {
-			end = n
-		}
-		chunk := string(runes[start:end])
-		if end < n {
-			if idx := strings.LastIndex(chunk, "\n"); idx > 0 {
-				end = start + idx + 1
-				chunk = string(runes[start:end])
-			}
-		}
-		chunks = append(chunks, chunk)
-		start = end
-	}
-
-	for _, chunk := range chunks {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: chunk})
-	}
 }
 
 // deleteLoadingMessages - удаляет сообщения о загрузке.

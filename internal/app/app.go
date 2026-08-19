@@ -9,10 +9,12 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/theamornoir/analyzpro/internal/ai/gemini"
 	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/bot"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/upload"
 	"github.com/theamornoir/analyzpro/internal/bot/reminders"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/config"
@@ -256,6 +258,13 @@ func (a *App) Run(parent context.Context) {
 	// цикл). Запускается в горутине и завершается вместе с ctx (остановка
 	// бота).
 	go a.notifService.Run(ctx)
+
+	// Фоновый сборщик брошенных временных файлов загрузки (отмена / бросание
+	// чата / падение до завершения анализа). Удаляет файлы старше 6 часов
+	// (анализ длится ≤ ~120с, поэтому такой порог безопасен для «живых»
+	// файлов). Проверка раз в час. Без этого диск на долгоживущем сервере
+	// неограниченно забивался бы оставленными файлами анализов.
+	go upload.StartUploadCleanupLoop(ctx, a.cfg.UploadDir, 6*time.Hour, time.Hour)
 
 	a.bot.Start(ctx)
 }

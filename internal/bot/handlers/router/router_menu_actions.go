@@ -766,7 +766,7 @@ func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, ch
 	if hasPhoto {
 		photos := update.Message.Photo
 		largest := photos[len(photos)-1]
-		data, mimeType, dlErr := helpers.DownloadFileByID(ctx, b, largest.FileID, r.uploadDir)
+		data, mimeType, dlErr := helpers.DownloadFileByID(ctx, b, largest.FileID)
 		if dlErr != nil {
 			log.Printf("[CONSULT] ошибка загрузки фото chatID=%d: %v", chatID, dlErr)
 			r.stateManager.SetState(chatID, states.StateIdle)
@@ -820,39 +820,16 @@ func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, ch
 	return true
 }
 
-// sendLongMessage - отправляет текст, разбивая его на куски ≤ 4000 символов
-// по границам строк, чтобы не упереться в лимит Telegram (4096). Клавиатура
-// (keyboard) крепится только к последнему куску.
+// sendLongMessage - отправляет текст, разбивая его на куски по 3500 байт
+// (байтовый лимит Telegram - 4096, с запасом на кириллицу/эмодзи), чтобы не
+// упереться в ограничение API. Клавиатура (keyboard) крепится только к
+// последнему куску. Разбиение делегируется общему байтовому хелперу
+// helpers.SplitLongMessage - единственный источник истины по чанкованию.
 func sendLongMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string, keyboard models.ReplyKeyboardMarkup) {
-	const maxChunk = 4000
-	runes := []rune(text)
-	n := len(runes)
-	if n <= maxChunk {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        text,
-			ReplyMarkup: keyboard,
-		})
+	chunks := helpers.SplitLongMessage(text, helpers.MaxMessageChunk)
+	if len(chunks) == 0 {
 		return
 	}
-
-	chunks := []string{}
-	for start := 0; start < n; {
-		end := start + maxChunk
-		if end > n {
-			end = n
-		}
-		chunk := string(runes[start:end])
-		if end < n {
-			if idx := strings.LastIndex(chunk, "\n"); idx > 0 {
-				end = start + idx + 1
-				chunk = string(runes[start:end])
-			}
-		}
-		chunks = append(chunks, chunk)
-		start = end
-	}
-
 	for i, chunk := range chunks {
 		kb := models.ReplyKeyboardMarkup{}
 		if i == len(chunks)-1 {

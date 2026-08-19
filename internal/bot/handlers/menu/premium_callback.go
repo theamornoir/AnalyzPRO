@@ -128,6 +128,25 @@ func HandlePremiumConfirm(
 		tariffID := strings.TrimPrefix(callbackData, "premium_confirm_")
 		log.Printf(locales.LogPaymentConfirmTarget, chatID, tariffID)
 
+		// Защита от повторного нажатия кнопки «Оплатил (симуляция)» из
+		// старого сообщения или двойного клика: если Premium уже активен
+		// ровно на этом тарифе - повторная активация не нужна (на реальном
+		// платёжном шлюзе это предотвратило бы повторное списание средств).
+		if paymentService.IsUserPremium(chatID) {
+			if info := paymentService.GetPremiumInfo(chatID); info != nil && info.TariffID == tariffID {
+				botutil.AnswerLogged(ctx, b, tgbot.AnswerCallbackQueryParams{
+					CallbackQueryID: update.CallbackQuery.ID,
+					Text:            "✅ Premium уже активен на этом тарифе",
+				})
+				_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+					ChatID:      chatID,
+					Text:        locales.MsgPremiumConfirmReplay,
+					ReplyMarkup: keyboards.MainMenu(),
+				})
+				return true
+			}
+		}
+
 		// Запоминаем, был ли Premium уже активен до этого подтверждения
 		// (тогда это смена тарифа, а не первая активация).
 		wasPremium := paymentService.IsUserPremium(chatID)

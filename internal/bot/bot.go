@@ -16,6 +16,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/router"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
+	"github.com/theamornoir/analyzpro/internal/bot/ratelimit"
 	"github.com/theamornoir/analyzpro/internal/bot/reminders"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -60,6 +61,10 @@ type Bot struct {
 	// Premium на 30 дней (вместо года). Коды из этого списка при
 	// активации дают premium_monthly, а не premium_yearly.
 	promoCodesMonthly []string
+	// rateLimiter - per-user (по chatID) rate-limit: защита от спама
+	// одного пользователя множеством фото/документов/сообщений, которые
+	// иначе породили бы неограниченное число горутин и очередь ИИ-запросов.
+	rateLimiter *ratelimit.Limiter
 }
 
 func New(
@@ -117,6 +122,12 @@ func New(
 		appEnv:            appEnv,
 		promoCodes:        promoCodes,
 		promoCodesMonthly: promoCodesMonthly,
+		// Per-user rate-limit: до 20 событий (сообщений/фото/документов/
+		// callback) в окно 10 секунд на один chatID. Админ исключён в
+		// обёртке. Значение подобрано так, чтобы легитимный пользователь
+		// (несколько фото за анализ) не упирался в лимит, но спам
+		// блокировался.
+		rateLimiter: ratelimit.New(20, 10*time.Second),
 	}
 
 	// Диагностика: логируем id бота из токена, чтобы при ошибках валидации
@@ -244,6 +255,21 @@ func (b *Bot) Start(ctx context.Context) {
 	// Telegram (в т.ч. админ-команды сброса для тестирования онбординга).
 	// Запускаем в горутине - сетевой вызов не должен блокировать старт.
 	go b.setupCommands(ctx)
+
+	// Периодическая очистка устаревших записей rate-limiter'а, чтобы
+	// карта в памяти не росла бесконечно (окно лимитера - 10с).
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				b.rateLimiter.Cleanup()
+			}
+		}
+	}()
 
 	b.client.Start(ctx)
 }
@@ -510,6 +536,58 @@ func (b *Bot) handleNotificationsCommand(ctx context.Context, tb *tgbot.Bot, upd
 	}
 }
 
+// updateChatID извлекает идентификатор чата (пользователя) из апдейта - для
+// ключа rate-limiter'а. Для callback-запросов берём ID отправителя
+// (CallbackQuery.From.ID) - он всегда доступен и уникален на пользователя.
+// (Поле Message в CallbackQuery имеет тип MaybeInaccessibleMessage без
+// Chat, поэтому chatID для кнопок извлекаем именно по From.ID.)
+func updateChatID(update *models.Update) int64 {
+	if update == nil {
+		return 0
+	}
+	if update.Message != nil {
+		return update.Message.Chat.ID
+	}
+	if update.EditedMessage != nil {
+		return update.EditedMessage.Chat.ID
+	}
+	if update.CallbackQuery != nil {
+		return update.CallbackQuery.From.ID
+	}
+	return 0
+}
+
+// rateLimited оборачивает обработчик апдейта per-user rate-limit'ом. Админ
+// (b.adminChatID) исключён - его действия не дросселируются. При превышении
+// лимита пользователю один раз за окно шлётся подсказка «сбавьте темп»,
+// остальные лишние события молча игнорируются (чтобы не спамить).
+func (b *Bot) rateLimited(handler func(context.Context, *tgbot.Bot, *models.Update)) func(context.Context, *tgbot.Bot, *models.Update) {
+	return func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+		chatID := updateChatID(update)
+		if chatID != 0 && chatID != b.adminChatID {
+			if !b.rateLimiter.Allow(chatID) {
+				// Чтобы у избыточного клика по inline-кнопке не «крутился»
+				// спиннер, отвечаем на callback сразу (без алерта). Иначе
+				// превышение лимита оставило бы кнопку в состоянии загрузки.
+				if update.CallbackQuery != nil {
+					_, _ = tb.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+						CallbackQueryID: update.CallbackQuery.ID,
+						Text:            locales.MsgRateLimit,
+						ShowAlert:       false,
+					})
+				} else if b.rateLimiter.ShouldWarn(chatID) {
+					_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+						ChatID: chatID,
+						Text:   locales.MsgRateLimit,
+					})
+				}
+				return
+			}
+		}
+		handler(ctx, tb, update)
+	}
+}
+
 func (b *Bot) registerHandlers() {
 
 	router := router.MessageRouter(
@@ -652,40 +730,42 @@ func (b *Bot) registerHandlers() {
 		}
 	}
 
-	// Обычный текст
+	// Обычный текст (с per-user rate-limit'ом против спама).
 	b.client.RegisterHandler(
 		tgbot.HandlerTypeMessageText,
 		"",
 		tgbot.MatchTypePrefix,
-		router,
+		b.rateLimited(router),
 	)
 
-	// Документы
+	// Документы (с per-user rate-limit'ом: защита от массовой загрузки
+	// файлов, порождающей горутины и очередь ИИ-запросов).
 	b.client.RegisterHandlerMatchFunc(
 		func(update *models.Update) bool {
 			return update.Message != nil &&
 				update.Message.Document != nil
 		},
-		router,
+		b.rateLimited(router),
 	)
 
-	// Фото
+	// Фото (с per-user rate-limit'ом).
 	b.client.RegisterHandlerMatchFunc(
 		func(update *models.Update) bool {
 			return update.Message != nil &&
 				update.Message.Photo != nil
 		},
-		router,
+		b.rateLimited(router),
 	)
 
 	// Callback-запросы (inline-кнопки: выбор тарифа premium_<id>,
-	// подтверждение оплаты premium_confirm_<id>).
+	// подтверждение оплаты premium_confirm_<id>). С per-user rate-limit'ом
+	// против спама кнопками.
 	// Без этой регистрации router.handle() никогда не получал callback'и,
 	// поэтому клики по тарифам/оплате «ничего не делали».
 	b.client.RegisterHandler(
 		tgbot.HandlerTypeCallbackQueryData,
 		"",
 		tgbot.MatchTypePrefix,
-		router,
+		b.rateLimited(router),
 	)
 }

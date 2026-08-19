@@ -64,6 +64,14 @@ func UploadHandler(
 			return
 		}
 
+		// Очищаем «висячие» файлы прошлой (брошенной) сессии загрузки, чтобы
+		// не смешивать их с новой и не ссылаться на уже удалённые файлы
+		// (например, очищенные фоновым сборщиком). В свежей сессии
+		// uploaded_files и так пуст, так что это безопасно.
+		cleanupUploadedFilesByChat(stateManager, chatID)
+		stateManager.SetUserData(chatID, "uploaded_files", "")
+		stateManager.SetUserData(chatID, "file_count", "")
+
 		if update.Message.Document != nil {
 			log.Printf(locales.LogUploadHandlingDoc)
 			handleFileUpload(ctx, b, stateManager, uploadDir, chatID, update.Message.Document)
