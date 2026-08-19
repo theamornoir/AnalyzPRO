@@ -169,40 +169,41 @@ func processSingleFile(
 		return
 	}
 
-	result, err := analysisService.HandleAnalysisFromFileWithContext(
+	// Обычный анализ: ОДИН структурированный JSON-вызов ИИ. По нему
+	// детерминированно рендерим чат-текст (гарантия формата, без зависимости
+	// от «настроения» LLM, как в Bioscan) и тот же JSON сохраняем в «Мой
+	// профиль» для блоков дашборда. Два старых вызова (текст + JSON)
+	// объединены в один.
+	analysisJSON, err := analysisService.HandleAnalysisFromFileJSON(
 		ctx,
 		fileData,
 		file.MimeType,
 		contextInfo,
 	)
+	if err != nil || strings.TrimSpace(analysisJSON) == "" {
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("analysis JSON failed: %w", err))
+		return
+	}
+	parsed, perr := report.ParseAdaptiveReportJSON(analysisJSON)
+	if perr != nil {
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("analysis JSON parse failed: %w", perr))
+		return
+	}
+	result := report.RenderAnalysisPlainText(parsed)
+	if strings.TrimSpace(result) == "" {
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("rendered empty analysis for single file"))
+		return
+	}
 
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
-	if err != nil {
-		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, err)
-		return
-	}
-
-	// Пустой результат без явной ошибки - тоже «неверный ответ» ИИ.
-	// Не отправляем пустоту и не ломаем состояние: даём пользователю
-	// вернуться в главное меню.
-	if strings.TrimSpace(result) == "" {
-		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("AI returned empty analysis for single file"))
-		return
-	}
-
 	sendLongMessagePlain(ctx, b, chatID, result)
 
-	// Дополнительно запрашиваем у ИИ структурированные показатели
-	// (sections/categories с indicators), чтобы наполнить блоки «Сводки
-	// здоровья» РЕАЛЬНЫМИ значениями обычного анализа (кровь/биохимия и т.п.).
-	// Не критично: при ошибке сохраняем только текст (текущее поведение).
-	indicatorsJSON, _ := analysisService.HandleAnalysisFromFileJSON(ctx, fileData, file.MimeType, contextInfo)
-
 	// Сохраняем ОБЫЧНЫЙ анализ в «Мой профиль» (история пользователя),
-	// чтобы он был доступен там вместе с прочими результатами. Вместе с
-	// текстом сохраняем структурированные показатели для блоков дашборда.
-	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, result, indicatorsJSON)
+	// чтобы он был доступен там вместе с прочими результатами. Тот же
+	// структурированный JSON наполняет блоки дашборда РЕАЛЬНЫМИ
+	// показателями обычного анализа (кровь/биохимия и т.п.).
+	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, result, analysisJSON)
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
 
 	// Сообщаем, что результат сохранён в «Мой профиль», и даём
@@ -248,21 +249,20 @@ func processMultipleFiles(
 		return
 	}
 
-	// Один мультифайловый запрос на текстовый анализ всех вложений сразу.
-	analysisText, err := analysisService.HandleAnalysisFromFilesWithContext(
-		ctx,
-		filesData,
-		mimeTypes,
-		contextInfo,
-	)
-	if err != nil || strings.TrimSpace(analysisText) == "" {
-		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("multi-file analysis failed: %w", err))
-		return
-	}
-
 	if isExtended {
 		// Расширенный анализ (несколько файлов) -> универсальное отчёт-досье.
-		// analysisText уже учитывает ВСЕ файлы совместно (один запрос).
+		// Один мультимодальный текстовый запрос всех вложений сразу
+		// (analysisText учитывает ВСЕ файлы совместно).
+		analysisText, err := analysisService.HandleAnalysisFromFilesWithContext(
+			ctx,
+			filesData,
+			mimeTypes,
+			contextInfo,
+		)
+		if err != nil || strings.TrimSpace(analysisText) == "" {
+			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("multi-file analysis failed: %w", err))
+			return
+		}
 		combined := analysisText + "\n\nДанные пациента и опросника об образе жизни:\n" + contextInfo
 		dossierJSON, derr := analysisService.HandleExtendedDossierJSON(ctx, combined)
 		if derr != nil || dossierJSON == "" {
@@ -273,17 +273,39 @@ func processMultipleFiles(
 		return
 	}
 
+	// БАЗОВЫЙ анализ: ОДИН структурированный JSON-вызов ИИ всех файлов сразу
+	// -> детерминированный чат-текст (гарантия формата, без зависимости от
+	// «настроения» LLM, как в Bioscan) + блоки дашборда «Мой профиль».
+	analysisJSON, err := analysisService.HandleAnalysisFromFilesJSON(
+		ctx,
+		filesData,
+		mimeTypes,
+		contextInfo,
+	)
+	if err != nil || strings.TrimSpace(analysisJSON) == "" {
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("multi-file analysis JSON failed: %w", err))
+		return
+	}
+	parsed, perr := report.ParseAdaptiveReportJSON(analysisJSON)
+	if perr != nil {
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("multi-file analysis JSON parse failed: %w", perr))
+		return
+	}
+	rendered := report.RenderAnalysisPlainText(parsed)
+	if strings.TrimSpace(rendered) == "" {
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("rendered empty multi-file analysis"))
+		return
+	}
+
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
-	finalResult := fmt.Sprintf(locales.MsgUploadResultFiles, len(files), analysisText)
+	finalResult := fmt.Sprintf(locales.MsgUploadResultFiles, len(files), rendered)
 	sendLongMessagePlain(ctx, b, chatID, finalResult)
 
-	// Один мультифайловый запрос на структурированные показатели (sections/
-	// categories) всех файлов сразу - для блоков «Мой профиль».
-	indicatorsJSON, _ := analysisService.HandleAnalysisFromFilesJSON(ctx, filesData, mimeTypes, contextInfo)
-
 	// Сохраняем ОБЫЧНЫЙ анализ (несколько файлов) в «Мой профиль».
-	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, finalResult, indicatorsJSON)
+	// Тот же структурированный JSON наполняет блоки дашборда РЕАЛЬНЫМИ
+	// показателями обычного анализа.
+	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, finalResult, analysisJSON)
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
 
 	// Сообщаем, что результат сохранён в «Мой профиль», и даём

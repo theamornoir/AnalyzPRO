@@ -4,6 +4,7 @@ package models
 // Генерируется AI и содержит только те секции, по которым есть данные.
 type AdaptiveReportData struct {
 	Title           string    `json:"title"`
+	Date            string    `json:"date,omitempty"` // дата исследования из бланка
 	Summary         string    `json:"summary"`
 	Sections        []Section `json:"sections"`
 	Recommendations []string  `json:"recommendations,omitempty"`
@@ -22,10 +23,11 @@ type Section struct {
 
 // Indicator - один показатель внутри секции.
 type Indicator struct {
-	Name   string `json:"name"`
-	Value  string `json:"value"`
-	Unit   string `json:"unit,omitempty"`
-	Normal string `json:"normal,omitempty"`
-	Status string `json:"status"` // normal, warning, critical
-	Score  int    `json:"score,omitempty"`
+	Name        string `json:"name"`
+	Value       string `json:"value"`
+	Unit        string `json:"unit,omitempty"`
+	Normal      string `json:"normal,omitempty"`
+	Status      string `json:"status"` // normal, warning, critical
+	Score       int    `json:"score,omitempty"`
+	Description string `json:"description,omitempty"` // 1-2 предложения: что показывает и что значит отклонение
 }

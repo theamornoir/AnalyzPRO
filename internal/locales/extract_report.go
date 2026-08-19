@@ -102,21 +102,36 @@ const (
 
 // ---------------------------------------------------------------------------
 // Plain-text report (RenderBioscanPlainText) - section titles and labels.
+// Формат вывода в чат приведён к шаблону пользователя: emoji-маркеры
+// (💪/📏/⚖️/🔥/●/🔸/⚡/⚠️/✦), без markdown-разметки и звёздочек.
 // ---------------------------------------------------------------------------
 const (
-	RptMsgTextHeader            = "BIOSCAN - результат анализа тела\n"
+	RptMsgTextHeader            = "💪 BIOSCAN — результат анализа тела\n"
 	RptMsgTextOverallAssessment = "Общая оценка: "
-	RptMsgTextComposition       = "Композиция тела:\n"
-	RptMsgTextProfileDev        = "Профиль развития:\n"
-	RptMsgTextCompLabel         = "Композиция: "
-	RptMsgTextMuscleDevLabel    = "Развитие мышц: "
-	RptMsgTextBalanceLabel      = "Баланс: "
-	RptMsgTextPotentialLabel    = "Потенциал: "
-	RptMsgTextSummary           = "Резюме:\n"
-	RptMsgTextZoneAssessment    = "Оценка зон тела:\n"
-	RptMsgTextPosture           = "Осанка:\n"
-	RptMsgTextAttentionZones    = "Зоны внимания:\n"
-	RptMsgTextRecommendations   = "Рекомендации:\n"
-	RptMsgTextProgressControl   = "Контроль прогресса:\n"
+	RptMsgTextHeight            = "📏 "
+	RptMsgTextWeight            = "⚖️ "
+	RptMsgTextMuscle            = "💪 "
+	RptMsgTextFat               = "🔥 "
+	RptMsgTextComposition       = "● КОМПОЗИЦИЯ ТЕЛА\n"
+	RptMsgTextScoreComp         = "Композиция "
+	RptMsgTextScoreMuscle       = "Мышцы "
+	RptMsgTextScoreBalance      = "Баланс "
+	RptMsgTextScorePotential    = "Потенциал "
+	RptMsgTextZoneAssessment    = "● ОЦЕНКА ПО ЗОНАМ\n"
+	RptMsgTextZoneBullet        = "🔸 "
+	RptMsgTextZoneRec           = "Совет: "
+	RptMsgTextPosture           = "● ОСАНКА\n"
+	RptMsgTextAttentionZones    = "● ЗОНЫ ВНИМАНИЯ\n"
+	RptMsgTextAttentionPrefix   = "⚠️ "
+	RptMsgTextRecommendations   = "● ГЛАВНЫЕ РЕКОМЕНДАЦИИ\n"
+	RptMsgTextRecBullet         = "✦ "
+	RptMsgTextProgressControl   = "● КОНТРОЛЬ ПРОГРЕССА\n"
 	RptMsgTextDisclaimer        = "⚠️ Отчёт носит информационный характер и не заменяет консультацию врача."
+
+	// Сохранён для обратной совместимости, в новом формате не используется.
+	RptMsgTextProfileDev = "Профиль развития:\n"
+
+	// Резюме (краткий вывод ИИ по биоскану), выводится блоком ● РЕЗЮМЕ
+	// сразу после оценок композиции в чат-версии отчёта.
+	RptMsgTextSummary = "● РЕЗЮМЕ\n"
 )
