@@ -413,7 +413,7 @@ func (b *Bot) handlePromo(ctx context.Context, tb *tgbot.Bot, update *models.Upd
 		activatedMsg = locales.MsgPromoActivatedMonth
 	}
 	if u, gerr := b.appStorage.Users.GetUserByTelegramID(ctx, chatID); gerr == nil {
-		_ = b.appStorage.Users.UpdateUserPremiumStatus(ctx, u.ID, true, expiresAt)
+		_ = b.appStorage.Users.UpdateUserPremiumStatus(ctx, u.ID, true, expiresAt, tariffID)
 	}
 
 	// Фиксируем использование кода (нельзя применить повторно).

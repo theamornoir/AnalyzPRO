@@ -80,6 +80,7 @@ func Migrate(conn *sql.DB) error {
 			name TEXT NOT NULL DEFAULT '',
 			is_premium INTEGER NOT NULL DEFAULT 0,
 			premium_expires_at DATETIME,
+			tariff_id TEXT NOT NULL DEFAULT '',
 			onboarding_completed INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL
 		)`,
@@ -212,6 +213,18 @@ func Migrate(conn *sql.DB) error {
 		}
 	} else {
 		rows2.Close()
+	}
+
+	// Для уже существующих баз добавляем столбец tariff_id (ID активного
+	// тарифа Premium) идемпотентно (тот же паттерн с обязательным
+	// rows.Close()).
+	rows3, qerr3 := conn.Query("SELECT tariff_id FROM users LIMIT 0")
+	if qerr3 != nil {
+		if _, aerr := conn.Exec("ALTER TABLE users ADD COLUMN tariff_id TEXT"); aerr != nil {
+			return fmt.Errorf("ошибка миграции (tariff_id): %w", aerr)
+		}
+	} else {
+		rows3.Close()
 	}
 
 	// Для уже существующих баз, где таблицы уведомлений были созданы по

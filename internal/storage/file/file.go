@@ -153,7 +153,7 @@ func (s *Store) GetAllUsers(ctx context.Context) ([]*sm.User, error) {
 	return out, nil
 }
 
-func (s *Store) UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time) error {
+func (s *Store) UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time, tariffID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -161,6 +161,7 @@ func (s *Store) UpdateUserPremiumStatus(ctx context.Context, userID uint, isPrem
 		if u.ID == userID {
 			u.IsPremium = isPremium
 			u.PremiumExpiresAt = expiresAt
+			u.TariffID = tariffID
 			s.save()
 			return nil
 		}

@@ -59,7 +59,7 @@ func TestUserRoundTrip(t *testing.T) {
 		t.Error("upsert изменил ID пользователя")
 	}
 
-	if err := r.UpdateUserPremiumStatus(ctx, u.ID, true, time.Now().Add(24*time.Hour)); err != nil {
+	if err := r.UpdateUserPremiumStatus(ctx, u.ID, true, time.Now().Add(24*time.Hour), "premium_yearly"); err != nil {
 		t.Fatalf("update premium: %v", err)
 	}
 	u3, _ := r.GetUserByTelegramID(ctx, 123)

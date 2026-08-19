@@ -1,15 +1,16 @@
 package payment
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
 	"github.com/theamornoir/analyzpro/internal/locales"
+	"github.com/theamornoir/analyzpro/internal/storage/interfaces"
 )
 
 // PaymentRequest - запрос на создание платежа.
@@ -42,12 +43,23 @@ type WebhookData struct {
 }
 
 // MockPaymentService - мок-сервис платежей (замена YooKassa).
+//
+// Состояние Premium хранится в БД (источник истины, переживает перезапуск
+// бота и защищено от конкурентных записей SQLite), а в памяти держится
+// быстрый кэш (users) для горячих проверок гейтов. При каждой активации/
+// сбросе состояние пишется и в БД (через usersRepo), и в кэш. При чтении
+// (IsPremium/GetPremiumInfo) при промахе кэша данные подтягиваются из БД.
+//
+// Ранее состояние дублировалось в JSON-файл (premium_users.json), что было
+// хрупко: файл перезаписывался целиком, не был concurrent-safe при
+// нескольких инстансах и рассинхронизировался с БД. Теперь файл не
+// используется.
 type MockPaymentService struct {
 	mu          sync.RWMutex
 	payments    map[string]*MockPayment
-	users       map[int64]*PremiumUser
+	users       map[int64]*PremiumUser // кэш Premium-статуса (key: telegram_id)
 	webhookFunc func(payload []byte) error // callback для обработки вебхуков
-	dataFile    string                     // файл для сохранения состояния Premium
+	usersRepo   interfaces.UserRepository // БД как источник истины (может быть nil - тогда только in-memory кэш)
 }
 
 // PremiumUser - информация о премиум-пользователе.
@@ -60,56 +72,54 @@ type PremiumUser struct {
 }
 
 // NewMockPaymentService создаёт мок-сервис платежей.
-// dataFile - путь к JSON-файлу для сохранения состояния Premium-пользователей.
-func NewMockPaymentService(dataFile string) *MockPaymentService {
-	s := &MockPaymentService{
-		payments: make(map[string]*MockPayment),
-		users:    make(map[int64]*PremiumUser),
-		dataFile: dataFile,
+// usersRepo - репозиторий пользователей (БД) как источник истины для
+// Premium-статуса. Может быть nil - тогда сервис работает только в
+// in-memory кэше (используется в тестах и как безопасный fallback, если
+// репозиторий недоступен).
+func NewMockPaymentService(usersRepo interfaces.UserRepository) *MockPaymentService {
+	return &MockPaymentService{
+		payments:  make(map[string]*MockPayment),
+		users:     make(map[int64]*PremiumUser),
+		usersRepo: usersRepo,
 	}
-
-	// Загружаем сохранённых пользователей из файла
-	s.loadUsers()
-
-	return s
 }
 
-// loadUsers - загружает пользователей из JSON-файла.
-func (s *MockPaymentService) loadUsers() {
-	data, err := os.ReadFile(s.dataFile)
-	if err != nil {
-		// Файл не существует - это нормально
-		return
-	}
-
-	if err := json.Unmarshal(data, &s.users); err != nil {
-		log.Printf("⚠️ Failed to load premium users: %v", err)
-		return
-	}
-
-	log.Printf("📂 Loaded %d premium user(s) from %s", len(s.users), s.dataFile)
-}
-
-// saveUsers - сериализует пользователей под RLock и ПОСЛЕ снятия лока
-// пишет файл. ВАЖНО: не держит блокировку во время записи на диск и не
-// вызывается из-под уже взятого s.mu (иначе self-deadlock на не-
-// реентерабельном sync.RWMutex).
-func (s *MockPaymentService) saveUsers() {
-	if s.dataFile == "" {
-		return
-	}
-
+// getInfo возвращает кэш PremiumUser для пользователя. При промахе кэша
+// (и наличии usersRepo) подтягивает состояние из БД и кладёт в кэш.
+// Если пользователь не найден и в БД - возвращает nil (без кэширования
+// результата, чтобы транзитный сбой БД не помечал реального Premium
+// пользователя как не-Premium навсегда).
+func (s *MockPaymentService) getInfo(userID int64) *PremiumUser {
 	s.mu.RLock()
-	data, err := json.Marshal(s.users)
+	u, ok := s.users[userID]
 	s.mu.RUnlock()
-	if err != nil {
-		log.Printf("⚠️ Failed to marshal premium users: %v", err)
-		return
+	if ok {
+		return u
 	}
 
-	if err := os.WriteFile(s.dataFile, data, 0644); err != nil {
-		log.Printf("⚠️ Failed to save premium users: %v", err)
+	if s.usersRepo != nil {
+		if stored, err := s.usersRepo.GetUserByTelegramID(context.Background(), userID); err == nil && stored != nil {
+			pu := &PremiumUser{
+				UserID:           userID,
+				IsPremium:        stored.IsPremium,
+				PremiumExpiresAt: stored.PremiumExpiresAt,
+				TariffID:         stored.TariffID,
+			}
+			s.mu.Lock()
+			// Повторная проверка: кэш мог заполниться за время
+			// обращения к БД из другой горутины.
+			if existing, exists := s.users[userID]; exists {
+				u = existing
+			} else {
+				s.users[userID] = pu
+				u = pu
+			}
+			s.mu.Unlock()
+			return u
+		}
 	}
+
+	return nil
 }
 
 // MockPayment - мок-запись платежа.
@@ -179,7 +189,7 @@ func (s *MockPaymentService) HandleWebhook(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Активируем Premium
+	// Активируем Premium (пишется и в кэш, и в БД - источник истины).
 	if err := s.activatePremium(webhook.Object.UserID, webhook.Object.TariffID); err != nil {
 		log.Printf(locales.LogPaymentActivateFailed, webhook.Object.UserID, err)
 		http.Error(w, "Internal error", http.StatusInternalServerError)
@@ -193,11 +203,11 @@ func (s *MockPaymentService) HandleWebhook(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-// activatePremium - активирует Premium для пользователя.
-// Берёт write-lock только на время мутации map, затем СНИМАЕТ его перед
-// saveUsers(), иначе saveUsers() (который берёт RLock) вызвал бы
-// self-deadlock на не-реентерабельном sync.RWMutex и заморозил бы весь
-// сервис платежей (и дашборд, который тоже берёт лок).
+// activatePremium - активирует Premium для пользователя. Обновляет in-memory
+// кэш и синхронно пишет состояние в БД (usersRepo) - источник истины,
+// переживающий перезапуск бота. Берёт write-lock только на время мутации
+// карты; обращение к БД идёт УЖЕ ПОСЛЕ снятия лока, чтобы не держать
+// sync.RWMutex во время I/O (и не блокировать горячие чтения гейтов).
 func (s *MockPaymentService) activatePremium(userID int64, tariffID string) error {
 	tariff := GetTariffByID(tariffID)
 	if tariff == nil {
@@ -207,73 +217,68 @@ func (s *MockPaymentService) activatePremium(userID int64, tariffID string) erro
 	now := time.Now()
 
 	s.mu.Lock()
-	// Создаём или обновляем запись пользователя
-	if _, exists := s.users[userID]; !exists {
-		s.users[userID] = &PremiumUser{}
+	// Создаём или обновляем запись пользователя в кэше.
+	s.users[userID] = &PremiumUser{
+		UserID:           userID,
+		IsPremium:        true,
+		PremiumSince:     now,
+		PremiumExpiresAt: now.Add(tariff.Duration),
+		TariffID:         tariffID,
 	}
 
-	user := s.users[userID]
-	user.IsPremium = true
-	user.PremiumSince = now
-	user.PremiumExpiresAt = now.Add(tariff.Duration)
-	user.TariffID = tariffID
-
-	// Обновляем статус платежа
+	// Обновляем статус платежа в кэше.
 	for _, payment := range s.payments {
 		if payment.UserID == userID && payment.TariffID == tariffID && payment.Status == "pending" {
 			payment.Status = "succeeded"
 			break
 		}
 	}
-
-	log.Printf(locales.LogPaymentPremiumActivated, userID, tariff.Name, user.PremiumExpiresAt.Format("2006-01-02"))
 	s.mu.Unlock()
 
-	// Сохраняем состояние в файл (saveUsers берёт свой собственный RLock -
-	// write-lock уже снят, поэтому deadlock не возникает).
-	s.saveUsers()
+	log.Printf(locales.LogPaymentPremiumActivated, userID, tariff.Name, now.Add(tariff.Duration).Format("2006-01-02"))
+
+	// Синхронизируем с БД (источник истины). При отсутствии usersRepo
+	// (nil) состояние живёт только в кэше (сценарий тестов/fallback).
+	if s.usersRepo != nil {
+		if u, err := s.usersRepo.GetUserByTelegramID(context.Background(), userID); err == nil {
+			if derr := s.usersRepo.UpdateUserPremiumStatus(context.Background(), u.ID, true, now.Add(tariff.Duration), tariffID); derr != nil {
+				log.Printf("⚠️ Failed to persist premium to DB (user=%d, tariff=%s): %v", userID, tariffID, derr)
+			}
+		} else {
+			log.Printf("⚠️ Cannot sync premium to DB: user %d not found in repository: %v", userID, err)
+		}
+	}
 
 	return nil
 }
 
-// IsPremium - проверка, является ли пользователь Premium.
-// Используем write-lock: при истечении срока здесь происходит мутация
-// (user.IsPremium = false), и брать RLock для записи - data race.
+// IsPremium - проверка, является ли пользователь Premium в данный момент
+// (флаг активен И подписка не истекла). Читает из кэша (с ленивой
+// подгрузкой из БД при промахе). НЕ мутирует состояние - истечение срока
+// проверяется на лету, чтобы не портить флаг, нужный напоминаниям об
+// окончании подписки (см. notifications.Service.rawPremium).
 func (s *MockPaymentService) IsPremium(userID int64) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	user, exists := s.users[userID]
-	if !exists {
+	info := s.getInfo(userID)
+	if info == nil || !info.IsPremium {
 		return false
 	}
-
-	if !user.IsPremium {
-		return false
-	}
-
-	// Проверка срока действия
-	if time.Now().After(user.PremiumExpiresAt) {
-		log.Printf(locales.LogPaymentExpired, userID)
-		user.IsPremium = false
-		return false
-	}
-
-	return true
+	return time.Now().Before(info.PremiumExpiresAt)
 }
 
-// GetPremiumInfo - информация о Premium пользователя.
+// GetPremiumInfo - информация о Premium пользователя (флаг, тариф, дата
+// окончания). Флаг IsPremium отражает ФАКТ активации (до сброса) и НЕ
+// гасится при истечении срока - это нужно напоминаниям об окончании
+// подписки. Для проверки «активен сейчас» используйте IsPremium.
 func (s *MockPaymentService) GetPremiumInfo(userID int64) *PremiumUser {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	user, exists := s.users[userID]
-	if !exists {
+	info := s.getInfo(userID)
+	if info == nil {
 		return nil
 	}
 
-	// Копируем
-	cp := *user
+	// Копируем под RLock, чтобы вызывающий не мутировал внутренний объект.
+	s.mu.RLock()
+	cp := *info
+	s.mu.RUnlock()
 	return &cp
 }
 
@@ -294,24 +299,30 @@ func (s *MockPaymentService) IsUserPremium(userID int64) bool {
 
 // ResetPremium сбрасывает Premium-статус пользователя (IsPremium=false и
 // срок действия - в ноль). Используется админ-командой для тестирования
-// полного цикла покупки.
+// полного цикла покупки. Синхронно пишется и в кэш, и в БД.
 func (s *MockPaymentService) ResetPremium(userID int64) {
 	s.mu.Lock()
-	if u, ok := s.users[userID]; ok {
-		u.IsPremium = false
-		u.PremiumExpiresAt = time.Time{}
+	s.users[userID] = &PremiumUser{
+		UserID:   userID,
+		IsPremium: false,
+		TariffID: "",
 	}
 	s.mu.Unlock()
 
-	// Сохраняем состояние (saveUsers берёт свой собственный RLock; write-lock
-	// уже снят, поэтому deadlock не возникает).
-	s.saveUsers()
+	// Синхронизируем с БД.
+	if s.usersRepo != nil {
+		if u, err := s.usersRepo.GetUserByTelegramID(context.Background(), userID); err == nil {
+			if derr := s.usersRepo.UpdateUserPremiumStatus(context.Background(), u.ID, false, time.Time{}, ""); derr != nil {
+				log.Printf("⚠️ Failed to reset premium in DB (user=%d): %v", userID, derr)
+			}
+		} else {
+			log.Printf("⚠️ Cannot reset premium in DB: user %d not found in repository: %v", userID, err)
+		}
+	}
 }
 
 // SimulatePaymentSuccess - симулирует успешную оплату по ID платежа.
 // Находит платеж по ID и меняет его статус на "succeeded".
-// Лок снимается ДО вызова activatePremium/saveUsers, чтобы избежать
-// вложенной блокировки (self-deadlock на sync.RWMutex).
 func (s *MockPaymentService) SimulatePaymentSuccess(paymentID string) error {
 	s.mu.Lock()
 	payment, exists := s.payments[paymentID]
@@ -328,15 +339,13 @@ func (s *MockPaymentService) SimulatePaymentSuccess(paymentID string) error {
 	payment.Status = "succeeded"
 	s.mu.Unlock()
 
-	// Активируем Premium для пользователя (activatePremium сам берёт лок).
+	// Активируем Premium для пользователя (activatePremium сам берёт лок и
+	// синхронизирует БД).
 	if err := s.activatePremium(payment.UserID, payment.TariffID); err != nil {
 		return err
 	}
 
 	log.Printf(locales.LogPaymentSimulatedSuccess, paymentID, payment.UserID)
-
-	// Сохраняем состояние (saveUsers берёт свой собственный RLock).
-	s.saveUsers()
 
 	return nil
 }

@@ -124,13 +124,12 @@ func nextAt10() time.Time {
 }
 
 // premiumStatus возвращает Premium-статус и дату окончания подписки из
-// ИСТОЧНИКА ИСТИНЫ - MockPaymentService (premium_users.json). SQL-поле
-// users.is_premium синхронизируется с моком не всегда (например, обычная
-// покупка пишет только в мок), поэтому читать статус из БД нельзя - иначе
-// уведомления не уходят реальным платившим пользователям. Если сервис
-// платежей недоступен (nil) - откатывается к SQL-полю (для тестов и
-// обратной совместимости). Возвращает isPremium=false, если пользователь не
-// Premium или срок уже истёк.
+// ИСТОЧНИКА ИСТИНЫ - MockPaymentService. Состояние Premium в нём
+// дублируется в БД (users.is_premium / premium_expires_at / tariff_id) при
+// каждой активации/сбросе, поэтому оно всегда консистентно. Для гейтов
+// (аналитика) возвращаем isPremium=false, если подписка истекла. Если
+// сервис платежей недоступен (nil) - откатывается к SQL-полю (для тестов и
+// обратной совместимости).
 func (s *Service) premiumStatus(ctx context.Context, telegramID int64) (bool, time.Time) {
 	if s.payment != nil {
 		if info := s.payment.GetPremiumInfo(telegramID); info != nil {

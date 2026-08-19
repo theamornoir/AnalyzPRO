@@ -94,7 +94,7 @@ func TestBackToParentDeletesPremiumScreen(t *testing.T) {
 	r := &router{
 		stateManager:     sm,
 		agreementStorage: agr,
-		paymentService:   payment.NewMockPaymentService(""),
+		paymentService:   payment.NewMockPaymentService(nil),
 	}
 
 	// Имитируем вход в Premium: переключаем раздел и шлём экран (якорь +

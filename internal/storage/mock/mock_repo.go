@@ -62,13 +62,14 @@ func (m *MockUserRepository) GetAllUsers(ctx context.Context) ([]*sm.User, error
 	return out, nil
 }
 
-func (m *MockUserRepository) UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time) error {
+func (m *MockUserRepository) UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time, tariffID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, user := range m.users {
 		if user.ID == userID {
 			user.IsPremium = isPremium
 			user.PremiumExpiresAt = expiresAt
+			user.TariffID = tariffID
 			return nil
 		}
 	}

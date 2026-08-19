@@ -13,7 +13,10 @@ type UserRepository interface {
 	GetUserByTelegramID(ctx context.Context, telegramID int64) (*sm.User, error)
 	// GetAllUsers - все пользователи (для периодических рассылок/напоминаний).
 	GetAllUsers(ctx context.Context) ([]*sm.User, error)
-	UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time) error
+	// UpdateUserPremiumStatus - обновляет флаг Premium, дату окончания
+	// подписки и ID активного тарифа. userID здесь - внутренний id
+	// пользователя (uint), как в таблице users.
+	UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time, tariffID string) error
 	UpdateUserOnboardingStatus(ctx context.Context, userID uint, completed bool) error
 	// UpdateUserLastActivity - обновляет дату последнего взаимодействия
 	// пользователя с ботом (нужно системе напоминаний об неактивности).

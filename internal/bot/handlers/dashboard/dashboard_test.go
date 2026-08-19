@@ -64,7 +64,7 @@ func newHandler(t *testing.T) (*Handler, int64) {
 
 	repo := monitoring_sqlrepo.New(conn)
 
-	pay := payment.NewMockPaymentService("")
+	pay := payment.NewMockPaymentService(nil)
 	h := NewHandler(pay, testBotToken, repo, nil, nil, "development", nil)
 	return h, int64(999)
 }
@@ -260,7 +260,7 @@ func TestNotificationsToggle(t *testing.T) {
 
 	repo := monitoring_sqlrepo.New(conn)
 	store := storage.NewSQLStorage(conn)
-	pay := payment.NewMockPaymentService("")
+	pay := payment.NewMockPaymentService(nil)
 	notifSvc := notifications.NewService(conn, store, pay, repo, false)
 
 	h := NewHandler(pay, testBotToken, repo, nil, nil, "development", notifSvc)

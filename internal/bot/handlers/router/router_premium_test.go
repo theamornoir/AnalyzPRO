@@ -99,7 +99,7 @@ func TestPremiumScreenCleanedOnBack(t *testing.T) {
 	sm := states.NewMemoryStateManager(t.TempDir() + "/states.json")
 	agr := storage.NewAgreementStorage(t.TempDir() + "/agree.json")
 	agr.SetAgreed(chatID)
-	pay := payment.NewMockPaymentService(t.TempDir() + "/pay.json")
+	pay := payment.NewMockPaymentService(nil)
 
 	mt := newMockTelegram()
 	srv := httptest.NewServer(mt.handler())

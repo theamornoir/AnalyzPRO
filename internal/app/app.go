@@ -128,8 +128,9 @@ func New() (*App, error) {
 	// История анализов/биосканов сохраняется между перезапусками бота.
 	monitorRepo := monitoring_sqlrepo.New(dbConn)
 
-	// Сервис платежей (Mock YooKassa)
-	paymentService := payment.NewMockPaymentService("./data/premium_users.json")
+	// Сервис платежей (Mock YooKassa). Состояние Premium дублируется в БД
+	// (источник истины, переживает перезапуск) - передаём usersRepo.
+	paymentService := payment.NewMockPaymentService(appStorage.Users)
 	log.Printf(locales.LogPaymentServiceInit)
 
 	// Сервис фоновых уведомлений о подписке (Premium скоро заканчивается)

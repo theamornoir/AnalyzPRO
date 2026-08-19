@@ -70,14 +70,15 @@ func (r *Repo) CreateUser(ctx context.Context, user *sm.User) error {
 }
 
 func (r *Repo) GetUserByTelegramID(ctx context.Context, telegramID int64) (*sm.User, error) {
-	const q = `SELECT id, telegram_id, name, is_premium, premium_expires_at, onboarding_completed, last_activity_date, created_at
+	const q = `SELECT id, telegram_id, name, is_premium, premium_expires_at, onboarding_completed, last_activity_date, created_at, tariff_id
 		FROM users WHERE telegram_id = ?`
 	var u sm.User
 	var isPremium int
 	var expires sql.NullTime
 	var onboardingCompleted int
 	var lastActivity sql.NullTime
-	if err := r.db.QueryRowContext(ctx, q, telegramID).Scan(&u.ID, &u.TelegramID, &u.Name, &isPremium, &expires, &onboardingCompleted, &lastActivity, &u.CreatedAt); err != nil {
+	var tariffID sql.NullString
+	if err := r.db.QueryRowContext(ctx, q, telegramID).Scan(&u.ID, &u.TelegramID, &u.Name, &isPremium, &expires, &onboardingCompleted, &lastActivity, &u.CreatedAt, &tariffID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("user not found")
 		}
@@ -86,6 +87,9 @@ func (r *Repo) GetUserByTelegramID(ctx context.Context, telegramID int64) (*sm.U
 	u.IsPremium = isPremium != 0
 	if expires.Valid {
 		u.PremiumExpiresAt = expires.Time
+	}
+	if tariffID.Valid {
+		u.TariffID = tariffID.String
 	}
 	u.OnboardingCompleted = onboardingCompleted != 0
 	if lastActivity.Valid {
@@ -97,7 +101,7 @@ func (r *Repo) GetUserByTelegramID(ctx context.Context, telegramID int64) (*sm.U
 // GetAllUsers возвращает всех пользователей (для периодических
 // напоминаний/рассылок). Используется системой уведомлений.
 func (r *Repo) GetAllUsers(ctx context.Context) ([]*sm.User, error) {
-	const q = `SELECT id, telegram_id, name, is_premium, premium_expires_at, onboarding_completed, last_activity_date, created_at
+	const q = `SELECT id, telegram_id, name, is_premium, premium_expires_at, onboarding_completed, last_activity_date, created_at, tariff_id
 		FROM users ORDER BY id`
 	rows, err := r.db.QueryContext(ctx, q)
 	if err != nil {
@@ -112,12 +116,16 @@ func (r *Repo) GetAllUsers(ctx context.Context) ([]*sm.User, error) {
 		var expires sql.NullTime
 		var onboardingCompleted int
 		var lastActivity sql.NullTime
-		if err := rows.Scan(&u.ID, &u.TelegramID, &u.Name, &isPremium, &expires, &onboardingCompleted, &lastActivity, &u.CreatedAt); err != nil {
+		var tariffID sql.NullString
+		if err := rows.Scan(&u.ID, &u.TelegramID, &u.Name, &isPremium, &expires, &onboardingCompleted, &lastActivity, &u.CreatedAt, &tariffID); err != nil {
 			return nil, fmt.Errorf("сканирование пользователя: %w", err)
 		}
 		u.IsPremium = isPremium != 0
 		if expires.Valid {
 			u.PremiumExpiresAt = expires.Time
+		}
+		if tariffID.Valid {
+			u.TariffID = tariffID.String
 		}
 		u.OnboardingCompleted = onboardingCompleted != 0
 		if lastActivity.Valid {
@@ -129,10 +137,10 @@ func (r *Repo) GetAllUsers(ctx context.Context) ([]*sm.User, error) {
 	return out, rows.Err()
 }
 
-func (r *Repo) UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time) error {
+func (r *Repo) UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time, tariffID string) error {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE users SET is_premium = ?, premium_expires_at = ? WHERE id = ?`,
-		boolToInt(isPremium), nullTime(expiresAt), userID)
+		`UPDATE users SET is_premium = ?, premium_expires_at = ?, tariff_id = ? WHERE id = ?`,
+		boolToInt(isPremium), nullTime(expiresAt), tariffID, userID)
 	if err != nil {
 		return fmt.Errorf("обновление статуса premium: %w", err)
 	}

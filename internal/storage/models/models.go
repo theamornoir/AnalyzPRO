@@ -9,6 +9,11 @@ type User struct {
 	Name             string    `json:"name"`
 	IsPremium        bool      `json:"is_premium"`
 	PremiumExpiresAt time.Time `json:"premium_expires_at"`
+	// TariffID - ID активного тарифа Premium (premium_monthly /
+	// premium_quarterly / premium_yearly). Заполняется при активации и
+	// сбрасывается при сбросе. Нужен Premium-экрану (показ текущего тарифа)
+	// и гарду повторной активации (нельзя «оплатить» тот же тариф дважды).
+	TariffID string `json:"tariff_id"`
 	// OnboardingCompleted - пройден ли онбординг (слайдер + соглашение) для
 	// пользователя. Новые пользователи проходят онбординг при первом /start.
 	OnboardingCompleted bool `json:"onboarding_completed"`
