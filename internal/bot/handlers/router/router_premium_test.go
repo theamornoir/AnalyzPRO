@@ -99,7 +99,7 @@ func TestPremiumScreenCleanedOnBack(t *testing.T) {
 	sm := states.NewMemoryStateManager(t.TempDir() + "/states.json")
 	agr := storage.NewAgreementStorage(t.TempDir() + "/agree.json")
 	agr.SetAgreed(chatID)
-	pay := payment.NewMockPaymentService(nil)
+	pay := payment.NewPaymentService(nil, payment.YooKassaConfig{})
 
 	mt := newMockTelegram()
 	srv := httptest.NewServer(mt.handler())
@@ -125,6 +125,7 @@ func TestPremiumScreenCleanedOnBack(t *testing.T) {
 		nil, // notificationsSvc (в premium-флоу не нужен)
 		"https://app.example/dashboard",
 		"https://app.example/dashboard",
+		"development",
 	)
 
 	sleep := func() { time.Sleep(700 * time.Millisecond) }

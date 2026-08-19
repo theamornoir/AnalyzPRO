@@ -39,7 +39,7 @@ type Bot struct {
 	stickerID        string
 	adminChatID      int64
 	agreementStorage *storage.AgreementStorage
-	paymentService   *payment.MockPaymentService
+	paymentService   *payment.PaymentService
 	appStorage       *storage.Storage
 	webAppURL        string
 	dashboardURL     string
@@ -77,7 +77,7 @@ func New(
 	stickerID string,
 	adminChatID int64,
 	agreementStorage *storage.AgreementStorage,
-	paymentService *payment.MockPaymentService,
+	paymentService *payment.PaymentService,
 	appStorage *storage.Storage,
 	monitorRepo monitoring.Repository,
 	webAppURL string,
@@ -213,6 +213,13 @@ func (b *Bot) Start(ctx context.Context) {
 		// Включить/отключить ВСЕ уведомления прямо из «Мой профиль»
 		// (общий флаг Preferences.NotificationsEnabled).
 		mux.HandleFunc("/api/notifications", dashHandler.Notifications)
+
+		// Вебхук YooKassa: реальные колбэки об успешной оплате. Подпись
+		// X-YooKassa-Signature проверяется внутри HandleWebhook
+		// (HMAC-SHA256), чтобы нельзя было подделать «успешный платёж»
+		// и получить Premium бесплатно. URL должен быть настроен в
+		// личном кабинете YooKassa и доступен по HTTPS извне.
+		mux.HandleFunc("/api/payment/webhook", b.paymentService.HandleWebhook)
 
 		// Мониторинг: веб-апп (статика) + API с защитой initData.
 		mux.HandleFunc("/monitoring", func(w http.ResponseWriter, r *http.Request) {
@@ -605,6 +612,7 @@ func (b *Bot) registerHandlers() {
 		&b.notificationsService,
 		b.webAppURL,
 		b.dashboardURL,
+		b.appEnv,
 	)
 
 	// /start - запуск бота / онбординг / главное меню.

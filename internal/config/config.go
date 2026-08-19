@@ -34,6 +34,20 @@ type Config struct {
 	// PostHogAPIKey - Project API Key сервиса аналитики PostHog. Если пуст -
 	// события не отправляются (клиент posthog-go становится no-op).
 	PostHogAPIKey string
+	// YookassaShopID / YookassaSecretKey - реквизиты платёжного шлюза
+	// YooKassa. Если оба пусты - сервис платежей работает в режиме
+	// симуляции (для локальной разработки без реальных ключей).
+	YookassaShopID    string
+	YookassaSecretKey string
+	// YookassaAPIURL - базовый URL API YooKassa (по умолчанию
+	// https://api.yookassa.ru/v3).
+	YookassaAPIURL string
+	// YookassaReturnURL - куда вернуть пользователя после оплаты (обычно
+	// тот же дашборд). По умолчанию равен WEBAPP_URL/DASHBOARD_URL.
+	YookassaReturnURL string
+	// YookassaWebhookSecret - секрет для проверки подписи вебхука
+	// X-YooKassa-Signature. Если пуст - используется YookassaSecretKey.
+	YookassaWebhookSecret string
 	// GeminiAPIKey - ключ API Google Gemini (единственный провайдер ИИ;
 	// читает фото и PDF нативно). Читается из GOOGLE_GEMINI_API_KEY. Пустой -
 	// AI-вызовы возвращают ошибку, бот стартует.
@@ -114,6 +128,11 @@ func Load() (*Config, error) {
 		AnalyticsPath:        getEnv("ANALYTICS_PATH", "./data/analytics.jsonl"),
 		DBPath:               getEnv("DB_PATH", "./data/analyzpro.db"),
 		PostHogAPIKey:        os.Getenv("POSTHOG_API_KEY"),
+		YookassaShopID:        os.Getenv("YOOKASSA_SHOP_ID"),
+		YookassaSecretKey:     os.Getenv("YOOKASSA_SECRET_KEY"),
+		YookassaAPIURL:        getEnv("YOOKASSA_API_URL", "https://api.yookassa.ru/v3"),
+		YookassaReturnURL:     getEnv("YOOKASSA_RETURN_URL", webAppURL),
+		YookassaWebhookSecret: os.Getenv("YOOKASSA_WEBHOOK_SECRET"),
 		LogLevel:             getEnv("LOG_LEVEL", "INFO"),
 		PromoCodes:           parseCSV(os.Getenv("PROMO_CODES")),
 		PromoCodesMonthly:    parseCSV(os.Getenv("PROMO_CODES_MONTHLY")),

@@ -38,7 +38,7 @@ type router struct {
 	stickerID        string
 	adminChatID      int64
 	agreementStorage *storage.AgreementStorage
-	paymentService   *payment.MockPaymentService
+	paymentService   *payment.PaymentService
 	appStorage       *storage.Storage
 	monitorRepo      monitoring.Repository
 	// notifSvc - указатель на ПОЛЕ notificationsService бота (а не сам
@@ -52,6 +52,10 @@ type router struct {
 	notifSvc     **notifications.Service
 	webAppURL    string
 	dashboardURL string
+	// appEnv - окружение (development/production): управляет
+	// видимостью кнопки «Оплатил (симуляция)» и тем, разрешена ли
+	// ручная активация Premium вне реального платежа.
+	appEnv string
 }
 
 // MessageRouter - главный маршрутизатор сообщений бота.
@@ -64,12 +68,13 @@ func MessageRouter(
 	stickerID string,
 	adminChatID int64,
 	agreementStorage *storage.AgreementStorage,
-	paymentService *payment.MockPaymentService,
+	paymentService *payment.PaymentService,
 	appStorage *storage.Storage,
 	monitorRepo monitoring.Repository,
 	notifSvcPtr **notifications.Service,
 	webAppURL string,
 	dashboardURL string,
+	appEnv string,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
 
 	r := &router{
@@ -87,6 +92,7 @@ func MessageRouter(
 		notifSvc:         notifSvcPtr,
 		webAppURL:        webAppURL,
 		dashboardURL:     dashboardURL,
+		appEnv:          appEnv,
 	}
 
 	return r.handle
@@ -442,7 +448,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "premium_confirm")
 		// Исходное сообщение со ссылкой на оплату убирается общим правилом
 		// «кнопка/выбор удаляется после ответа» (см. начало handleCallback).
-		menu.HandlePremiumConfirm(r.stateManager, r.paymentService, r.webAppURL, r.dashboardURL)(ctx, b, update, callbackData)
+		menu.HandlePremiumConfirm(r.stateManager, r.paymentService, r.webAppURL, r.dashboardURL, r.appEnv)(ctx, b, update, callbackData)
 		log.Printf(locales.LogRouterCallbackDone, dashboard.MaskID(chatID), callbackData)
 		return
 	}
@@ -464,7 +470,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "premium")
 		// Исходное сообщение со списком тарифов убирается общим правилом
 		// «кнопка/выбор удаляется после ответа» (см. начало handleCallback).
-		menu.HandlePremiumCallback(r.stateManager, r.paymentService)(ctx, b, update, callbackData)
+		menu.HandlePremiumCallback(r.stateManager, r.paymentService, r.appEnv)(ctx, b, update, callbackData)
 		log.Printf(locales.LogRouterCallbackDone, dashboard.MaskID(chatID), callbackData)
 		return
 	}

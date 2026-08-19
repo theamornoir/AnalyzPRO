@@ -91,7 +91,7 @@ type MetricItem struct {
 // Премиум-гейт реализован на уровне API /api/metrics через проверку
 // подлинности Telegram initData + статуса Premium пользователя.
 type Handler struct {
-	pay            *payment.MockPaymentService
+	pay            *payment.PaymentService
 	botToken       string
 	repo           monitoring.Repository
 	reportRenderer *report.Renderer
@@ -110,7 +110,7 @@ type Handler struct {
 // NewHandler создаёт обработчик дашборда. reportRenderer/pdfConverter нужны,
 // чтобы по запросу отдавать сохранённые отчёты как PDF (/api/reports/file).
 // notifSvc (может быть nil в тестах) нужен для эндпоинта /api/notifications.
-func NewHandler(pay *payment.MockPaymentService, botToken string, repo monitoring.Repository, reportRenderer *report.Renderer, pdfConverter pdfservice.Converter, appEnv string, notifSvc *notifications.Service) *Handler {
+func NewHandler(pay *payment.PaymentService, botToken string, repo monitoring.Repository, reportRenderer *report.Renderer, pdfConverter pdfservice.Converter, appEnv string, notifSvc *notifications.Service) *Handler {
 	return &Handler{pay: pay, botToken: botToken, repo: repo, reportRenderer: reportRenderer, pdfConverter: pdfConverter, appEnv: appEnv, notifSvc: notifSvc}
 }
 

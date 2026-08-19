@@ -36,7 +36,7 @@ type Service struct {
 	db          *sql.DB
 	repo        *repo
 	store       *storage.Storage
-	payment     *payment.MockPaymentService
+	payment     *payment.PaymentService
 	monitorRepo monitoring.Repository
 	botClient   *tgbot.Bot
 	isDev       bool
@@ -51,7 +51,7 @@ type Service struct {
 func NewService(
 	db *sql.DB,
 	store *storage.Storage,
-	pay *payment.MockPaymentService,
+	pay *payment.PaymentService,
 	monitorRepo monitoring.Repository,
 	isDev bool,
 ) *Service {
@@ -124,7 +124,7 @@ func nextAt10() time.Time {
 }
 
 // premiumStatus возвращает Premium-статус и дату окончания подписки из
-// ИСТОЧНИКА ИСТИНЫ - MockPaymentService. Состояние Premium в нём
+// ИСТОЧНИКА ИСТИНЫ - PaymentService. Состояние Premium в нём
 // дублируется в БД (users.is_premium / premium_expires_at / tariff_id) при
 // каждой активации/сбросе, поэтому оно всегда консистентно. Для гейтов
 // (аналитика) возвращаем isPremium=false, если подписка истекла. Если
@@ -152,7 +152,7 @@ func (s *Service) premiumStatus(ctx context.Context, telegramID int64) (bool, ti
 // дней), если оно ещё не отправлялось. Premium-статус берётся из
 // сервиса платежей (источник истины), а не из SQL.
 // rawPremium возвращает «сырые» Premium-статус и дату окончания подписки из
-// источника истины (MockPaymentService) БЕЗ проверки, не истекла ли подписка
+// источника истины (PaymentService) БЕЗ проверки, не истекла ли подписка
 // на момент вызова. Отличается от premiumStatus тем, что не возвращает
 // isPremium=false для истёкшей подписки - это нужно runSubscriptionChecks,
 // чтобы отправить напоминание об окончании (kind=0) даже для недавно

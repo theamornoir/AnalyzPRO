@@ -128,9 +128,22 @@ func New() (*App, error) {
 	// История анализов/биосканов сохраняется между перезапусками бота.
 	monitorRepo := monitoring_sqlrepo.New(dbConn)
 
-	// Сервис платежей (Mock YooKassa). Состояние Premium дублируется в БД
+	// Сервис платежей (YooKassa). Состояние Premium дублируется в БД
 	// (источник истины, переживает перезапуск) - передаём usersRepo.
-	paymentService := payment.NewMockPaymentService(appStorage.Users)
+	// При пустых YOOKASSA_SHOP_ID/SECRET_KEY работает в режиме симуляции
+	// (для локальной разработки/тестов без реальных ключей).
+	paymentService := payment.NewPaymentService(appStorage.Users, payment.YooKassaConfig{
+		ShopID:        cfg.YookassaShopID,
+		SecretKey:     cfg.YookassaSecretKey,
+		APIURL:        cfg.YookassaAPIURL,
+		ReturnURL:     cfg.YookassaReturnURL,
+		WebhookSecret: cfg.YookassaWebhookSecret,
+	})
+	if paymentService.IsRealMode() {
+		log.Printf("[PAYMENT] YooKassa: РЕАЛЬНЫЙ режим (shopID=%s задан)", maskSecret(cfg.YookassaShopID))
+	} else {
+		log.Printf("[PAYMENT] YooKassa: режим СИМУЛЯЦИИ (ключи не заданы)")
+	}
 	log.Printf(locales.LogPaymentServiceInit)
 
 	// Сервис фоновых уведомлений о подписке (Premium скоро заканчивается)
@@ -283,4 +296,12 @@ func acquireInstanceLock() error {
 	}
 	// оставляем fd открытым на время жизни процесса - lock держится до выхода
 	return nil
+}
+
+// maskSecret возвращает префикс секрета для логов без утечки целого значения.
+func maskSecret(s string) string {
+	if len(s) <= 4 {
+		return "***"
+	}
+	return s[:4] + "***"
 }

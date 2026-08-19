@@ -20,7 +20,7 @@ func ResetHandler(
 	adminChatID int64,
 	stateManager states.StateManager,
 	agreementStorage *storage.AgreementStorage,
-	paymentService *payment.MockPaymentService,
+	paymentService *payment.PaymentService,
 	appStorage *storage.Storage,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update) {

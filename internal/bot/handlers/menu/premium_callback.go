@@ -20,7 +20,8 @@ import (
 // HandlePremiumCallback - обработка нажатия на тариф.
 func HandlePremiumCallback(
 	stateManager states.StateManager,
-	paymentService *payment.MockPaymentService,
+	paymentService *payment.PaymentService,
+	appEnv string,
 ) func(ctx context.Context, b *tgbot.Bot, update *models.Update, callbackData string) bool {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update, callbackData string) bool {
 		if !strings.HasPrefix(callbackData, "premium_") {
@@ -77,20 +78,7 @@ func HandlePremiumCallback(
 				"🎁 Что входит:\n• " + featuresText + "\n\n" +
 				"👇 Нажмите кнопку для оплаты:",
 			ReplyMarkup: models.InlineKeyboardMarkup{
-				InlineKeyboard: [][]models.InlineKeyboardButton{
-					{
-						{
-							Text: "💳 Оплатить " + priceText,
-							URL:  paymentResp.URL,
-						},
-					},
-					{
-						{
-							Text:         "✅ Оплатил (симуляция)",
-							CallbackData: "premium_confirm_" + tariffID,
-						},
-					},
-				},
+				InlineKeyboard: premiumPaymentKeyboard(priceText, paymentResp.URL, tariffID, appEnv),
 			},
 			ParseMode: "Markdown",
 		})
@@ -111,9 +99,10 @@ func HandlePremiumCallback(
 // webAppURL/dashboardURL нужны, чтобы сразу показать кнопки открытия дашборда.
 func HandlePremiumConfirm(
 	stateManager states.StateManager,
-	paymentService *payment.MockPaymentService,
+	paymentService *payment.PaymentService,
 	webAppURL string,
 	dashboardURL string,
+	appEnv string,
 ) func(ctx context.Context, b *tgbot.Bot, update *models.Update, callbackData string) bool {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update, callbackData string) bool {
 		// update.Message у callback-запросов nil - берём chatID из отправителя.
@@ -122,6 +111,18 @@ func HandlePremiumConfirm(
 		log.Printf(locales.LogPaymentConfirmEnter, chatID, callbackData)
 		if !strings.HasPrefix(callbackData, "premium_confirm_") {
 			log.Printf(locales.LogPaymentConfirmSkip, chatID, callbackData)
+			return false
+		}
+
+		// В проде ручная активация запрещена: Premium выдаётся только по
+		// реальному вебхуку YooKassa. Кнопка «Оплатил (симуляция)» скрыта вне
+		// development, но роутер диспетчеризует ЛЮБОЙ premium_confirm_<id>,
+		// поэтому здесь явно отклоняем активацию вне development, чтобы
+		// нельзя было получить Premium бесплатно.
+		if appEnv != "development" {
+			botutil.AnswerLogged(ctx, b, tgbot.AnswerCallbackQueryParams{
+				CallbackQueryID: update.CallbackQuery.ID,
+			})
 			return false
 		}
 
@@ -246,4 +247,29 @@ func HandlePremiumConfirm(
 		}
 		return true
 	}
+}
+
+
+// premiumPaymentKeyboard строит клавиатуру экрана оплаты. Кнопка
+// «✅ Оплатил (симуляция)» (ручная активация Premium без реального
+// платежа) показывается только в development - в проде оплата идёт
+// исключительно через реальный YooKassa (кнопка «Оплатить» -> checkout).
+func premiumPaymentKeyboard(priceText, payURL, tariffID, appEnv string) [][]models.InlineKeyboardButton {
+	rows := [][]models.InlineKeyboardButton{
+		{
+			{
+				Text: "💳 Оплатить " + priceText,
+				URL:  payURL,
+			},
+		},
+	}
+	if appEnv == "development" {
+		rows = append(rows, []models.InlineKeyboardButton{
+			{
+				Text:         locales.BtnPaidSimulation,
+				CallbackData: "premium_confirm_" + tariffID,
+			},
+		})
+	}
+	return rows
 }

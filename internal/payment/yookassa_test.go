@@ -19,7 +19,7 @@ func TestPremiumPersistedToDB(t *testing.T) {
 	}
 	chatID := int64(777)
 
-	pay := NewMockPaymentService(repo)
+	pay := NewPaymentService(repo, YooKassaConfig{})
 
 	if pay.IsPremium(chatID) {
 		t.Fatal("до активации не должно быть Premium")
@@ -51,7 +51,7 @@ func TestPremiumPersistedToDB(t *testing.T) {
 
 	// Новый экземпляр сервиса того же репозитория (имитация перезапуска
 	// бота): Premium должен восстановиться из БД (кэш пуст).
-	pay2 := NewMockPaymentService(repo)
+	pay2 := NewPaymentService(repo, YooKassaConfig{})
 	if !pay2.IsPremium(chatID) {
 		t.Error("после перезапуска Premium не восстановлен из БД")
 	}
@@ -77,7 +77,7 @@ func TestPremiumPersistedToDB(t *testing.T) {
 // TestPremiumNilRepoInMemory проверяет, что при nil-репозитории сервис
 // работает только в in-memory кэше (сценарий тестов/fallback) и не падает.
 func TestPremiumNilRepoInMemory(t *testing.T) {
-	pay := NewMockPaymentService(nil)
+	pay := NewPaymentService(nil, YooKassaConfig{})
 	chatID := int64(999)
 
 	if pay.IsPremium(chatID) {

@@ -88,7 +88,7 @@ func sendPremiumAnchor(ctx context.Context, b *tgbot.Bot, stateManager states.St
 // Мгновенная выдача Premium убрана - это был тестовый режим.
 func PremiumHandler(
 	stateManager states.StateManager,
-	paymentService *payment.MockPaymentService,
+	paymentService *payment.PaymentService,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update) {
 		chatID := update.Message.Chat.ID
@@ -131,7 +131,7 @@ func PremiumHandler(
 
 // showPremiumCurrent - экран активного Premium: показывает текущий тариф,
 // дату окончания и кнопку смены тарифа (premium_change).
-func showPremiumCurrent(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64, paymentService *payment.MockPaymentService) {
+func showPremiumCurrent(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64, paymentService *payment.PaymentService) {
 	tariffName := "-"
 	expiry := "-"
 	if info := paymentService.GetPremiumInfo(chatID); info != nil {
@@ -165,7 +165,7 @@ func showPremiumCurrent(ctx context.Context, b *tgbot.Bot, stateManager states.S
 // подтверждения оплаты тариф пользователя перезаписывается.
 func HandleChangeTariff(
 	stateManager states.StateManager,
-	paymentService *payment.MockPaymentService,
+	paymentService *payment.PaymentService,
 ) func(ctx context.Context, b *tgbot.Bot, update *models.Update, callbackData string) bool {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update, callbackData string) bool {
 		if callbackData != "premium_change" {
