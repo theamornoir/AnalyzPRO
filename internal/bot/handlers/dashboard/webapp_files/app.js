@@ -291,6 +291,8 @@ async function loadMetrics() {
         // Карточки сохранённых отчётов (Расширенные анализы / Bioscan PRO)
         // грузим отдельным запросом - они не зависят от метрик сводки.
         loadReports(initData, demo).catch(function () {});
+        // Карточка настроек уведомлений (вкл/выкл все уведомления).
+        loadNotifications().catch(function () {});
     } catch (e) {
         showMessage("Ошибка загрузки данных: " + e.message, "error");
     }
@@ -771,6 +773,76 @@ async function deleteEntry(kind, id) {
         loadMetrics();
     } catch (e) {
         showMessage("Ошибка сети: " + e.message, "error");
+    }
+}
+
+// ---------------------------------------------------------------
+// Настройки уведомлений (карточка «🔔 Уведомления» на вкладке «Обзор»).
+// По единому флагу Preferences.NotificationsEnabled отключаются ВСЕ
+// уведомления: напоминания о подписке, об отклонениях в анализах и
+// мотивационные рассылки. Без initData (демо / открыто не из Telegram)
+// карточка скрывается - управлять нечем.
+// ---------------------------------------------------------------
+function loadNotifications() {
+    const initData = getInitData();
+    const card = document.getElementById("notifCard");
+    if (!initData) {
+        if (card) card.style.display = "none";
+        return;
+    }
+    if (card) card.style.display = "block";
+    return fetch("/api/notifications?initData=" + encodeURIComponent(initData))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+            if (j && typeof j.enabled === "boolean") applyNotifState(j.enabled);
+        })
+        .catch(function () {});
+}
+
+// applyNotifState - отрисовывает кнопку-переключатель по текущему статусу.
+function applyNotifState(enabled) {
+    const btn = document.getElementById("notifToggleBtn");
+    const hint = document.getElementById("notifHint");
+    if (!btn) return;
+    if (enabled) {
+        btn.textContent = "🔕 Отключить уведомления";
+        btn.classList.remove("btn-muted");
+        if (hint) hint.textContent = "Уведомления включены: напоминания о подписке, анализах и активности.";
+    } else {
+        btn.textContent = "🔔 Включить уведомления";
+        btn.classList.add("btn-muted");
+        if (hint) hint.textContent = "Все уведомления отключены. Вы не будете получать напоминания от Prisma.";
+    }
+    btn.onclick = function () { toggleNotifications(!enabled); };
+}
+
+// toggleNotifications - шлёт POST /api/notifications и по ответу обновляет
+// состояние кнопки. enable=false отключает ВСЕ уведомления (общий флаг).
+async function toggleNotifications(enable) {
+    const initData = getInitData();
+    const btn = document.getElementById("notifToggleBtn");
+    if (!initData || !btn || btn.disabled) return;
+    const saved = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Сохранение…";
+    try {
+        const resp = await fetch("/api/notifications?initData=" + encodeURIComponent(initData), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: enable ? "on" : "off" })
+        });
+        if (!resp.ok) {
+            showMessage("Не удалось изменить настройки уведомлений. Попробуйте ещё раз.", "error");
+            return;
+        }
+        const data = await resp.json();
+        applyNotifState(data.enabled);
+    } catch (e) {
+        showMessage("Ошибка сети: " + e.message, "error");
+    } finally {
+        btn.disabled = false;
+        // Если состояние не обновилось (ошибка сети/сервера), вернуть текст.
+        if (btn.textContent === "Сохранение…") btn.textContent = saved;
     }
 }
 

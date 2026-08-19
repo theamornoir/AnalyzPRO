@@ -189,7 +189,7 @@ func (b *Bot) Start(ctx context.Context) {
 			// сессии → initData оказался бы пустым/чужим.
 			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 		})
-		dashHandler := dashboard.NewHandler(b.paymentService, b.botToken, b.monitorRepo, b.reportRenderer, b.pdfConverter, b.appEnv)
+		dashHandler := dashboard.NewHandler(b.paymentService, b.botToken, b.monitorRepo, b.reportRenderer, b.pdfConverter, b.appEnv, b.notificationsService)
 		mux.HandleFunc("/dashboard/", dashHandler.ServeWebApp)
 		mux.HandleFunc("/api/metrics", dashHandler.Metrics)
 		mux.HandleFunc("/api/profile", dashHandler.SaveProfile)
@@ -199,6 +199,9 @@ func (b *Bot) Start(ctx context.Context) {
 		// Удалить запись истории (анализ/биоскан/профиль) из «Мой
 		// профиль» - чтобы пользователь мог удалять свои данные.
 		mux.HandleFunc("/api/reports/delete", dashHandler.DeleteEntry)
+		// Включить/отключить ВСЕ уведомления прямо из «Мой профиль»
+		// (общий флаг Preferences.NotificationsEnabled).
+		mux.HandleFunc("/api/notifications", dashHandler.Notifications)
 
 		// Мониторинг: веб-апп (статика) + API с защитой initData.
 		mux.HandleFunc("/monitoring", func(w http.ResponseWriter, r *http.Request) {

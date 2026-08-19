@@ -5,7 +5,7 @@
 
 ## Проект (Prisma — Telegram-бот, Go; ранее AnalyzPRO)
 - **РЕБРЕНДИНГ:** публичное имя — **Prisma** (убрано из пользовательских текстов). Нет упоминаний ИИ/AI/нейросети — «аналитический помощник Prisma». ⚠️ Менять ТОЛЬКО пользовательские строки; Go-импорты/пути (`github.com/theamornoir/analyzpro`, `bin/analyzpro`, `/tmp/analyzpro.lock`, `./data/analyzpro.db`) НЕ трогать.
-- **Версия Mini App = `WebAppAssetsVersion`** (в пакете `keyboards`, сейчас **"v37"**) — поднимать при каждой правке фронта `webapp_files/{index.html,app.js,style.css}`. Активы грузятся по ВЕРСИОНИРОВАННОМУ ПУТИ (`style.<ver>.css`/`app.<ver>.js`), `ServeWebApp` резолвит любую версию. `Cache-Control: no-store` + отрезание `?v=`.
+- **Версия Mini App = `WebAppAssetsVersion`** (в пакете `keyboards`, сейчас **"v44"**) — поднимать при каждой правке фронта `webapp_files/{index.html,app.js,style.css}`. Активы грузятся по ВЕРСИОНИРОВАННОМУ ПУТИ (`style.<ver>.css`/`app.<ver>.js`), `ServeWebApp` резолвит любую версию. `Cache-Control: no-store` + отрезание `?v=`.
 - `make mini` — бот + HTTPS-туннель (`WEBAPP_URL=<туннель>/dashboard`); Menu Button НЕ открывает дашборд; Мой профиль — только из «📊 Здоровье» → хаб → «Открыть». Туннель ngrok по умолчанию (лимит 1 агент), `TUNNEL=cloudflared make mini` без лимита. Экран Telegram «you are about to visit <domain>» — штатное подтверждение.
 
 ## Онбординг + сброс
@@ -74,3 +74,4 @@
 
 ## Напоминания (internal/bot/reminders)
 - `RunReminderLoop` (goroutine в app.Run, раз в 6ч) по `users.last_activity_date`: ≥10 дней неактивности → `GetRandomReminder()` из пула `locales.Reminders` (≤200 символов); ставит `last_activity_date=now` (дебаунс). Уважает `Preferences.NotificationsEnabled`. `BroadcastFeature` — одноразовая рассылка.
+- **Единый флаг `Preferences.NotificationsEnabled` (def=on) управляет ВСЕМИ уведомлениями разом** (нотиф-сервис: напоминания о подписке + отклонениях в анализах; `RunReminderLoop`; админ-рассылка `/announce` — все читают тот же флаг). Переключается тремя путями: бот-команда `/notifications on|off|status` (`bot.go` `handleNotificationsCommand` → `notifications.Service.SetUserNotificationsEnabled/GetUserNotificationsEnabled`), и из «Мой профиль» через `GET/POST /api/notifications` (`dashboard.Handler.Notifications` + карточка «🔔 Уведомления» на вкладке Обзор, кнопка-переключатель в `webapp_files/app.js` `loadNotifications`/`toggleNotifications`; `notifSvc` проброшен в `dashboard.NewHandler`). GET при отсутствии строки предпочтений (новый юзер) дефолтно отдаёт `enabled=true` (не 500); POST `{"action":"off"|"on"}` отключает/включает всё. Демо `?demo=1` — синтетика без БД.

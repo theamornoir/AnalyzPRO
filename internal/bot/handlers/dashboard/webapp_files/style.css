@@ -140,6 +140,13 @@ h1 { font-size: 22px; margin: 12px 0 2px; }
     padding: 12px 16px; font-size: 15px; font-weight: 700; cursor: pointer;
 }
 .btn-primary:active { transform: scale(0.99); }
+/* Состояние «уведомления отключены»: спокойная, вторичная кнопка.
+   Используется для переключателя уведомлений в карточке настроек. */
+.btn-primary.btn-muted {
+    background: transparent; color: var(--text);
+    border: 1px solid rgba(255,255,255,0.16);
+}
+.settings-card .hint { margin-top: 6px; margin-bottom: 12px; }
 
 .footer {
     display: flex; justify-content: space-between; padding: 14px 18px;

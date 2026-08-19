@@ -18,6 +18,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 	apmodels "github.com/theamornoir/analyzpro/internal/models"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
+	"github.com/theamornoir/analyzpro/internal/notifications"
 	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
@@ -99,12 +100,18 @@ type Handler struct {
 	// чтобы демо-режим (?demo=1) работал только в development-отладке,
 	// а в production требовал реальной авторизации initData.
 	appEnv string
+	// notifSvc - сервис уведомлений, чтобы из «Мой профиль» можно было
+	// включить/отключить ВСЕ уведомления (общий флаг Preferences.
+	// NotificationsEnabled, который уважают фоновый сервис подписок/
+	// аналитики, цикл напоминаний и админ-рассылка).
+	notifSvc *notifications.Service
 }
 
 // NewHandler создаёт обработчик дашборда. reportRenderer/pdfConverter нужны,
 // чтобы по запросу отдавать сохранённые отчёты как PDF (/api/reports/file).
-func NewHandler(pay *payment.MockPaymentService, botToken string, repo monitoring.Repository, reportRenderer *report.Renderer, pdfConverter pdfservice.Converter, appEnv string) *Handler {
-	return &Handler{pay: pay, botToken: botToken, repo: repo, reportRenderer: reportRenderer, pdfConverter: pdfConverter, appEnv: appEnv}
+// notifSvc (может быть nil в тестах) нужен для эндпоинта /api/notifications.
+func NewHandler(pay *payment.MockPaymentService, botToken string, repo monitoring.Repository, reportRenderer *report.Renderer, pdfConverter pdfservice.Converter, appEnv string, notifSvc *notifications.Service) *Handler {
+	return &Handler{pay: pay, botToken: botToken, repo: repo, reportRenderer: reportRenderer, pdfConverter: pdfConverter, appEnv: appEnv, notifSvc: notifSvc}
 }
 
 // demoMode возвращает true, только если запрошен демо-режим (?demo=1) И
@@ -562,6 +569,86 @@ func (h *Handler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[DASHBOARD] удалена запись id=%d user=%s type=%s", entryID, MaskID(telegramID), entry.Type)
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// Notifications - обработчик GET/POST /api/notifications. GET возвращает
+// текущий статус уведомлений пользователя (enabled), POST с телом
+// {"action":"off"|"on"} включает/отключает ВСЕ уведомления (напоминания о
+// подписке, об отклонениях в анализах, мотивационные рассылки) через единый
+// флаг Preferences.NotificationsEnabled. Доступ - по подписи initData
+// (проверка подлинности Telegram), как у остальных эндпоинтов дашборда.
+func (h *Handler) Notifications(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+
+	initData := r.URL.Query().Get("initData")
+	if initData == "" {
+		initData = r.Header.Get("X-Telegram-Init-Data")
+	}
+
+	// Демо-режим (?demo=1, только development): синтетический статус без
+	// привязки к реальному пользователю/БД - чтобы карточка настроек в
+	// локальном демо-дашборде не падала с 401 (в демо нет initData).
+	if h.demoMode(r) {
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok", "enabled": false})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"enabled": true})
+		return
+	}
+
+	telegramID, ok := monitoring.ValidateInitData(initData, h.botToken)
+	if !ok || telegramID == 0 {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	if h.notifSvc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "notifications service unavailable"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		enabled, err := h.notifSvc.GetUserNotificationsEnabled(r.Context(), telegramID)
+		if err != nil {
+			// Дефолт системы - уведомления включены. Отсутствие записи
+			// предпочтений (новый пользователь) трактуем как «включено»,
+			// а не как ошибку, чтобы карточка настроек в «Мой профиль» не
+			// падала с 500 на ровном месте.
+			log.Printf("[DASHBOARD] не удалось получить статус уведомлений user=%s (default enabled): %v", MaskID(telegramID), err)
+			enabled = true
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"enabled": enabled})
+	case http.MethodPost:
+		var req struct {
+			Action string `json:"action"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Action != "on" && req.Action != "off") {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid action (on|off)"})
+			return
+		}
+		enabled := req.Action == "on"
+		if err := h.notifSvc.SetUserNotificationsEnabled(r.Context(), telegramID, enabled); err != nil {
+			log.Printf("[DASHBOARD] не удалось изменить уведомления user=%s: %v", MaskID(telegramID), err)
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal"})
+			return
+		}
+		log.Printf("[DASHBOARD] уведомления user=%s установлены в enabled=%v", MaskID(telegramID), enabled)
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok", "enabled": enabled})
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
+	}
 }
 
 // reportHTML возвращает print-ready HTML сохранённого отчёта: если есть

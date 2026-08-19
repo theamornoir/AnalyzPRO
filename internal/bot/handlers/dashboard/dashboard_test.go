@@ -20,7 +20,10 @@ import (
 	"github.com/theamornoir/analyzpro/internal/db"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
 	monitoring_sqlrepo "github.com/theamornoir/analyzpro/internal/monitoring/sqlrepo"
+	"github.com/theamornoir/analyzpro/internal/notifications"
 	"github.com/theamornoir/analyzpro/internal/payment"
+	"github.com/theamornoir/analyzpro/internal/storage"
+	sm "github.com/theamornoir/analyzpro/internal/storage/models"
 )
 
 const testBotToken = "TEST_BOT_TOKEN_DASHBOARD"
@@ -62,7 +65,7 @@ func newHandler(t *testing.T) (*Handler, int64) {
 	repo := monitoring_sqlrepo.New(conn)
 
 	pay := payment.NewMockPaymentService("")
-	h := NewHandler(pay, testBotToken, repo, nil, nil, "development")
+	h := NewHandler(pay, testBotToken, repo, nil, nil, "development", nil)
 	return h, int64(999)
 }
 
@@ -237,6 +240,99 @@ func TestSaveProfileValidation(t *testing.T) {
 	h.SaveProfile(ra, noAuth)
 	if ra.Code != http.StatusUnauthorized {
 		t.Errorf("ожидали 401 без initData, получили %d", ra.Code)
+	}
+}
+
+// TestNotificationsToggle проверяет эндпоинт /api/notifications: управление
+// единым флагом уведомлений из «Мой профиль». GET возвращает текущий статус
+// (по умолчанию включён), POST off отключает все уведомления, повторный GET
+// подтверждает выключенное состояние. Флаг общий для всех систем рассылки
+// (нотиф-сервис, напоминания, админ-рассылка).
+func TestNotificationsToggle(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.Migrate(conn); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	repo := monitoring_sqlrepo.New(conn)
+	store := storage.NewSQLStorage(conn)
+	pay := payment.NewMockPaymentService("")
+	notifSvc := notifications.NewService(conn, store, pay, repo, false)
+
+	h := NewHandler(pay, testBotToken, repo, nil, nil, "development", notifSvc)
+
+	// Реальный пользователь в БД (SetUserNotificationsEnabled требует запись).
+	ctx := context.Background()
+	if err := store.Users.CreateUser(ctx, &sm.User{TelegramID: 4242, Name: "NotifTester"}); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	uid := int64(4242)
+	initData := buildInitData(testBotToken, uid)
+
+	// GET — по умолчанию уведомления включены (NotificationsEnabled=true).
+	g := httptest.NewRequest(http.MethodGet, "/api/notifications?initData="+url.QueryEscape(initData), nil)
+	wg := httptest.NewRecorder()
+	h.Notifications(wg, g)
+	if wg.Code != http.StatusOK {
+		t.Fatalf("GET ожидали 200, получили %d: %s", wg.Code, wg.Body.String())
+	}
+	var gj map[string]interface{}
+	if err := json.Unmarshal(wg.Body.Bytes(), &gj); err != nil {
+		t.Fatalf("декод GET: %v", err)
+	}
+	if gj["enabled"] != true {
+		t.Fatalf("ожидали enabled=true по умолчанию, получили %v", gj["enabled"])
+	}
+
+	// POST off — отключаем все уведомления.
+	p := httptest.NewRequest(http.MethodPost, "/api/notifications?initData="+url.QueryEscape(initData), strings.NewReader(`{"action":"off"}`))
+	p.Header.Set("Content-Type", "application/json")
+	wp := httptest.NewRecorder()
+	h.Notifications(wp, p)
+	if wp.Code != http.StatusOK {
+		t.Fatalf("POST off ожидали 200, получили %d: %s", wp.Code, wp.Body.String())
+	}
+	var pj map[string]interface{}
+	if err := json.Unmarshal(wp.Body.Bytes(), &pj); err != nil {
+		t.Fatalf("декод POST: %v", err)
+	}
+	if pj["enabled"] != false {
+		t.Fatalf("ожидали enabled=false после off, получили %v", pj["enabled"])
+	}
+
+	// GET снова — подтверждаем выключенное состояние.
+	g2 := httptest.NewRequest(http.MethodGet, "/api/notifications?initData="+url.QueryEscape(initData), nil)
+	wg2 := httptest.NewRecorder()
+	h.Notifications(wg2, g2)
+	if wg2.Code != http.StatusOK {
+		t.Fatalf("GET2 ожидали 200, получили %d", wg2.Code)
+	}
+	var gj2 map[string]interface{}
+	if err := json.Unmarshal(wg2.Body.Bytes(), &gj2); err != nil {
+		t.Fatalf("декод GET2: %v", err)
+	}
+	if gj2["enabled"] != false {
+		t.Fatalf("ожидали enabled=false после off, получили %v", gj2["enabled"])
+	}
+
+	// POST с невалидным action — 400.
+	pBad := httptest.NewRequest(http.MethodPost, "/api/notifications?initData="+url.QueryEscape(initData), strings.NewReader(`{"action":"maybe"}`))
+	pBad.Header.Set("Content-Type", "application/json")
+	wpBad := httptest.NewRecorder()
+	h.Notifications(wpBad, pBad)
+	if wpBad.Code != http.StatusBadRequest {
+		t.Fatalf("POST bad action ожидали 400, получили %d", wpBad.Code)
+	}
+
+	// Без initData — 401.
+	wNo := httptest.NewRecorder()
+	h.Notifications(wNo, httptest.NewRequest(http.MethodGet, "/api/notifications", nil))
+	if wNo.Code != http.StatusUnauthorized {
+		t.Fatalf("GET без initData ожидали 401, получили %d", wNo.Code)
 	}
 }
 

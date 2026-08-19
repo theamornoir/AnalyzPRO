@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Prisma - Мой профиль</title>
     <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <link rel="stylesheet" href="style.v43.css">
+    <link rel="stylesheet" href="style.v44.css">
 </head>
 <body>
     <div class="dashboard">
@@ -100,9 +100,17 @@
                     <h2>💡 Рекомендации</h2>
                     <ul id="recList" class="rec-list"></ul>
                 </section>
-            </section>
 
-            <!-- Вкладка «Анализы»: расширенные анализы (последний отчёт + графики + архив) -->
+                <!-- Настройки уведомлений (общий флаг: отключает все
+                     напоминания и рассылки Prisma). Карточка скрывается в
+                     демо-режиме и показывается только при реальной сессии
+                     Telegram (см. loadNotifications в app.js). -->
+                <section class="card settings-card" id="notifCard" style="display:none;">
+                    <h2>🔔 Уведомления</h2>
+                    <p class="hint" id="notifHint">Управляйте напоминаниями и сообщениями от Prisma.</p>
+                    <button class="btn-primary" id="notifToggleBtn" type="button">—</button>
+                </section>
+            </section>
             <section class="tab-panel" id="tab-analysis">
                 <!-- Плашка-заглушка: видна, пока нет ни одного отчёта.
                      Скрывается в renderReportGroup, когда появляются данные. -->
@@ -260,6 +268,6 @@
         </div>
     </div>
 
-    <script defer src="app.v43.js"></script>
+    <script defer src="app.v44.js"></script>
 </body>
 </html>
