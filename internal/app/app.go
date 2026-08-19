@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/theamornoir/analyzpro/internal/ai/claude"
+	"github.com/theamornoir/analyzpro/internal/ai/gemini"
 	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/bot"
 	"github.com/theamornoir/analyzpro/internal/bot/reminders"
@@ -65,8 +65,35 @@ func New() (*App, error) {
 
 	stateManager := states.NewMemoryStateManager("./data/states.json")
 
-	// Единый мультимодальный Claude-клиент (все файлы в одном запросе).
-	aiClient := claude.NewClient()
+	// Единый мультимодальный Gemini-клиент (все файлы в одном запросе).
+	// Конфигурация полностью из env (через config.Config) - клиент сам не
+	// читает env и не логирует внутри (чистые функции).
+	aiClient, err := gemini.NewClient(gemini.Config{
+		APIKey:         cfg.GeminiAPIKey,
+		Model:          cfg.GeminiModel,
+		Proxy:          cfg.GeminiProxy,
+		APIBase:        cfg.GeminiAPIBase,
+		MaxConcurrency: cfg.GeminiMaxConcurrency,
+		Timeout:        gemini.DefaultTimeout,
+	})
+	if err != nil {
+		// Не удалось настроить прокси - логируем и создаём клиента без
+		// прокси (запросы пойдут через системный прокси/напрямую).
+		log.Printf(locales.LogGeminiProxyError, cfg.GeminiProxy, err)
+		aiClient, err = gemini.NewClient(gemini.Config{
+			APIKey:         cfg.GeminiAPIKey,
+			Model:          cfg.GeminiModel,
+			APIBase:        cfg.GeminiAPIBase,
+			MaxConcurrency: cfg.GeminiMaxConcurrency,
+			Timeout:        gemini.DefaultTimeout,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("не удалось создать Gemini-клиент: %w", err)
+		}
+	}
+	if cfg.GeminiAPIKey == "" {
+		log.Printf(locales.LogGeminiKeyNotSet)
+	}
 
 	// HTML Renderer для отчётов
 	renderer, err := report.NewRenderer()
@@ -159,7 +186,7 @@ func New() (*App, error) {
 	log.Printf(locales.LogAppInitialized)
 	log.Printf(locales.LogConfiguration)
 	log.Printf(locales.LogAppEnv, cfg.AppEnv)
-	log.Printf(locales.LogClaudeModel, claude.Model)
+	log.Printf(locales.LogGeminiModel, cfg.GeminiModel)
 	log.Printf(locales.LogUploadDir, cfg.UploadDir)
 	log.Printf(locales.LogMockMode, useMock)
 	log.Printf(locales.LogAdminChatID, cfg.AdminChatID)

@@ -13,7 +13,7 @@ import (
 )
 
 // AIClient - интерфейс AI-клиента. Реализуется единым мультимодальным
-// Claude-клиентом (internal/ai/claude). Выделен как интерфейс, чтобы сервис
+// Gemini-клиентом (internal/ai/gemini). Выделен как интерфейс, чтобы сервис
 // не зависел от конкретного провайдера и оставался тестируемым.
 type AIClient interface {
 	GenerateAnalysisSummary(ctx context.Context, userInput string) (string, error)
@@ -22,7 +22,7 @@ type AIClient interface {
 	// GenerateAnalysisFromFilesWithContext - анализ НЕСКОЛЬКИХ файлов
 	// (изображения/PDF) одним мультимодальным запросом. Все вложения
 	// передаются в ОДНО сообщение вместе с промптом, как в Bioscan PRO, -
-	// это гарантирует, что ни один файл/показатель не теряется и Claude видит
+	// это гарантирует, что ни один файл/показатель не теряется и Gemini видит
 	// связь между несколькими анализами сразу.
 	GenerateAnalysisFromFilesWithContext(ctx context.Context, data [][]byte, mimeTypes []string, contextText string) (string, error)
 	// GenerateAnalysisFromFilesJSON - структурированный JSON-анализ НЕСКОЛЬКИХ

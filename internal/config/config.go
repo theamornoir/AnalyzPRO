@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/theamornoir/analyzpro/internal/ai/gemini"
 )
 
 type Config struct {
@@ -33,6 +34,26 @@ type Config struct {
 	// PostHogAPIKey - Project API Key сервиса аналитики PostHog. Если пуст -
 	// события не отправляются (клиент posthog-go становится no-op).
 	PostHogAPIKey string
+	// GeminiAPIKey - ключ API Google Gemini (единственный провайдер ИИ;
+	// читает фото и PDF нативно). Читается из GOOGLE_GEMINI_API_KEY. Пустой -
+	// AI-вызовы возвращают ошибку, бот стартует.
+	GeminiAPIKey string
+	// GeminiModel - модель Gemini (например gemini-2.5-flash). Читается из
+	// GOOGLE_AI_MODEL; по умолчанию gemini.DefaultModel. Переопределение
+	// доступно без пересборки (напр. gemini-2.5-flash-lite - ещё дешевле).
+	GeminiModel string
+	// GeminiProxy - egress-прокси ТОЛЬКО для AI-вызовов к Gemini
+	// (socks5/http/https). Читается из GEMINI_PROXY; пустой - системный
+	// прокси (HTTPS_PROXY). Решает гео-блок Gemini.
+	GeminiProxy string
+	// GeminiAPIBase - базовый URL Generative Language API
+	// (REST generateContent). Читается из GEMINI_API_BASE; по умолчанию
+	// gemini.DefaultAPIBase.
+	GeminiAPIBase string
+	// GeminiMaxConcurrency - макс. число одновременных запросов к Gemini
+	// (защита от 429/RPM и OOM). Читается из GEMINI_MAX_CONCURRENCY; по
+	// умолчанию gemini.DefaultMaxConcurrency.
+	GeminiMaxConcurrency int
 	// PromoCodes - список одноразовых промокодов на активацию Premium.
 	// Читается из PROMO_CODES (через запятую). Пусто - промокоды отключены.
 	PromoCodes []string
@@ -79,23 +100,28 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		BotToken:          strings.TrimSpace(os.Getenv("BOT_TOKEN")),
-		UploadDir:         getEnv("UPLOAD_DIR", "./uploads"),
-		AppEnv:            getEnv("APP_ENV", "development"),
-		LoadingStickerID:  os.Getenv("LOADING_STICKER_ID"),
-		AdminChatID:       adminID,
-		WebAppURL:         webAppURL,
-		DashboardURL:      dashboardURL,
-		HTTPAddr:          httpAddr,
-		HTML2PDFAPIKey:    getEnv("HTML2PDF_API_KEY", ""),
-		StoragePath:       getEnv("STORAGE_PATH", "./data/analyzpro.db.json"),
-		MonitoringPath:    getEnv("MONITORING_PATH", "./data/monitoring.db.json"),
-		AnalyticsPath:     getEnv("ANALYTICS_PATH", "./data/analytics.jsonl"),
-		DBPath:            getEnv("DB_PATH", "./data/analyzpro.db"),
-		PostHogAPIKey:     os.Getenv("POSTHOG_API_KEY"),
-		LogLevel:          getEnv("LOG_LEVEL", "INFO"),
-		PromoCodes:        parseCSV(os.Getenv("PROMO_CODES")),
-		PromoCodesMonthly: parseCSV(os.Getenv("PROMO_CODES_MONTHLY")),
+		BotToken:             strings.TrimSpace(os.Getenv("BOT_TOKEN")),
+		UploadDir:            getEnv("UPLOAD_DIR", "./uploads"),
+		AppEnv:               getEnv("APP_ENV", "development"),
+		LoadingStickerID:     os.Getenv("LOADING_STICKER_ID"),
+		AdminChatID:          adminID,
+		WebAppURL:            webAppURL,
+		DashboardURL:         dashboardURL,
+		HTTPAddr:             httpAddr,
+		HTML2PDFAPIKey:       getEnv("HTML2PDF_API_KEY", ""),
+		StoragePath:          getEnv("STORAGE_PATH", "./data/analyzpro.db.json"),
+		MonitoringPath:       getEnv("MONITORING_PATH", "./data/monitoring.db.json"),
+		AnalyticsPath:        getEnv("ANALYTICS_PATH", "./data/analytics.jsonl"),
+		DBPath:               getEnv("DB_PATH", "./data/analyzpro.db"),
+		PostHogAPIKey:        os.Getenv("POSTHOG_API_KEY"),
+		LogLevel:             getEnv("LOG_LEVEL", "INFO"),
+		PromoCodes:           parseCSV(os.Getenv("PROMO_CODES")),
+		PromoCodesMonthly:    parseCSV(os.Getenv("PROMO_CODES_MONTHLY")),
+		GeminiAPIKey:         strings.TrimSpace(os.Getenv("GOOGLE_GEMINI_API_KEY")),
+		GeminiModel:          getEnv("GOOGLE_AI_MODEL", gemini.DefaultModel),
+		GeminiProxy:          os.Getenv("GEMINI_PROXY"),
+		GeminiAPIBase:        getEnv("GEMINI_API_BASE", gemini.DefaultAPIBase),
+		GeminiMaxConcurrency: getEnvInt("GEMINI_MAX_CONCURRENCY", gemini.DefaultMaxConcurrency),
 	}, nil
 }
 
@@ -190,6 +216,20 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// getEnvInt - целочисленная переменная окружения с числовым дефолтом.
+// При некорректном значении (не число) возвращает defaultValue.
+func getEnvInt(key string, defaultValue int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultValue
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil {
+		return defaultValue
+	}
+	return n
 }
 
 // lanURLFor - если rawURL указывает на localhost/127.0.0.1, возвращает тот же

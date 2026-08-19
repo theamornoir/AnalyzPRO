@@ -143,7 +143,7 @@ func processSingleFile(
 ) {
 	fileData, err := file.readData()
 	if err != nil {
-		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, err)
 		return
 	}
 
@@ -156,13 +156,13 @@ func processSingleFile(
 			contextInfo,
 		)
 		if ferr != nil || fileText == "" {
-			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("extended single-file analysis failed: %w", ferr))
 			return
 		}
 		combined := fileText + "\n\nДанные пациента и опросника об образе жизни:\n" + contextInfo
 		dossierJSON, derr := analysisService.HandleExtendedDossierJSON(ctx, combined)
 		if derr != nil || dossierJSON == "" {
-			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("extended dossier JSON failed: %w", derr))
 			return
 		}
 		renderAndSendDossier(ctx, b, stateManager, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, dossierJSON, appStorage, saver, webAppURL)
@@ -179,7 +179,7 @@ func processSingleFile(
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
 	if err != nil {
-		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, err)
 		return
 	}
 
@@ -187,14 +187,11 @@ func processSingleFile(
 	// Не отправляем пустоту и не ломаем состояние: даём пользователю
 	// вернуться в главное меню.
 	if strings.TrimSpace(result) == "" {
-		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("AI returned empty analysis for single file"))
 		return
 	}
 
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text:   result,
-	})
+	sendLongMessagePlain(ctx, b, chatID, result)
 
 	// Дополнительно запрашиваем у ИИ структурированные показатели
 	// (sections/categories с indicators), чтобы наполнить блоки «Сводки
@@ -214,7 +211,7 @@ func processSingleFile(
 }
 
 // processMultipleFiles - обрабатывает несколько файлов ЕДИНЫМ мультимодальным
-// запросом. Все вложения (фото/PDF) передаются в Claude в ОДНО сообщение
+// запросом. Все вложения (фото/PDF) передаются в Gemini в ОДНО сообщение
 // вместе с промптом (как в Bioscan PRO) - это исключает потерю данных между
 // файлами и позволяет ИИ видеть связь между несколькими анализами сразу.
 func processMultipleFiles(
@@ -247,7 +244,7 @@ func processMultipleFiles(
 	}
 
 	if len(filesData) == 0 {
-		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("no file data read from any uploaded file"))
 		return
 	}
 
@@ -259,7 +256,7 @@ func processMultipleFiles(
 		contextInfo,
 	)
 	if err != nil || strings.TrimSpace(analysisText) == "" {
-		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("multi-file analysis failed: %w", err))
 		return
 	}
 
@@ -269,7 +266,7 @@ func processMultipleFiles(
 		combined := analysisText + "\n\nДанные пациента и опросника об образе жизни:\n" + contextInfo
 		dossierJSON, derr := analysisService.HandleExtendedDossierJSON(ctx, combined)
 		if derr != nil || dossierJSON == "" {
-			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+			sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("multi-file extended dossier JSON failed: %w", derr))
 			return
 		}
 		renderAndSendDossier(ctx, b, stateManager, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, dossierJSON, appStorage, saver, webAppURL)
@@ -279,10 +276,7 @@ func processMultipleFiles(
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
 	finalResult := fmt.Sprintf(locales.MsgUploadResultFiles, len(files), analysisText)
-	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID: chatID,
-		Text:   finalResult,
-	})
+	sendLongMessagePlain(ctx, b, chatID, finalResult)
 
 	// Один мультифайловый запрос на структурированные показатели (sections/
 	// categories) всех файлов сразу - для блоков «Мой профиль».
@@ -295,6 +289,43 @@ func processMultipleFiles(
 	// Сообщаем, что результат сохранён в «Мой профиль», и даём
 	// кнопку для мгновенного открытия.
 	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
+}
+
+// sendLongMessagePlain отправляет текст, разбивая его на куски <= 4000
+// символов по границам строк, чтобы не упереться в лимит Telegram (4096).
+// Клавиатура не крепится - меню присылается отдельным сообщением после
+// сохранения результата. Без этого длинные отчёты ИИ (4000-6000 выходных
+// токенов на кириллице - это ~6-10k символов) не доставлялись бы в чат
+// (Telegram вернул бы 400), хотя и сохранялись бы в «Мой профиль».
+func sendLongMessagePlain(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
+	const maxChunk = 4000
+	runes := []rune(text)
+	n := len(runes)
+	if n <= maxChunk {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: text})
+		return
+	}
+
+	chunks := []string{}
+	for start := 0; start < n; {
+		end := start + maxChunk
+		if end > n {
+			end = n
+		}
+		chunk := string(runes[start:end])
+		if end < n {
+			if idx := strings.LastIndex(chunk, "\n"); idx > 0 {
+				end = start + idx + 1
+				chunk = string(runes[start:end])
+			}
+		}
+		chunks = append(chunks, chunk)
+		start = end
+	}
+
+	for _, chunk := range chunks {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: chunk})
+	}
 }
 
 // deleteLoadingMessages - удаляет сообщения о загрузке.
@@ -313,7 +344,15 @@ func deleteLoadingMessages(ctx context.Context, b *tgbot.Bot, chatID int64, load
 // вернуться в меню. Раньше ошибка отправлялась через helpers.SendError без
 // клавиатуры и без сброса состояния - из-за этого пропадало меню и не было
 // пути назад. loadingMsg/textMsg безопасно обрабатываются, если nil.
-func sendAnalysisError(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64, loadingMsg, textMsg *models.Message) {
+//
+// err - реальная причина сбоя (ошибка Gemini/сети/чтения файла). Раньше она
+// «проглатывалась»: в логах оставался только generic-текст для юзера, из-за
+// чего было непонятно, почему анализ упал (например, 404 по снятой с
+// поддержки модели или пустой ключ API). Теперь причина логируется.
+func sendAnalysisError(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64, loadingMsg, textMsg *models.Message, err error) {
+	if err != nil {
+		log.Printf("❌ [UPLOAD] анализ не удалось обработать (chatID=%d): %v", chatID, err)
+	}
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 	stateManager.Reset(chatID)
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{

@@ -11,6 +11,11 @@ import (
 // RenderBioscanPlainText формирует plain-text (без markdown/форматирования)
 // версию отчёта Bioscan для вывода обычным сообщением в чат. Используется в
 // базовом (бесплатном) режиме Bioscan, где результат приходит текстом.
+//
+// Для максимальной эффективности всё накопление идёт через strings.Builder:
+// внутри циклов никакой конкатенации строк ("a" + b + "c"), только
+// последовательные WriteString каждого фрагмента. Это исключает лишние
+// аллокации промежуточных строк (равнозначно тому, что требует gopls S1021).
 func RenderBioscanPlainText(rep models.Report) string {
 	var b strings.Builder
 
@@ -19,7 +24,8 @@ func RenderBioscanPlainText(rep models.Report) string {
 
 	if rep.Score > 0 || rep.Level != "" {
 		if rep.Score > 0 {
-			b.WriteString(locales.RptMsgTextOverallAssessment + strconv.Itoa(rep.Score))
+			b.WriteString(locales.RptMsgTextOverallAssessment)
+			b.WriteString(strconv.Itoa(rep.Score))
 		}
 		if rep.Level != "" {
 			if rep.Score > 0 {
@@ -44,36 +50,62 @@ func RenderBioscanPlainText(rep models.Report) string {
 		body = append(body, locales.RptMsgPdfBodyFatLabel+rep.Body.Fat)
 	}
 	if len(body) > 0 {
-		b.WriteString(strings.Join(body, "\n") + "\n\n")
+		b.WriteString(strings.Join(body, "\n"))
+		b.WriteString("\n\n")
 	}
 
 	if rep.Composition != "" {
-		b.WriteString(locales.RptMsgTextComposition + rep.Composition + "\n\n")
+		b.WriteString(locales.RptMsgTextComposition)
+		b.WriteString(rep.Composition)
+		b.WriteString("\n\n")
 	}
 
 	if rep.Profile.Composition > 0 || rep.Profile.MuscleDevelopment > 0 ||
 		rep.Profile.Balance > 0 || rep.Profile.Potential > 0 {
 		b.WriteString(locales.RptMsgTextProfileDev)
-		b.WriteString("• " + locales.RptMsgTextCompLabel + strconv.Itoa(rep.Profile.Composition) + "/100\n")
-		b.WriteString("• " + locales.RptMsgTextMuscleDevLabel + strconv.Itoa(rep.Profile.MuscleDevelopment) + "/100\n")
-		b.WriteString("• " + locales.RptMsgTextBalanceLabel + strconv.Itoa(rep.Profile.Balance) + "/100\n")
-		b.WriteString("• " + locales.RptMsgTextPotentialLabel + strconv.Itoa(rep.Profile.Potential) + "/100\n\n")
+		b.WriteString("• ")
+		b.WriteString(locales.RptMsgTextCompLabel)
+		b.WriteString(strconv.Itoa(rep.Profile.Composition))
+		b.WriteString("/100\n")
+		b.WriteString("• ")
+		b.WriteString(locales.RptMsgTextMuscleDevLabel)
+		b.WriteString(strconv.Itoa(rep.Profile.MuscleDevelopment))
+		b.WriteString("/100\n")
+		b.WriteString("• ")
+		b.WriteString(locales.RptMsgTextBalanceLabel)
+		b.WriteString(strconv.Itoa(rep.Profile.Balance))
+		b.WriteString("/100\n")
+		b.WriteString("• ")
+		b.WriteString(locales.RptMsgTextPotentialLabel)
+		b.WriteString(strconv.Itoa(rep.Profile.Potential))
+		b.WriteString("/100\n\n")
 	}
 
 	if rep.Summary != "" {
-		b.WriteString(locales.RptMsgTextSummary + rep.Summary + "\n\n")
+		b.WriteString(locales.RptMsgTextSummary)
+		b.WriteString(rep.Summary)
+		b.WriteString("\n\n")
 	}
 
 	if len(rep.Zones) > 0 {
 		b.WriteString(locales.RptMsgTextZoneAssessment)
 		for _, z := range rep.Zones {
-			b.WriteString("• " + z.Name + " - " + strconv.Itoa(z.Score) + "/100")
+			b.WriteString("• ")
+			b.WriteString(z.Name)
+			b.WriteString(" - ")
+			b.WriteString(strconv.Itoa(z.Score))
+			b.WriteString("/100")
 			if z.Status != "" {
-				b.WriteString(" (" + z.Status + ")")
+				b.WriteString(" (")
+				b.WriteString(z.Status)
+				b.WriteString(")")
 			}
 			b.WriteString("\n")
 			if z.Recommendation != "" {
-				b.WriteString("  " + locales.RptMsgPdfRecLabel + z.Recommendation + "\n")
+				b.WriteString("  ")
+				b.WriteString(locales.RptMsgPdfRecLabel)
+				b.WriteString(z.Recommendation)
+				b.WriteString("\n")
 			}
 		}
 		b.WriteString("\n")
@@ -82,19 +114,33 @@ func RenderBioscanPlainText(rep models.Report) string {
 	if rep.Posture.Type != "" || rep.Posture.Description != "" {
 		b.WriteString(locales.RptMsgTextPosture)
 		if rep.Posture.Type != "" {
-			b.WriteString("• " + locales.RptMsgPdfTypeLabel + rep.Posture.Type + "\n")
+			b.WriteString("• ")
+			b.WriteString(locales.RptMsgPdfTypeLabel)
+			b.WriteString(rep.Posture.Type)
+			b.WriteString("\n")
 		}
 		if rep.Posture.Head != "" {
-			b.WriteString("• " + locales.RptMsgPdfHeadLabel + rep.Posture.Head + "\n")
+			b.WriteString("• ")
+			b.WriteString(locales.RptMsgPdfHeadLabel)
+			b.WriteString(rep.Posture.Head)
+			b.WriteString("\n")
 		}
 		if rep.Posture.Shoulders != "" {
-			b.WriteString("• " + locales.RptMsgPdfShouldersLabel + rep.Posture.Shoulders + "\n")
+			b.WriteString("• ")
+			b.WriteString(locales.RptMsgPdfShouldersLabel)
+			b.WriteString(rep.Posture.Shoulders)
+			b.WriteString("\n")
 		}
 		if rep.Posture.Pelvis != "" {
-			b.WriteString("• " + locales.RptMsgPdfPelvisLabel + rep.Posture.Pelvis + "\n")
+			b.WriteString("• ")
+			b.WriteString(locales.RptMsgPdfPelvisLabel)
+			b.WriteString(rep.Posture.Pelvis)
+			b.WriteString("\n")
 		}
 		if rep.Posture.Description != "" {
-			b.WriteString("• " + rep.Posture.Description + "\n")
+			b.WriteString("• ")
+			b.WriteString(rep.Posture.Description)
+			b.WriteString("\n")
 		}
 		b.WriteString("\n")
 	}
@@ -102,12 +148,20 @@ func RenderBioscanPlainText(rep models.Report) string {
 	if len(rep.AttentionZones) > 0 {
 		b.WriteString(locales.RptMsgTextAttentionZones)
 		for _, a := range rep.AttentionZones {
-			b.WriteString("• " + a.Name + "\n")
+			b.WriteString("• ")
+			b.WriteString(a.Name)
+			b.WriteString("\n")
 			if a.Problem != "" {
-				b.WriteString("  " + locales.RptMsgPdfProblemLabel + a.Problem + "\n")
+				b.WriteString("  ")
+				b.WriteString(locales.RptMsgPdfProblemLabel)
+				b.WriteString(a.Problem)
+				b.WriteString("\n")
 			}
 			if a.Solution != "" {
-				b.WriteString("  " + locales.RptMsgPdfSolutionLabel + a.Solution + "\n")
+				b.WriteString("  ")
+				b.WriteString(locales.RptMsgPdfSolutionLabel)
+				b.WriteString(a.Solution)
+				b.WriteString("\n")
 			}
 		}
 		b.WriteString("\n")
@@ -116,7 +170,9 @@ func RenderBioscanPlainText(rep models.Report) string {
 	if len(rep.Recommendations) > 0 {
 		b.WriteString(locales.RptMsgTextRecommendations)
 		for _, r := range rep.Recommendations {
-			b.WriteString("• " + r + "\n")
+			b.WriteString("• ")
+			b.WriteString(r)
+			b.WriteString("\n")
 		}
 		b.WriteString("\n")
 	}
@@ -124,10 +180,15 @@ func RenderBioscanPlainText(rep models.Report) string {
 	if len(rep.Progress.Targets) > 0 || rep.Progress.Recheck != "" {
 		b.WriteString(locales.RptMsgTextProgressControl)
 		if rep.Progress.Recheck != "" {
-			b.WriteString("• " + locales.RptMsgPdfRecheckLabel + rep.Progress.Recheck + "\n")
+			b.WriteString("• ")
+			b.WriteString(locales.RptMsgPdfRecheckLabel)
+			b.WriteString(rep.Progress.Recheck)
+			b.WriteString("\n")
 		}
 		for _, t := range rep.Progress.Targets {
-			b.WriteString("• " + t + "\n")
+			b.WriteString("• ")
+			b.WriteString(t)
+			b.WriteString("\n")
 		}
 		b.WriteString("\n")
 	}

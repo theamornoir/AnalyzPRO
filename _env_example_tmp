@@ -26,26 +26,22 @@ BOT_TOKEN=your_bot_token_here
 LOADING_STICKER_ID=your_sticker_id
 ADMIN_CHAT_ID=your_admin_chat_id
 
-# AI Models — Gemini
+# AI Models — Gemini (единственный провайдер ИИ; читает фото и PDF)
 GOOGLE_GEMINI_API_KEY=your_gemini_api_key
-GOOGLE_AI_MODEL=gemini-2.0-flash
+# Модель по умолчанию — gemini-2.5-flash (дешёвая, умеет vision+PDF).
+# Можно переопределить без пересборки, напр. gemini-2.5-flash-lite (ещё дешевле).
+GOOGLE_AI_MODEL=gemini-2.5-flash
 
-# AI Models — OpenRouter (основной бесплатный провайдер; ключ читается
-# напрямую из окружения в internal/ai/orchestrator/openrouter.go)
-OPENROUTER_API_KEY=
-OPENROUTER_MODEL=google/gemma-4-26b-a4b-it:free
-
-# AI Models — DeepSeek (опционально)
-DEEPSEEK_API_KEY=
-
-# AI Models — Claude (опционально)
-ANTHROPIC_API_KEY=
-
-# AI Models — Yandex (опционально)
-YANDEX_GPT_API_KEY=
-YANDEX_GPT_FOLDER_ID=
-YANDEX_GPT_MODEL=yandexgpt-lite
-YANDEX_GPT_VISION_MODEL=yandexgpt
+# Egress-прокси ТОЛЬКО для AI-вызовов (Gemini). Решает гео-блок Gemini.
+# Локальный SOCKS5-порт VPN/Clash: socks5://127.0.0.1:1080
+# (либо http/https-прокси). Если пусто — используется системный HTTPS_PROXY.
+GEMINI_PROXY=
+# Базовый URL Generative Language API. По умолчанию
+# https://generativelanguage.googleapis.com/v1beta/models
+# (менять только при кастомном эндпоинте / шлюзе).
+GEMINI_API_BASE=
+# Макс. число одновременных запросов к Gemini (защита от 429 и OOM).
+GEMINI_MAX_CONCURRENCY=8
 
 # Хранение данных (SQLite; путь задаётся DB_PATH, Postgres не используется)
 UPLOAD_DIR=./uploads
@@ -55,6 +51,10 @@ HTML2PDF_API_KEY=your_html2pdf_api_key_here
 
 # Аналитика (PostHog; опционально - пусто = события не отправляются)
 POSTHOG_API_KEY=
+
+# Промокоды на Premium (через запятую; опционально)
+PROMO_CODES=
+PROMO_CODES_MONTHLY=
 
 # Web App (Дашборд)
 WEBAPP_URL=http://localhost:8080/dashboard

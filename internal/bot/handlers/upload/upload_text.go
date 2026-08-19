@@ -2,6 +2,7 @@ package upload
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 
@@ -64,13 +65,13 @@ func handleTextUpload(
 	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
 	if err != nil {
-		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, err)
 		return
 	}
 
 	// Пустой результат без явной ошибки - тоже «неверный ответ» ИИ.
 	if strings.TrimSpace(result) == "" {
-		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg)
+		sendAnalysisError(ctx, b, stateManager, chatID, loadingMsg, textMsg, fmt.Errorf("AI returned empty analysis for text input"))
 		return
 	}
 

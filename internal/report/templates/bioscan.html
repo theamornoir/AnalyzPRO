@@ -950,6 +950,16 @@ h1 span {
         {{end}}
     </div>
 
+    {{if .Recommendations}}
+    <div class="section-title">Рекомендации</div>
+
+    <div class="card">
+        {{range .Recommendations}}
+        <p style="margin-bottom:6px;font-size:10px;">✓ {{.}}</p>
+        {{end}}
+    </div>
+    {{end}}
+
     <div class="section-title">Контроль прогресса</div>
 
     <div class="card">
