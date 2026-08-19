@@ -83,7 +83,7 @@ const (
 		"📎 Откройте файл в браузере и при желании сохраните как PDF (Печать → Сохранить как PDF)."
 	MsgBioscanDone              = "✅ Анализ завершён!\n\nХотите сделать новый Bioscan? Отправьте новое фото или выберите действие в меню."
 	MsgBioscanLoadingStatusText = "%s\n\n⏳ Подождите..."
-	MsgBioscanProcessingError   = "⚠️ Не удалось обработать фото. Ошибка: %v"
+	MsgBioscanProcessingError   = "⚠️ Не удалось обработать фото. Попробуйте ещё раз или позже."
 
 	// Bioscan validation messages
 	MsgBioscanAgeInvalid    = "❌ Пожалуйста, введите корректный возраст (от 10 до 120 лет)."

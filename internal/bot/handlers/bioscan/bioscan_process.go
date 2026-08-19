@@ -3,7 +3,6 @@ package bioscan
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -121,7 +120,7 @@ func ProcessBioscanWithPhotos(
 		sm.SetState(chatID, states.StateIdle)
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
-			Text:        fmt.Sprintf(locales.MsgBioscanProcessingError, err),
+			Text:        locales.MsgBioscanProcessingError,
 			ReplyMarkup: keyboards.MainMenu(),
 		})
 		return

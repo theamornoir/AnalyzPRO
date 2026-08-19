@@ -89,7 +89,7 @@ func HandleBioscanBasicPhoto(
 		sm.SetState(chatID, states.StateIdle)
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
-			Text:        fmt.Sprintf(locales.MsgBioscanProcessingError, err),
+			Text:        locales.MsgBioscanProcessingError,
 			ReplyMarkup: keyboards.MainMenu(),
 		})
 		return
@@ -98,11 +98,10 @@ func HandleBioscanBasicPhoto(
 	helpers.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
 
 	// Результат - ОБЫЧНОЕ сообщение БЕЗ форматирования (без ParseMode).
-	if result != "" {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID: chatID,
-			Text:   result,
-		})
+	// Может превышать лимит Telegram (4096) - дробим на куски <= 4000
+	// символов, иначе сообщение не дойдёт, хотя бот пошлёт «Готово».
+	if strings.TrimSpace(result) != "" {
+		helpers.SendLongMessagePlain(ctx, b, chatID, result)
 	}
 
 	sm.SetState(chatID, states.StateIdle)
