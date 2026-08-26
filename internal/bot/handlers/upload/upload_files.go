@@ -37,6 +37,7 @@ func handleFileUpload(
 	stateManager states.StateManager,
 	uploadDir string,
 	chatID int64,
+	msgID int,
 	document *models.Document,
 ) {
 	fileName := document.FileName
@@ -59,6 +60,17 @@ func handleFileUpload(
 		return
 	}
 
+	// Дополнительная защита: отклоняем типы, не являющиеся
+	// PDF/изображением (исполняемые файлы, архивы, HTML), даже если
+	// пользователь переименовал расширение.
+	if isDangerousMime(mimeType) {
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgUploadFileInvalid,
+		})
+		return
+	}
+
 	// Сохраняем файл на диск, в память кладём только путь
 	path := saveUploadedFile(uploadDir, fileName, fileData)
 
@@ -67,6 +79,11 @@ func handleFileUpload(
 		MimeType: mimeType,
 		FileName: fileName,
 	})
+
+	// Трекаем ID исходного сообщения пользователя, чтобы удалить его из
+	// чата после успешной обработки анализа (приватность: исходные
+	// материалы не остаются в истории).
+	appendUploadedMsgID(stateManager, chatID, msgID)
 
 	// Экранируем имя файла перед вставкой в HTML-сообщение (ParseMode: HTML),
 	// чтобы имена вроде «<b>x</b>» или «<a href=...>» не интерпретировались
@@ -99,6 +116,7 @@ func handlePhotoUpload(
 	stateManager states.StateManager,
 	uploadDir string,
 	chatID int64,
+	msgID int,
 	photos []models.PhotoSize,
 ) {
 	photo := photos[len(photos)-1]
@@ -134,6 +152,11 @@ func handlePhotoUpload(
 		MimeType: mimeType,
 		FileName: fileName,
 	})
+
+	// Трекаем ID исходного сообщения пользователя, чтобы удалить его из
+	// чата после успешной обработки анализа (приватность: исходные
+	// материалы не остаются в истории).
+	appendUploadedMsgID(stateManager, chatID, msgID)
 
 	messageText := fmt.Sprintf(locales.MsgUploadPhotoAdded,
 		len(uploadedFiles), len(uploadedFiles))
@@ -174,4 +197,33 @@ func appendUploadedFile(stateManager states.StateManager, chatID int64, file Upl
 	stateManager.SetUserData(chatID, "uploaded_files", string(filesJSON))
 	stateManager.SetUserData(chatID, "file_count", fmt.Sprintf("%d", len(uploadedFiles)))
 	return uploadedFiles
+}
+
+// dangerousMimes - типы, которые категорически не принимаем (исполняемые
+// файлы, арх материалы, скрипты, HTML). Защита от загрузки вредоноса под
+// видом медицинского анализа (например, rename evil.exe → evil.pdf).
+var dangerousMimes = map[string]bool{
+	"application/x-msdownload":                         true,
+	"application/x-dosexec":                           true,
+	"application/x-executable":                        true,
+	"application/vnd.microsoft.portable-executable":   true,
+	"application/x-msdos-program":                     true,
+	"application/x-sh":                               true,
+	"application/x-bat":                              true,
+	"application/java-archive":                        true,
+	"application/zip":                                true,
+	"application/x-rar-compressed":                   true,
+	"application/x-7z-compressed":                    true,
+	"application/x-tar":                              true,
+	"application/gzip":                              true,
+	"text/html":                                      true,
+	"text/javascript":                               true,
+	"application/javascript":                         true,
+	"application/x-python":                           true,
+}
+
+// isDangerousMime возвращает true для типов, которые не являются
+// PDF/изображением и потенциально опасны при дальнейшей обработке.
+func isDangerousMime(mime string) bool {
+	return dangerousMimes[mime]
 }

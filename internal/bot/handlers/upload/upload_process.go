@@ -212,9 +212,10 @@ func processSingleFile(
 }
 
 // processMultipleFiles - обрабатывает несколько файлов ЕДИНЫМ мультимодальным
-// запросом. Все вложения (фото/PDF) передаются в Gemini в ОДНО сообщение
-// вместе с промптом (как в Bioscan PRO) - это исключает потерю данных между
-// файлами и позволяет ИИ видеть связь между несколькими анализами сразу.
+// запросом. Все вложения (фото/PDF) предварительно распознаются через Yandex
+// Vision OCR, извлечённый текст передаётся модели в ОДНО сообщение вместе с
+// промптом (как в Bioscan PRO) - это исключает потерю данных между файлами и
+// позволяет ИИ видеть связь между несколькими анализами сразу.
 func processMultipleFiles(
 	ctx context.Context,
 	b *tgbot.Bot,
@@ -330,7 +331,8 @@ func deleteLoadingMessages(ctx context.Context, b *tgbot.Bot, chatID int64, load
 // клавиатуры и без сброса состояния - из-за этого пропадало меню и не было
 // пути назад. loadingMsg/textMsg безопасно обрабатываются, если nil.
 //
-// err - реальная причина сбоя (ошибка Gemini/сети/чтения файла). Раньше она
+// err - реальная причина сбоя (ошибка YandexGPT/сети/чтения файла/OCR).
+// Раньше она
 // «проглатывалась»: в логах оставался только generic-текст для юзера, из-за
 // чего было непонятно, почему анализ упал (например, 404 по снятой с
 // поддержки модели или пустой ключ API). Теперь причина логируется.
@@ -343,7 +345,7 @@ func sendAnalysisError(ctx context.Context, b *tgbot.Bot, stateManager states.St
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgTextProcessingError,
-		ReplyMarkup: keyboards.MainMenu(),
+		ReplyMarkup: keyboards.MainMenuInline(),
 	})
 }
 
@@ -356,15 +358,21 @@ func sendAnalysisComplete(ctx context.Context, b *tgbot.Bot, stateManager states
 // дополнительной информации (extra). Используется, чтобы напомнить
 // пользователю, что результат сохранён в «Мой профиль».
 func sendAnalysisCompleteNote(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64, extra string) {
+	// Удаляем исходные присланные материалы (файлы/фото/текст) из чата -
+	// приватность: после успешной обработки ИИ они не должны оставаться в
+	// истории и не хранятся ботом (с диска уже удалены defer'ом в
+	// startAnalysis, в БД сырые материалы не пишутся - только отчёт).
+	deleteSubmittedMessages(ctx, b, stateManager, chatID)
 	stateManager.Reset(chatID)
 	text := locales.MsgAnalysisComplete
 	if strings.TrimSpace(extra) != "" {
 		text += "\n\n" + extra
 	}
+	text += "\n\n" + locales.MsgMaterialsDeleted
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        text,
-		ReplyMarkup: keyboards.MainMenu(),
+		ReplyMarkup: keyboards.MainMenuInline(),
 		ParseMode:   "HTML",
 	})
 }

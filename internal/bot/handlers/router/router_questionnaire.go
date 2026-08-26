@@ -117,6 +117,46 @@ func (r *router) handleQuestionnaireStates(ctx context.Context, b *tgbot.Bot, ch
 		log.Printf(locales.LogProcessingGoal, chatID)
 		collector.HandleGoal(ctx, b, chatID, text)
 		return true
+
+	case states.StateWaitingEnergy:
+		log.Printf("[QUESTIONNAIRE] вопрос: энергия для chatID=%d", chatID)
+		collector.HandleEnergy(ctx, b, chatID, text)
+		return true
+
+	case states.StateWaitingMood:
+		log.Printf("[QUESTIONNAIRE] вопрос: настроение для chatID=%d", chatID)
+		collector.HandleMood(ctx, b, chatID, text)
+		return true
+
+	case states.StateWaitingWorkRegimen:
+		log.Printf("[QUESTIONNAIRE] вопрос: режим дня для chatID=%d", chatID)
+		collector.HandleWorkRegimen(ctx, b, chatID, text)
+		return true
+
+	case states.StateWaitingScreenTime:
+		log.Printf("[QUESTIONNAIRE] вопрос: экранное время для chatID=%d", chatID)
+		collector.HandleScreenTime(ctx, b, chatID, text)
+		return true
+
+	case states.StateWaitingMealRegularity:
+		log.Printf("[QUESTIONNAIRE] вопрос: регулярность питания для chatID=%d", chatID)
+		collector.HandleMealRegularity(ctx, b, chatID, text)
+		return true
+
+	case states.StateWaitingCaffeine:
+		log.Printf("[QUESTIONNAIRE] вопрос: кофеин для chatID=%d", chatID)
+		collector.HandleCaffeine(ctx, b, chatID, text)
+		return true
+
+	case states.StateWaitingIllnessFreq:
+		log.Printf("[QUESTIONNAIRE] вопрос: частота болезней для chatID=%d", chatID)
+		collector.HandleIllnessFreq(ctx, b, chatID, text)
+		return true
+
+	case states.StateWaitingPainAreas:
+		log.Printf("[QUESTIONNAIRE] вопрос: боли/дискомфорт для chatID=%d", chatID)
+		collector.HandlePainAreas(ctx, b, chatID, text)
+		return true
 	}
 
 	return false
@@ -153,7 +193,7 @@ func isBioscanState(state states.State) bool {
 		states.StateWaitingBioscanPhoto3,
 		states.StateWaitingBioscanPhoto4,
 		states.StateWaitingBioscanConfirm,
-		states.StateWaitingBioscanBasicPhoto:
+		states.StateWaitingBioscanBasicQ:
 		return true
 	}
 	return false
@@ -181,7 +221,15 @@ func isQuestionnaireState(state states.State) bool {
 		states.StateWaitingFamilyHistory,
 		states.StateWaitingDigestion,
 		states.StateWaitingSportType,
-		states.StateWaitingGoal:
+		states.StateWaitingGoal,
+		states.StateWaitingEnergy,
+		states.StateWaitingMood,
+		states.StateWaitingWorkRegimen,
+		states.StateWaitingScreenTime,
+		states.StateWaitingMealRegularity,
+		states.StateWaitingCaffeine,
+		states.StateWaitingIllnessFreq,
+		states.StateWaitingPainAreas:
 		return true
 	}
 	return false

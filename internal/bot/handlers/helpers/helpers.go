@@ -20,7 +20,7 @@ func SendError(ctx context.Context, b *tgbot.Bot, chatID int64) {
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgTextProcessingError,
-		ReplyMarkup: keyboards.MainMenu(),
+		ReplyMarkup: keyboards.MainMenuInline(),
 	})
 }
 

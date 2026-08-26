@@ -26,13 +26,14 @@ const (
 	// пользователям непонятно, поэтому теперь это «Мой профиль» -
 	// снимок состояния здоровья прямо сейчас.
 	BtnHealthSummary = "📊 Мой профиль"
-	// 🧪 Демо-кнопки - открывают веб-аппы с ?demo=1, чтобы посмотреть
-	// графики «как заполнено», без реальных анализов и без Premium.
-	BtnHealthSummaryDemo = "🧪 Демо: Мой профиль"
 	// BtnHealthDynamics - новый раздел-хаб, объединяющий «Мой профиль»
 	// и «Мониторинг» (отслеживание показателей в динамике).
 	BtnHealthDynamics = "📈 Здоровье в динамике"
 	BtnFeedback       = "📝 Отзывы и предложения"
+	// BtnDeleteAccount - кнопка удаления аккаунта (раздел «Сервис»).
+	// Полностью стирает все данные пользователя (профиль, анализы,
+	// биосканы, мониторинг, уведомления) - необратимо.
+	BtnDeleteAccount = "🗑 Удалить аккаунт"
 	// BtnTestNotify - кнопка входа в тестовое меню проверки уведомлений
 	// (раздел «Сервис»). Позволяет разработчику отправить себе образец
 	// реального уведомления (напоминание/мотивация/фича) спустя 30 секунд.
@@ -47,15 +48,23 @@ const (
 	// Пользователю непонятно «консультация с ИИ», поэтому названо как
 	// «Быстрая консультация»: можно прислать фото травмы или задать вопрос,
 	// и ИИ даст консультацию с рекомендациями. Premium-функция (3 бесплатно).
-	BtnConsultation     = "💬 Быстрая консультация"
+	BtnConsultation = "💬 Быстрая консультация"
+	// BtnConsultAgain - reply-кнопка «Задать ещё вопрос» в финиш-состоянии
+	// консультации: позволяет продолжить диалог с ИИ (вернуться в
+	// StateWaitingConsultation, не выходя в главное меню).
+	BtnConsultAgain = "💬 Задать ещё вопрос"
+	// BtnConsultFinish - reply-кнопка «Закончить консультацию» в
+	// финиш-состоянии: единственный способ выйти из флоу и вернуться в
+	// обычное главное меню. Находится в нижней reply-клавиатуре (не inline).
+	BtnConsultFinish    = "✅ Закончить консультацию"
 	BtnPremium          = "💎 Premium"
 	BtnPremiumChange    = "🔄 Сменить тариф"
 	BtnRegularAnalysis  = "📊 Обычный анализ"
-	BtnExtendedAnalysis = "🔬 Расширенный анализ"
+	BtnExtendedAnalysis = "🩺 Общая оценка здоровья"
 	// 🧪 Демо-кнопки для предпросмотра результатов «как заполнено»,
 	// без реальных файлов и без вызовов ИИ. Работают всем (и без Premium).
 	BtnRegularAnalysisDemo  = "🧪 Демо: Обычный"
-	BtnExtendedAnalysisDemo = "🧪 Демо: Расширенный"
+	BtnExtendedAnalysisDemo = "🧪 Демо: Оценка здоровья"
 	BtnBioscanBasicDemo     = "🧪 Демо: Bioscan"
 	BtnBioscanExtendedDemo  = "🧪 Демо: Bioscan PRO"
 	BtnAcceptAgreement      = "✅ Принять соглашение"
@@ -105,4 +114,21 @@ const (
 	BioscanStatusEvaluatingComposition   = "📊 Оцениваю композицию тела..."
 	BioscanStatusFormingProfile          = "🧬 Формирую профиль развития..."
 	BioscanStatusCreatingRecommendations = "📝 Создаю рекомендации..."
+)
+
+// BtnBioscanBasicMale / BtnBioscanBasicFemale - inline-кнопки выбора пола
+// в мини-опроснике базового (бесплатного) Bioscan.
+const (
+	BtnBioscanBasicMale   = "👨 Мужской"
+	BtnBioscanBasicFemale = "👩 Женский"
+)
+
+// BtnBioscanBasicGoal* - inline-кнопки выбора цели в мини-опроснике базового
+// (бесплатного) Bioscan.
+const (
+	BtnBioscanBasicGoalMass   = "💪 Набор массы"
+	BtnBioscanBasicGoalCut    = "🔥 Снижение веса"
+	BtnBioscanBasicGoalKeep   = "⚖️ Поддержание формы"
+	BtnBioscanBasicGoalEndure = "🏃 Выносливость"
+	BtnBioscanBasicGoalFlex   = "🧘 Гибкость"
 )

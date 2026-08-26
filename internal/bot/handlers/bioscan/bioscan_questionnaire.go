@@ -101,7 +101,7 @@ func sendBioscanQuestionText(ctx context.Context, b *tgbot.Bot, chatID int64, id
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        header + prompt,
-		ReplyMarkup: keyboards.BackCancelMenu(),
+		ReplyMarkup: keyboards.BackCancelQuestionInlineBioscan(),
 		ParseMode:   "Markdown",
 	})
 }

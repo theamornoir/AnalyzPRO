@@ -27,6 +27,7 @@ type ReportsResponse struct {
 	TrendBadges     []TrendBadge `json:"trendBadges"`
 	Analysis        ReportsGroup `json:"analysis"`
 	Bioscan         ReportsGroup `json:"bioscan"`
+	Health          ReportsGroup `json:"health"`
 }
 
 // TrendBadge - компактный бейдж направления тренда показателя,
@@ -63,6 +64,12 @@ type ReportBlock struct {
 	Indicators []IndicatorView `json:"indicators"`
 	Zones      []ZoneView      `json:"zones"`
 	Summary    string          `json:"summary"`
+	// Rich - признак «богатого» (премиумного) отчёта. true для Bioscan PRO
+	// (есть score/posture/zones) и расширенного анализа-досье (есть scores/
+	// indicators). false для базового Bioscan (только текстовая сводка) и
+	// обычного анализа (plain-текст). Фронтенд по нему выбирает подпись
+	// карточки и решает, прятать ли отчёт за Premium-гейтом.
+	Rich bool `json:"rich"`
 }
 
 // IndicatorView - один показатель списка (имя/значение/статус).
@@ -99,6 +106,7 @@ func (h *Handler) buildReportsData(ctx context.Context, telegramID int64, isPrem
 	}
 	resp.Analysis = h.buildGroup(ctx, telegramID, "analysis", isPremium)
 	resp.Bioscan = h.buildGroup(ctx, telegramID, "bioscan", isPremium)
+	resp.Health = h.buildGroup(ctx, telegramID, "health_assessment", isPremium)
 	resp.TrendBadges = computeTrendBadges(ctx, h.repo, telegramID)
 	return resp
 }
@@ -145,8 +153,19 @@ func parseReportBlock(e monitoring.HistoryEntry, entryType string) ReportBlock {
 
 	if entryType == "bioscan" {
 		parseBioscanBlock(jsonStr, &out)
+	} else if entryType == "health_assessment" {
+		parseHealthAssessmentBlock(jsonStr, &out)
 	} else {
 		parseAnalysisBlock(jsonStr, &out)
+	}
+
+	// Rich-признак: отчёт «богатый», если в нём есть хотя бы один
+	// структурированный показатель (счёт, оценки, индикаторы, зоны).
+	// Базовый Bioscan ({"title","note"}) и обычный анализ (plain-текст)
+	// ничего этого не содержат -> Rich=false (подпись «Базовый
+	// Bioscan» / «Анализ», без путаницы с Bioscan PRO / расширенным).
+	if out.MainScore > 0 || len(out.Scores) > 0 || len(out.Indicators) > 0 || len(out.Zones) > 0 {
+		out.Rich = true
 	}
 	return out
 }
@@ -282,6 +301,7 @@ func parseBioscanBlock(jsonStr string, out *ReportBlock) {
 		Score   int    `json:"score"`
 		Level   string `json:"level"`
 		Summary string `json:"summary"`
+		Note    string `json:"note"`
 		Posture struct {
 			PostureScore    int `json:"posture_score"`
 			Symmetry        int `json:"symmetry"`
@@ -304,6 +324,11 @@ func parseBioscanBlock(jsonStr string, out *ReportBlock) {
 
 	out.Title = strings.TrimSpace(doc.Title)
 	out.Summary = strings.TrimSpace(doc.Summary)
+	// Базовый Bioscan хранит текстовую сводку в поле "note", а не
+	// "summary" - сохраняем её, чтобы данные не терялись при парсинге.
+	if out.Summary == "" {
+		out.Summary = strings.TrimSpace(doc.Note)
+	}
 	out.MainScore = doc.Score
 	out.ScoreLabel = "Body Score"
 
@@ -343,6 +368,79 @@ func parseBioscanBlock(jsonStr string, out *ReportBlock) {
 
 	if out.Title == "" {
 		out.Title = "Bioscan PRO"
+	}
+}
+
+func parseHealthAssessmentBlock(jsonStr string, out *ReportBlock) {
+	var doc struct {
+		Title      string `json:"title"`
+		HealthIndex int    `json:"health_index"`
+		Summary    string `json:"summary"`
+		Lifestyle  map[string]struct {
+			Score   int    `json:"score"`
+			Comment string `json:"comment"`
+		} `json:"lifestyle"`
+	}
+	if err := json.Unmarshal([]byte(jsonStr), &doc); err != nil {
+		return
+	}
+
+	out.Title = strings.TrimSpace(doc.Title)
+	if out.Title == "" {
+		out.Title = "Общая оценка здоровья"
+	}
+	out.Summary = strings.TrimSpace(doc.Summary)
+	out.MainScore = doc.HealthIndex
+	out.ScoreLabel = "Индекс здоровья"
+
+	// Сферы образа жизни - как показатели карточки (выше = лучше).
+	if len(doc.Lifestyle) > 0 && out.Indicators == nil {
+		out.Indicators = []IndicatorView{}
+	}
+	order := []string{"sleep", "nutrition", "movement", "activity", "stress", "energy", "wellbeing"}
+	labels := map[string]string{
+		"sleep":     "Сон",
+		"nutrition": "Питание",
+		"movement":  "Движение",
+		"activity":  "Активность",
+		"stress":    "Стресс",
+		"energy":    "Энергия",
+		"wellbeing": "Самочувствие",
+	}
+	seen := map[string]bool{}
+	addInd := func(key string, dim struct {
+		Score   int    `json:"score"`
+		Comment string `json:"comment"`
+	}) {
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		label := labels[key]
+		if label == "" {
+			label = key
+		}
+		status := "normal"
+		if dim.Score >= 80 {
+			status = "good"
+		} else if dim.Score < 60 {
+			status = "warning"
+		}
+		out.Indicators = append(out.Indicators, IndicatorView{
+			Name:   label,
+			Value:  strconv.Itoa(dim.Score),
+			Status: status,
+			Num:    float64(dim.Score),
+		})
+		out.Scores[label] = dim.Score
+	}
+	for _, k := range order {
+		if dim, ok := doc.Lifestyle[k]; ok {
+			addInd(k, dim)
+		}
+	}
+	for k, dim := range doc.Lifestyle {
+		addInd(k, dim)
 	}
 }
 

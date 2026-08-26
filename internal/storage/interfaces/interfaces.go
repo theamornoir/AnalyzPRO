@@ -17,6 +17,13 @@ type UserRepository interface {
 	// подписки и ID активного тарифа. userID здесь - внутренний id
 	// пользователя (uint), как в таблице users.
 	UpdateUserPremiumStatus(ctx context.Context, userID uint, isPremium bool, expiresAt time.Time, tariffID string) error
+
+	// UpdateUserPremiumStatusByTelegramID - то же, что UpdateUserPremiumStatus,
+	// но по Telegram chat ID (int64), а не по внутреннему id. Позволяет
+	// активировать Premium из вебхука YooKassa напрямую, без предварительного
+	// поиска пользователя по внутреннему id (устойчиво к его временной
+	// недоступности). userID здесь - Telegram chat ID (int64).
+	UpdateUserPremiumStatusByTelegramID(ctx context.Context, telegramID int64, isPremium bool, expiresAt time.Time, tariffID string) error
 	UpdateUserOnboardingStatus(ctx context.Context, userID uint, completed bool) error
 	// UpdateUserLastActivity - обновляет дату последнего взаимодействия
 	// пользователя с ботом (нужно системе напоминаний об неактивности).
@@ -27,6 +34,11 @@ type UserRepository interface {
 	// MarkPromoCodeUsed - помечает промокод использованным пользователем
 	// (идемпотентно: повторный вызов для того же userID+code не дублирует запись).
 	MarkPromoCodeUsed(ctx context.Context, userID int64, code string) error
+	// DeleteAccount - полностью удаляет пользователя и все связанные данные
+	// (профиль, анализы, курсы, предпочтения) по Telegram ID. Используется
+	// функцией «Удалить аккаунт» - необратимо. userID здесь - Telegram
+	// chat ID (int64), как во всём боте.
+	DeleteAccount(ctx context.Context, telegramID int64) error
 }
 
 // DiagnosisRepository - репозиторий диагнозов.

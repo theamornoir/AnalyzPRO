@@ -26,7 +26,7 @@ func HandleBioscanName(ctx context.Context, b *tgbot.Bot, sm states.StateManager
 		ChatID:      chatID,
 		Text:        fmt.Sprintf(locales.MsgBioscanWelcomeName, text),
 		ParseMode:   "Markdown",
-		ReplyMarkup: keyboards.BackMenu(),
+		ReplyMarkup: keyboards.BackQuestionInline(),
 	})
 }
 
@@ -42,7 +42,7 @@ func HandleBioscanAge(ctx context.Context, b *tgbot.Bot, sm states.StateManager,
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanAgeInvalid,
-			ReplyMarkup: keyboards.BackMenu(),
+			ReplyMarkup: keyboards.BackQuestionInline(),
 		})
 		return
 	}
@@ -54,7 +54,7 @@ func HandleBioscanAge(ctx context.Context, b *tgbot.Bot, sm states.StateManager,
 		ChatID:      chatID,
 		Text:        locales.MsgBioscanStepAge,
 		ParseMode:   "Markdown",
-		ReplyMarkup: keyboards.BackMenu(),
+		ReplyMarkup: keyboards.BackQuestionInline(),
 	})
 }
 
@@ -70,7 +70,7 @@ func HandleBioscanHeight(ctx context.Context, b *tgbot.Bot, sm states.StateManag
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanHeightInvalid,
-			ReplyMarkup: keyboards.BackMenu(),
+			ReplyMarkup: keyboards.BackQuestionInline(),
 		})
 		return
 	}
@@ -82,7 +82,7 @@ func HandleBioscanHeight(ctx context.Context, b *tgbot.Bot, sm states.StateManag
 		ChatID:      chatID,
 		Text:        locales.MsgBioscanStepHeight,
 		ParseMode:   "Markdown",
-		ReplyMarkup: keyboards.BackMenu(),
+		ReplyMarkup: keyboards.BackQuestionInline(),
 	})
 }
 
@@ -98,7 +98,7 @@ func HandleBioscanWeight(ctx context.Context, b *tgbot.Bot, sm states.StateManag
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanWeightInvalid,
-			ReplyMarkup: keyboards.BackMenu(),
+			ReplyMarkup: keyboards.BackQuestionInline(),
 		})
 		return
 	}
@@ -110,7 +110,7 @@ func HandleBioscanWeight(ctx context.Context, b *tgbot.Bot, sm states.StateManag
 		ChatID:      chatID,
 		Text:        locales.MsgBioscanStepWeight,
 		ParseMode:   "Markdown",
-		ReplyMarkup: keyboards.BackMenu(),
+		ReplyMarkup: keyboards.BackQuestionInline(),
 	})
 }
 
@@ -136,6 +136,6 @@ func HandleBioscanGoal(ctx context.Context, b *tgbot.Bot, sm states.StateManager
 		ChatID:      chatID,
 		Text:        locales.MsgBioscanStepGoal,
 		ParseMode:   "Markdown",
-		ReplyMarkup: keyboards.BackMenu(),
+		ReplyMarkup: keyboards.BackQuestionInline(),
 	})
 }

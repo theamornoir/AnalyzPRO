@@ -221,19 +221,6 @@ function reloadMonitoringFrame() {
     if (activeTab === "monitoring") loadMonitoringFrame();
 }
 
-// Счётчик скрытых записей (Free) над списком истории.
-function renderFreeHistoryNote(kind, group, premiumRequired) {
-    const el = document.getElementById(kind + "HistoryNote");
-    if (!el) return;
-    if (premiumRequired && group && group.hiddenCount > 0) {
-        el.textContent = TEXTS.historyNote(group.totalCount);
-        el.style.display = "block";
-        el.onclick = function () { openPremiumModal("history"); };
-    } else {
-        el.style.display = "none";
-        el.onclick = null;
-    }
-}
 
 // Тренд-бейджи (направление по полной истории) - показываем один раз
 // (в разделе «Анализы»), чтобы не дублировать между вкладками.
@@ -302,6 +289,7 @@ function render(data) {
     hideMessage();
     hideRegisterCard();
     hidePremiumStubs();
+    renderProfileCard(data);
 
     document.getElementById('userName').textContent = data.userName ? data.userName : "Мой профиль";
     document.getElementById('analysisDate').textContent = data.analysisDate
@@ -338,6 +326,10 @@ function render(data) {
         // Показываем заглушки-тизеры: пользователь видит, какие карточки
         // с анализами и прогрессом появятся после оформления Premium.
         showPremiumStubs();
+        // Форма заполнения профиля (имя/возраст/пол/рост/вес) показывается
+        // и Premium-пользователю, если он ещё не заполнил анкету. Она
+        // живёт отдельной карточкой поверх заглушек - не конфликтует.
+        if (data.profileMissing) showRegisterCard();
         return;
     }
 
@@ -367,7 +359,56 @@ function render(data) {
     // Free-ветки выше.
     renderTrendCard(data.trend);
 
+    // Форма заполнения профиля показывается, если пользователь ещё не
+    // заполнил анкету - поверх уже заполненного профиля/данных, чтобы
+    // форма и существующие показатели сосуществовали (не прячем данные).
+    if (data.profileMissing) showRegisterCard();
+
     document.getElementById('lastUpdate').textContent = "Обновлено: " + new Date().toLocaleString('ru-RU');
+}
+
+// renderProfileCard - показывает блок «Профиль» (возраст/пол/рост/вес)
+// в верхней части вкладки «Обзор», сразу под заголовком «Мой профиль»,
+// ПЕРЕД блоком «Индекс здоровья». Виден только когда заполнена анкета
+// (data.profileMissing == false и есть хотя бы имя) - иначе скрыт, вместо
+// него показывается форма заполнения профиля (registerCard). Поля приходят
+// с бэкенда в userGender/userHeight/userWeight (см. buildMetrics в
+// dashboard.go). Имя НЕ дублируем: оно уже выведено в шапке Web App
+// (#userName), поэтому в блоке только Возраст/Пол/Рост/Вес.
+// Формат - «подпись + значение»: каждый параметр = отдельная карточка-чип
+// (.profile-chip) с единым маркером-иконкой ✦ сверху, подписью и значением
+// ниже. Карточки идут горизонтальным рядом (flex, gap:10px); при нехватке
+// ширины экрана ряд прокручивается (overflow-x:auto, см. .profile-line).
+function renderProfileCard(data) {
+    const card = document.getElementById('profileCard');
+    if (!card) return;
+    if (!data || data.profileMissing || !data.userName) {
+        card.style.display = 'none';
+        return;
+    }
+    // Параметры профиля (без имени): подпись + значение. Единый маркер ✦
+    // на каждой карточке - профессиональный, однотипный, без перегруза.
+    const items = [];
+    if (data.userAge) items.push({ label: 'Возраст', value: data.userAge + ' лет' });
+    if (data.userGender) items.push({ label: 'Пол', value: data.userGender });
+    if (data.userHeight) items.push({ label: 'Рост', value: data.userHeight + ' см' });
+    if (data.userWeight) items.push({ label: 'Вес', value: data.userWeight + ' кг' });
+
+    // Горизонтальный ряд карточек-чипов. Каждая карточка - .profile-chip
+    // (column, центрирована): маркер ✦ + подпись (.pc-label) + значение
+    // (.pc-value). Ряд прокручивается влево/вправо, карточки не занимают
+    // весь экран. Отступы слева/справа задаются в .profile-line (CSS).
+    let html = '<div class="profile-line">';
+    items.forEach(function (it) {
+        html += '<div class="profile-chip">' +
+            '<span class="pc-mark">✦</span>' +
+            '<span class="pc-label">' + escapeHtml(it.label) + '</span>' +
+            '<span class="pc-value">' + escapeHtml(it.value) + '</span>' +
+            '</div>';
+    });
+    html += '</div>';
+    card.innerHTML = html;
+    card.style.display = 'block';
 }
 
 // renderMetricGroups - заполняет контейнер #metricGroups адаптивными
@@ -641,6 +682,8 @@ function showTab(tab) {
         renderReportGroup("analysis", window.__reportsData.analysis, window.__reportsData.premiumRequired);
     } else if (tab === "bioscan" && window.__reportsData) {
         renderReportGroup("bioscan", window.__reportsData.bioscan, window.__reportsData.premiumRequired);
+    } else if (tab === "health" && window.__reportsData) {
+        renderReportGroup("health", window.__reportsData.health, window.__reportsData.premiumRequired);
     } else if (tab === "monitoring") {
         // Мониторинг теперь встроен в «Мой профиль» как отдельная вкладка
         // (iframe). Грузим лениво при первом открытии вкладки.
@@ -901,6 +944,8 @@ async function loadReports(initData, demo) {
             renderReportGroup("analysis", data.analysis, data.premiumRequired);
         } else if (activeTab === "bioscan") {
             renderReportGroup("bioscan", data.bioscan, data.premiumRequired);
+        } else if (activeTab === "health") {
+            renderReportGroup("health", data.health, data.premiumRequired);
         }
     } catch (e) { /* отдельный запрос - не ломаем сводку при ошибке */ }
 }
@@ -909,6 +954,7 @@ function renderReports(data) {
     if (!data) return;
     renderReportGroup("analysis", data.analysis, data.premiumRequired);
     renderReportGroup("bioscan", data.bioscan, data.premiumRequired);
+    renderReportGroup("health", data.health, data.premiumRequired);
 }
 
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -1018,7 +1064,7 @@ function renderReportGroup(kind, group, premiumRequired) {
     });
 
     document.getElementById(kind + "ReportTitle").textContent =
-        latest.title || (kind === "bioscan" ? "Bioscan PRO" : "Расширенный анализ");
+        latest.title || (kind === "bioscan" ? "Bioscan PRO" : (kind === "health" ? "Общая оценка здоровья" : "Расширенный анализ"));
     document.getElementById(kind + "ReportDate").textContent = "от " + (latest.date || "-");
 
     // Заголовок раздела отражает РЕАЛЬНЫЙ тип отчёта: расширенный
@@ -1029,6 +1075,8 @@ function renderReportGroup(kind, group, premiumRequired) {
     if (headerEl) {
         if (kind === "bioscan") {
             headerEl.textContent = latest.rich ? "✨ Bioscan PRO" : "✨ Базовый Bioscan";
+        } else if (kind === "health") {
+            headerEl.textContent = latest.rich ? "💺 Общая оценка здоровья" : "💺 Оценка здоровья";
         } else {
             headerEl.textContent = latest.rich ? "📊 Расширенный анализ" : "📊 Анализ";
         }
@@ -1116,7 +1164,6 @@ function renderReportGroup(kind, group, premiumRequired) {
     // Визуальный архив ВСЕХ сохранённых отчётов. Без Premium прячем
     // премиум-отчёты (rich), оставляем бесплатные.
     renderArchive(kind, group.reports, group.latest.date, premiumRequired);
-    renderFreeHistoryNote(kind, group, premiumRequired);
     renderTrendBadges(kind, premiumRequired);
 
     // Подсказка: для не-Premium - апселл, иначе - guidance при малом
@@ -1232,7 +1279,7 @@ function renderArchive(kind, reports, latestDate, premiumRequired) {
         div.innerHTML =
             donut +
             '<div class="archive-info">' +
-                '<div class="archive-name">' + escapeHtml(r.title || (kind === "bioscan" ? "Bioscan PRO" : "Расширенный анализ")) +
+                '<div class="archive-name">' + escapeHtml(r.title || (kind === "bioscan" ? "Bioscan PRO" : (kind === "health" ? "Общая оценка здоровья" : "Расширенный анализ"))) +
                 (isLatest ? ' <span class="archive-badge">текущий</span>' : '') + '</div>' +
                 '<div class="archive-date">' + escapeHtml(r.date || "") + '</div>' +
             '</div>' +

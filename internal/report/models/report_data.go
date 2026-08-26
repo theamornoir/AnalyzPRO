@@ -1,5 +1,7 @@
 package models
 
+import coremodels "github.com/theamornoir/analyzpro/internal/models"
+
 // AdaptiveReportData - данные для адаптивного HTML-отчёта.
 // Генерируется AI и содержит только те секции, по которым есть данные.
 type AdaptiveReportData struct {
@@ -18,7 +20,7 @@ type Section struct {
 	Indicators []Indicator `json:"indicators,omitempty"`
 	Summary    string      `json:"summary,omitempty"`
 	List       []string    `json:"list,omitempty"`
-	Score      int         `json:"score,omitempty"` // для круговых диаграмм (0-100)
+	Score      coremodels.FlexInt `json:"score,omitempty"` // для круговых диаграмм (0-100)
 }
 
 // Indicator - один показатель внутри секции.
@@ -28,6 +30,6 @@ type Indicator struct {
 	Unit        string `json:"unit,omitempty"`
 	Normal      string `json:"normal,omitempty"`
 	Status      string `json:"status"` // normal, warning, critical
-	Score       int    `json:"score,omitempty"`
+	Score       coremodels.FlexInt `json:"score,omitempty"`
 	Description string `json:"description,omitempty"` // 1-2 предложения: что показывает и что значит отклонение
 }

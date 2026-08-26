@@ -2,6 +2,8 @@ package menu
 
 import (
 	"context"
+	"strconv"
+	"strings"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -14,6 +16,36 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/storage"
 )
+
+// consultFinishKey / consultResultKey - ключи трекинга сообщений флоу
+// консультации. Должны СОВПАДАТЬ с router.consultFinishMsgKey и
+// router.consultResultMsgKey (дублируем намеренно: StartHandler живёт в
+// пакете menu и не имеет доступа к приватным константам роутера). Если
+// меняете имена ключей в роутере - синхронизируйте и здесь.
+const (
+	consultFinishKey = "consult_finish_msg_id"
+	consultResultKey = "consult_result_msg_ids"
+)
+
+// clearConsultationMessages - удаляет «висящие» сообщения флоу консультации
+// (reply-клавиатуру «Закончить консультацию» и сообщение(я)-ответ ИИ), если
+// пользователь нажал /start прямо во время финиша консультации. Вызывать ДО
+// stateManager.Reset (Reset сбросит user-data, и id сообщений потеряются, а
+// сами сообщения останутся висеть в чате с нижней клавиатурой). Безопасно
+// при отсутствии сохранённых id (просто ничего не делает).
+func clearConsultationMessages(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64) {
+	ids := []string{stateManager.GetUserData(chatID, consultFinishKey)}
+	if raw := stateManager.GetUserData(chatID, consultResultKey); raw != "" {
+		for _, p := range strings.Split(raw, ",") {
+			ids = append(ids, strings.TrimSpace(p))
+		}
+	}
+	for _, idStr := range ids {
+		if id, err := strconv.Atoi(idStr); err == nil && id > 0 {
+			helpers.DeleteMessage(ctx, b, chatID, id)
+		}
+	}
+}
 
 func StartHandler(
 	stateManager states.StateManager,
@@ -73,6 +105,15 @@ func StartHandler(
 		// /start»). Безопасно при отсутствии экрана.
 		clearPremiumScreen(ctx, b, stateManager, chatID)
 
+		// Подчищаем «висящий» флоу консультации (reply-клавиатуру
+		// «Закончить консультацию» и сообщение-ответ ИИ), если пользователь
+		// нажал /start прямо во время финиша консультации. Читаем id ДО
+		// Reset (ниже), иначе ключи исчезнут из user-data, а сами сообщения
+		// останутся висеть в чате с нижней клавиатурой (баг «клавиатура
+		// консультации остаётся после /start»). Ключи совпадают с
+		// router.consultFinishMsgKey / router.consultResultMsgKey.
+		clearConsultationMessages(ctx, b, stateManager, chatID)
+
 		// /start всегда освобождает «зависшее» состояние от прошлых сессий
 		// (оно персистится в states.json между перезапусками бота), чтобы
 		// пользователь начинал с чистого главного меню, а не из середины
@@ -116,13 +157,14 @@ func StartHandler(
 			helpers.ShowPersistentMessage(ctx, b, stateManager, chatID, helpers.MainMenuMsgKey, tgbot.SendMessageParams{
 				ChatID:      chatID,
 				Text:        locales.MsgStartWelcomeBack,
-				ReplyMarkup: keyboards.MainMenu(),
+				ReplyMarkup: keyboards.MainMenuInline(),
 				ParseMode:   "Markdown",
 			})
 			return
 		}
 
-		// Новый пользователь - запускаем онбординг с первого шага.
-		onboarding.SendStep(ctx, b, chatID, 1)
+		// Новый пользователь - запускаем короткий онбординг (1 сообщение
+		// с описанием функционала → согласие).
+		onboarding.SendIntro(ctx, b, chatID)
 	}
 }

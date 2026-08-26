@@ -6,7 +6,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -199,15 +198,15 @@ type ykConfirmation struct {
 	ReturnURL string `json:"return_url"`
 }
 type ykCreateRequest struct {
-	Amount      ykAmount           `json:"amount"`
+	Amount       ykAmount          `json:"amount"`
 	Confirmation ykConfirmation    `json:"confirmation"`
 	Capture      bool              `json:"capture"`
 	Description  string            `json:"description"`
 	Metadata     map[string]string `json:"metadata"`
 }
 type ykCreateResponse struct {
-	ID         string `json:"id"`
-	Status     string `json:"status"`
+	ID           string `json:"id"`
+	Status       string `json:"status"`
 	Confirmation struct {
 		Type            string `json:"type"`
 		ConfirmationURL string `json:"confirmation_url"`
@@ -346,6 +345,12 @@ func (s *PaymentService) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.processed[wh.Object.ID] = true
+	// Ограничиваем рост карты дедупа (иначе она растёт безгранично за
+	// время работы процесса). Сброс после 10000 уникальных ID безопасен:
+	// YooKassa не повторяет доставку платежа спустя столь долгое время.
+	if len(s.processed) > 10000 {
+		s.processed = make(map[string]bool)
+	}
 	s.processedMu.Unlock()
 
 	userID, perr := strconv.ParseInt(wh.Object.Metadata["user_id"], 10, 64)
@@ -382,7 +387,7 @@ func (s *PaymentService) verifySignature(body []byte, sig string) bool {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
 	expected := mac.Sum(nil)
-	got, err := hex.DecodeString(strings.TrimSpace(sig))
+	got, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sig))
 	if err != nil {
 		return false
 	}
@@ -422,12 +427,11 @@ func (s *PaymentService) activatePremium(userID int64, tariffID string) error {
 	log.Printf(locales.LogPaymentPremiumActivated, userID, tariff.Name, now.Add(tariff.Duration).Format("2006-01-02"))
 
 	if s.usersRepo != nil {
-		if u, err := s.usersRepo.GetUserByTelegramID(context.Background(), userID); err == nil {
-			if derr := s.usersRepo.UpdateUserPremiumStatus(context.Background(), u.ID, true, now.Add(tariff.Duration), tariffID); derr != nil {
-				log.Printf("⚠️ Failed to persist premium to DB (user=%d, tariff=%s): %v", userID, tariffID, derr)
-			}
-		} else {
-			log.Printf("⚠️ Cannot sync premium to DB: user %d not found in repository: %v", userID, err)
+		// Первичный путь - напрямую по Telegram ID, без поиска внутреннего id.
+		// Устойчиво к временным сбоям БД и гарантирует, что реальная оплата
+		// переживёт перезапуск бота (источник истины в БД, не только кэш).
+		if derr := s.usersRepo.UpdateUserPremiumStatusByTelegramID(context.Background(), userID, true, now.Add(tariff.Duration), tariffID); derr != nil {
+			log.Printf("⚠️ Failed to persist premium to DB (user=%d, tariff=%s): %v", userID, tariffID, derr)
 		}
 	}
 
@@ -483,19 +487,15 @@ func (s *PaymentService) IsUserPremium(userID int64) bool {
 func (s *PaymentService) ResetPremium(userID int64) {
 	s.mu.Lock()
 	s.users[userID] = &PremiumUser{
-		UserID:   userID,
+		UserID:    userID,
 		IsPremium: false,
-		TariffID: "",
+		TariffID:  "",
 	}
 	s.mu.Unlock()
 
 	if s.usersRepo != nil {
-		if u, err := s.usersRepo.GetUserByTelegramID(context.Background(), userID); err == nil {
-			if derr := s.usersRepo.UpdateUserPremiumStatus(context.Background(), u.ID, false, time.Time{}, ""); derr != nil {
-				log.Printf("⚠️ Failed to reset premium in DB (user=%d): %v", userID, derr)
-			}
-		} else {
-			log.Printf("⚠️ Cannot reset premium in DB: user %d not found in repository: %v", userID, err)
+		if derr := s.usersRepo.UpdateUserPremiumStatusByTelegramID(context.Background(), userID, false, time.Time{}, ""); derr != nil {
+			log.Printf("⚠️ Failed to reset premium in DB (user=%d): %v", userID, derr)
 		}
 	}
 }

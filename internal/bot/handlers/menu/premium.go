@@ -41,6 +41,13 @@ func premiumScreenIDs(stateManager states.StateManager, chatID int64) (anchor, m
 	return
 }
 
+// ClearPremiumScreen - экспортируемая обёртка clearPremiumScreen для вызова
+// из других пакетов (например, роутера при удалении аккаунта). Полностью
+// удаляет экран Premium и очищает трекинг его id.
+func ClearPremiumScreen(ctx context.Context, b *tgbot.Bot, stateManager states.StateManager, chatID int64) {
+	clearPremiumScreen(ctx, b, stateManager, chatID)
+}
+
 // clearPremiumScreen - удаляет ранее показанные сообщения экрана Premium
 // (якорь с [Назад] и список тарифов/экран оплаты/подтверждения), чтобы при
 // повторном входе в раздел (повторное нажатие «💎 Premium» из главного меню,
@@ -91,7 +98,16 @@ func PremiumHandler(
 	paymentService *payment.PaymentService,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
 	return func(ctx context.Context, b *tgbot.Bot, update *models.Update) {
-		chatID := update.Message.Chat.ID
+		// update.Message у callback-запросов (например, premium_open из
+		// inline-главного меню) равен nil - берём chatID из отправителя.
+		var chatID int64
+		if update.Message != nil {
+			chatID = update.Message.Chat.ID
+		} else if update.CallbackQuery != nil {
+			chatID = update.CallbackQuery.From.ID
+		} else {
+			return
+		}
 
 		// PostHog: открытие раздела Premium.
 		analytics.Track(chatID, "premium_view", nil)

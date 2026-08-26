@@ -36,13 +36,68 @@ body {
 h1 { font-size: 22px; margin: 12px 0 2px; }
 .header-subtitle { color: var(--muted); margin: 0; font-size: 13px; }
 
-.main { padding: 14px; display: flex; flex-direction: column; gap: 20px; }
+/* Отступы между крупными блоками/карточками задаём через margin-bottom
+   (а НЕ через gap у flex-контейнера): flex `gap` НЕ поддерживается в
+   старых WebView Telegram (Android) - отсюда «слипание» блоков на части
+   устройств. margin-bottom работает везде, поэтому им и разносим карточки
+   единообразно на всех вкладках. */
+.card,
+.block,
+.section,
+.dashboard-card,
+.metric-card,
+.content-block {
+    margin-bottom: 20px;
+}
+
+.main { padding: 14px 14px 24px; display: flex; flex-direction: column; gap: 0; }
 
 .card {
     background: var(--card); border-radius: 16px; padding: 16px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+    margin-bottom: 20px;
 }
 .card h2 { font-size: 15px; margin: 0 0 12px; color: var(--text); }
+
+/* Карточка «Профиль» (вкладка «Обзор»): компактный блок сразу под
+   заголовком «Мой профиль», ПЕРЕД блоком «Индекс здоровья». Формат
+   «подпись + значение»: каждый параметр (Возраст / Пол / Рост / Вес) -
+   отдельная карточка-чип с единым маркером ✦ сверху, подписью и
+   значением ниже. Имя намеренно НЕ дублируется (оно уже в шапке).
+   Карточки идут горизонтальным рядом (flex, gap:10px); при нехватке
+   ширины экрана ряд прокручивается (overflow-x:auto). Отступы: слева
+   6px (первая карточка «дышит» от края), справа 20px (последняя при
+   прокрутке влево не обрезается). */
+.profile-card { padding: 12px 14px; }
+.profile-line {
+    display: flex; flex-wrap: nowrap; align-items: stretch;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; gap: 10px;
+    padding-left: 6px; padding-right: 20px;
+}
+.profile-line::-webkit-scrollbar { display: none; }
+/* Карточка-чип: вертикальный столбец (маркер / подпись / значение),
+   выровненный по центру. Одинаковая высота, не занимает весь экран.
+   white-space:nowrap - значение не переносится внутри карточки. */
+.profile-chip {
+    flex: 0 0 auto;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-width: 84px; padding: 10px 14px;
+    background: var(--card2); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; text-align: center;
+}
+.profile-chip .pc-mark {
+    font-size: 12px; line-height: 1; color: var(--accent);
+    margin-bottom: 4px; flex: 0 0 auto;
+}
+.profile-chip .pc-label {
+    font-size: 11px; line-height: 1.2; color: var(--muted);
+    margin-bottom: 2px; flex: 0 0 auto;
+}
+.profile-chip .pc-value {
+    font-size: 14px; line-height: 1.2; font-weight: 600; color: var(--text);
+    white-space: nowrap; flex: 0 0 auto;
+}
 
 .indices-grid { display: flex; gap: 12px; }
 .index-card {
@@ -93,17 +148,20 @@ h1 { font-size: 22px; margin: 12px 0 2px; }
 
 /* Адаптивные блоки показателей («Мой профиль»): результаты анализов
    и биосканов, собранные по категориям из реальных отчётов пользователя
-   (кровь/биохимия/гормоны/... + блок тела Bioscan PRO). */
-.metric-groups { display: flex; flex-direction: column; gap: 20px; }
+   (кровь/биохимия/гормоны/... + блок тела Bioscan PRO).
+   gap:0 - отступы между блоками (кровь / иммуноглобулины / «Тело
+   (Bioscan PRO)» и т.п.) задаются margin-bottom у .card.metric-group,
+   чтобы корректно отображаться в старых WebView без поддержки flex-gap. */
+.metric-groups { display: flex; flex-direction: column; gap: 0; }
 .metric-group { /* наследует .card */ }
 .mg-head { display: flex; align-items: center; gap: 6px; font-size: 15px; margin: 0 0 12px; color: var(--text); }
-.mg-grid { display: flex; flex-direction: column; gap: 6px; }
+.mg-grid { display: flex; flex-direction: column; gap: 10px; }
 .mg-item {
     display: flex; justify-content: space-between; align-items: center; gap: 10px;
     background: var(--card2); border-radius: 8px; padding: 8px 12px; font-size: 13px;
 }
-.mg-name { color: var(--muted); }
-.mg-value { color: var(--text); font-weight: 600; }
+.mg-name { color: var(--muted); overflow-wrap: anywhere; }
+.mg-value { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
 
 .rec-list { margin: 0; padding-left: 18px; }
 .rec-list li { margin-bottom: 8px; line-height: 1.4; }
@@ -174,7 +232,7 @@ h1 { font-size: 22px; margin: 12px 0 2px; }
 }
 
 /* Карточки сохранённых отчётов (Расширенные анализы / Bioscan PRO) */
-.report-card h2 { margin: 0 0 10px; }
+.report-card h2 { margin: 0 0 12px; }
 /* Кликабельная шапка отчёта (заголовок + дата + счёт) открывает сам
    отчёт. Курсор задаётся в app.js; здесь - лёгкое расширение области
    клика (отрицательные отступы) и подсветка при нажатии. */
@@ -188,11 +246,11 @@ h1 { font-size: 22px; margin: 12px 0 2px; }
 .report-score { font-size: 24px; font-weight: 700; color: var(--accent); text-align: right; min-width: 64px; line-height: 1.1; }
 .report-score small { display: block; font-size: 10px; color: var(--muted); font-weight: 400; }
 .chart-container.reports { height: 220px; }
-.ind-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.ind-list { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
 /* Строка показателя: вертикальный индикатор (колонка) с зонами + текст. */
 .ind-row {
     display: flex; align-items: center; gap: 12px;
-    padding: 10px; background: var(--card2); border-radius: 10px;
+    padding: 12px; background: var(--card2); border-radius: 12px;
 }
 /* Вертикальный индикатор с тремя зонами: зелёная (низ) = норма,
    жёлтая (середина) = внимание, красная (верх) = критично. Маркер
@@ -217,9 +275,9 @@ h1 { font-size: 22px; margin: 12px 0 2px; }
     box-shadow: 0 0 8px rgba(0,0,0,0.45);
 }
 .ind-body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
-.ind-num { font-size: 18px; font-weight: 700; line-height: 1.1; }
-.ind-name { font-size: 13px; color: #c7d2da; margin-top: 2px; }
-.ind-status { font-size: 11px; margin-top: 3px; color: var(--muted); }
+.ind-num { font-size: 18px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.ind-name { font-size: 13px; color: #c7d2da; margin-top: 2px; overflow-wrap: anywhere; }
+.ind-status { font-size: 11px; margin-top: 3px; color: var(--muted); overflow-wrap: anywhere; }
 .ind-status-normal, .ind-status-good { color: var(--ok); }
 .ind-status-warning { color: var(--warn); }
 .ind-status-critical { color: #E5484D; }
@@ -228,7 +286,7 @@ h1 { font-size: 22px; margin: 12px 0 2px; }
 .cmp .up { color: var(--ok); font-weight: 600; }
 .cmp .down { color: #E5484D; font-weight: 600; }
 .cmp ul { margin: 4px 0 0; padding-left: 18px; }
-.zone-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px; }
+.zone-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 12px; }
 .zdonut-cell { display: flex; flex-direction: column; align-items: center; background: var(--card2); border-radius: 10px; padding: 10px 6px; }
 .zdonut { width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--text); }
 .zname { font-size: 11px; color: var(--muted); margin-top: 6px; text-align: center; }
@@ -237,7 +295,7 @@ h1 { font-size: 22px; margin: 12px 0 2px; }
 .zdonut.critical { background: conic-gradient(#E5484D calc(var(--p)*1%), rgba(255,255,255,0.06) 0); }
 
 /* Архив отчётов (история прогресса) в «Мой профиль» */
-.archive { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06); }
+.archive { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); }
 .archive-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
 .archive-list { display: flex; flex-direction: column; gap: 8px; }
 .archive-item {
@@ -295,19 +353,68 @@ h1 { font-size: 22px; margin: 12px 0 2px; }
 .cmp-metrics .cmp-trend.down { color: #E5484D; }
 .cmp-metrics .cmp-trend.same { color: var(--muted); }
 
-/* Вкладки «Мой профиль» (Обзор / Анализы / Bioscan PRO) */
-.tabs {
-    display: flex; gap: 8px; position: sticky; top: 0; z-index: 5;
-    background: var(--bg); padding: 4px 0 2px; margin: -2px 0 0;
+/* Обёртка вкладок: держит мягкие градиенты-индикаторы по краям экрана,
+   сигнализирующие, что ленту вкладок можно прокручивать влево/вправо.
+   Сами градиенты прижаты к краям wrapper-а и НЕ прокручиваются вместе с
+   контентом (pointer-events:none - клики проходят сквозь к кнопкам). */
+.tabs-wrap { position: relative; }
+/* Краевые градиенты-индикаторы: сигнал, что ленту вкладок можно
+   прокручивать влево/вправо. Градиент УЗКИЙ (8px) и полностью прозрачен
+   к внутреннему краю, поэтому НЕ перекрывает первую вкладку «Обзор»:
+   кнопки начинаются с padding-left:8px контейнера .tabs, а градиент
+   заканчивается ровно там, где начинается первая кнопка. При прокрутке
+   вправо первая вкладка уезжает под левый градиент (ожидаемо), а на
+   старте (scrollLeft=0) она видна целиком, не обрезана экраном и не
+   «прилипает» к краю (отступ 8px задан scroll-padding-left). */
+.tabs-wrap::before,
+.tabs-wrap::after {
+    content: ""; position: absolute; top: 0; bottom: 0; width: 8px;
+    pointer-events: none; z-index: 6;
 }
+.tabs-wrap::before {
+    left: 0;
+    background: linear-gradient(to right, var(--bg) 0%, rgba(15,20,25,0) 100%);
+}
+.tabs-wrap::after {
+    right: 0;
+    background: linear-gradient(to left, var(--bg) 0%, rgba(15,20,25,0) 100%);
+}
+
+/* Вкладки «Мой профиль» (Обзор / Анализы / Bioscan / Оценка здоровья /
+   Мониторинг): на узких экранах телефона лента скроллится горизонтально,
+   чтобы все 5 кнопок были доступны без обрезки. flex-wrap:nowrap + кнопки
+   натуральной ширины (flex:0 0 auto; white-space:nowrap), а контейнер
+   прокручивается (overflow-x:auto). scroll-snap делает прокрутку плавной.
+   gap:8px между вкладками - они не «слипаются». padding-left/right:8px -
+   небольшой, но приятный отступ от края экрана, чтобы первая и последняя
+   вкладки не «прилипали» к краю и не резались градиентом/экраном. */
+.tabs {
+    display: flex; flex-wrap: nowrap; gap: 8px; position: sticky; top: 0; z-index: 5;
+    background: var(--bg); padding: 6px 8px 8px; margin: 0 0 20px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity; scrollbar-width: none;
+    /* scroll-padding-left синхронизирован с padding-left контейнера: при
+       прокрутке влево первая вкладка «Обзор» останавливается ровно на
+       отступе 8px от края, а НЕ «прилипает» к нулевой координате. */
+    scroll-padding-left: 8px;
+}
+.tabs::-webkit-scrollbar { display: none; }
+/* Гарантируем, что у первой вкладки нет левого отступа/маржина (любые
+   простаивающие сдвиги влево, например margin-left:-10px, удалены) - она
+   начинается ровно от padding-left контейнера (20px от края экрана). */
+.tab-btn:first-child { margin-left: 0; }
 .tab-btn {
-    flex: 1; padding: 10px 6px; border: 1px solid rgba(255,255,255,0.08);
+    flex: 0 0 auto; white-space: nowrap; padding: 10px 12px;
+    border: 1px solid rgba(255,255,255,0.08);
     background: var(--card); color: var(--muted); border-radius: 12px;
     font-size: 13px; font-weight: 600; cursor: pointer;
+    scroll-snap-align: start;
 }
 .tab-btn.active { background: var(--accent); color: #04181a; border-color: var(--accent); }
 .tab-panel { display: none; }
-.tab-panel.active { display: flex; flex-direction: column; gap: 20px; }
+/* gap:0 - карточки внутри вкладки разносятся margin-bottom (см. .card),
+   чтобы отступы работали в старых WebView без поддержки flex-gap. */
+.tab-panel.active { display: flex; flex-direction: column; gap: 0; }
 
 /* Вкладка «Мониторинг»: встроенный фрейм с приложением мониторинга
    (переехало сюда из отдельного Mini App). Фрейм заполняет вкладку. */
@@ -347,22 +454,9 @@ h1 { font-size: 22px; margin: 12px 0 2px; }
 }
 .report-viewer-close:active { transform: scale(0.97); }
 .report-viewer-frame {
-    flex: 1; width: 100%; border: 0; background: #fff;
+    flex: 1; width: 100%; border: 0; background: #0f1419;
 }
 
-
-/* === Free/Premium: счётчик скрытых записей === */
-.free-history-note {
-    margin: 8px 0 4px;
-    padding: 10px 12px;
-    border-radius: 12px;
-    background: rgba(31, 166, 168, 0.10);
-    color: #1FA6A8;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-}
-.free-history-note:active { opacity: 0.7; }
 
 /* === Тренд-бейджи === */
 .trend-badges { margin: 8px 0 2px; display: flex; flex-direction: column; gap: 6px; }

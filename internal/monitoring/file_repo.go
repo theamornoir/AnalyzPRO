@@ -334,5 +334,25 @@ func (r *FileRepository) DeleteHistoryEntry(ctx context.Context, id int64) error
 	return nil
 }
 
+// DeleteByUser полностью удаляет проекты мониторинга и историю
+// пользователя по Telegram ID (вместе с привязками записей в проектах).
+func (r *FileRepository) DeleteByUser(ctx context.Context, telegramID int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for id, p := range r.data.Projects {
+		if p.TelegramID == telegramID {
+			delete(r.data.Projects, id)
+		}
+	}
+	for id, h := range r.data.Histories {
+		if h.TelegramID == telegramID {
+			delete(r.data.Histories, id)
+		}
+	}
+	r.save()
+	return nil
+}
+
 // compile-time проверка, что FileRepository реализует Repository.
 var _ Repository = (*FileRepository)(nil)

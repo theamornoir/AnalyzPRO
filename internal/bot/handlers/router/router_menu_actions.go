@@ -15,6 +15,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/botutil"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/userdata"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
@@ -22,41 +23,24 @@ import (
 	"github.com/theamornoir/analyzpro/internal/notifications"
 )
 
-// WebAppAssetsVersion и WithWebAppVersion вынесены в пакет keyboards
-// (keyboards.WebAppAssetsVersion / keyboards.WithWebAppVersion), чтобы их
-// могли переиспользовать и другие пакеты (например, кнопка «Открыть Мой
-// профиль» после выдачи отчёта). Здесь оставлен только комментарий-якорь.
-
-// hubMessageKey - ключ в user-data, в котором хранится message_id текущего
-// «блока-хаба» (раздел Анализы/Здоровье/Сервис). Блок редактируется на месте
-// (editMessage) при переключении разделов, чтобы не плодить сообщения: один
-// блок перерисовывается вкладками, а результаты под-действий приходят
-// отдельными сообщениями.
+// hubMessageKey - ключ в user-data для message_id «блока-хаба» (раздел
+// Анализы/Здоровье/Сервис). Блок редактируется на месте (editMessage) при
+// переключении разделов, чтобы не плодить сообщения.
 const hubMessageKey = "hub_message_id"
 
-// hubAnchorKey - ключ в user-data для message_id «якорного» сообщения раздела.
-// Оно несёт внизу единую Reply-клавиатуру [Назад] (висит на всём протяжении
-// раздела). Telegram не позволяет совместить inline-кнопки действий и эту
-// Reply-клавиатуру в одном сообщении, поэтому «якорь» и блок - два сообщения.
-const hubAnchorKey = "hub_anchor_id"
+// navLevelKey - уровень навигации в едином сообщении: "main" (главное меню),
+// "hub" (раздел-хаб), "action" (экран под-действия/инструкция флоу). Нужен
+// обработчику «Назад», чтобы понимать, куда возвращаться (в главное меню
+// или в хаб раздела), не полагаясь на тип сообщения.
+const navLevelKey = "nav_level"
 
-// lastMsgKey - ключ в user-data для message_id последнего «шагового»
-// сообщения раздела/флоу. Используется обработчиком «Назад», чтобы удалить
-// именно текущее сообщение раздела перед возвратом в главное меню.
-const lastMsgKey = "last_msg_id"
+func (r *router) navLevel(chatID int64) string {
+	return r.stateManager.GetUserData(chatID, navLevelKey)
+}
 
-// mainMenuMsgKey - ключ в user-data для message_id «закреплённого» сообщения
-// главного меню. Когда пользователь возвращается в главное меню (кнопка
-// «Назад» / «Отмена» / выход из Premium), бот оставляет ПЕРСИСТЕНТНОЕ
-// сообщение меню, а не самоудаляющееся уведомление. Иначе после удаления
-// кнопок по глобальному правилу «кнопка/выбор удаляется после ответа» внизу
-// чата образуется «пустое дно». Старое закреплённое сообщение удаляется
-// перед показом нового, чтобы не плодить дубли.
-//
-// Ключ вынесен в пакет helpers (helpers.MainMenuMsgKey), чтобы его мог
-// переиспользовать и пакет upload (router импортирует upload, прямой импорт
-// наоборот дал бы цикл).
-const mainMenuMsgKey = helpers.MainMenuMsgKey
+func (r *router) setNavLevel(chatID int64, level string) {
+	r.stateManager.SetUserData(chatID, navLevelKey, level)
+}
 
 // hubSection описывает содержимое одного раздела-хаба.
 type hubSection struct {
@@ -73,17 +57,14 @@ func hubSections() map[string]hubSection {
 	}
 }
 
-// renderHub - показывает/переключает «блок-хаб» раздела ДВУМЯ сообщениями:
-//  1. «якорь» - описание раздела + единая Reply-клавиатура [Назад] внизу;
-//  2. «блок» - инлайн-кнопки под-действий раздела + подсказка
-//     «👇 Выберите действие:». Telegram не позволяет совместить инлайн-кнопки
-//     действий и Reply-клавиатуру [Назад] в одном сообщении, поэтому хаб -
-//     два сообщения.
+// renderHub - показывает/переключает «хаб» раздела ОДНИМ сообщением
+// (main_menu_msg_id). Telegram не позволяет совместить inline-кнопки действий
+// и Reply-клавиатуру [Назад] в одном сообщении, поэтому хаб - это единое
+// сообщение с inline-кнопками под-действий и inline-кнопкой «Назад».
 //
-// Если у пользователя уже открыты оба сообщения хаба (сохранены hub_anchor_id
-// и hub_message_id), раздел перерисовывается прямо в них (editMessage на
-// месте), иначе отправляются новые. Результаты под-действий (анализ,
-// консультация и т.п.) приходят отдельными сообщениями.
+// Если у пользователя уже открыто это сообщение (сохранено main_menu_msg_id),
+// раздел перерисовывается прямо в нём (editMessage на месте), иначе
+// отправляется новое. Результаты под-действий приходят отдельными сообщениями.
 func (r *router) renderHub(ctx context.Context, b *tgbot.Bot, chatID int64, section string) bool {
 	sections := hubSections()
 	sec, ok := sections[section]
@@ -92,151 +73,71 @@ func (r *router) renderHub(ctx context.Context, b *tgbot.Bot, chatID int64, sect
 		sec = sections[section]
 	}
 
-	// Запоминаем текущий раздел для иерархического «Назад» (подшаг -> хаб).
 	r.setCurrentSection(chatID, section)
 
-	// Уходим из главного меню в раздел-хаб - убираем закреплённое
-	// сообщение главного меню (в т.ч. приветствие /start), чтобы оно
-	// не висело над хабом. Безопасно, если такого сообщения нет.
-	r.deleteMainMenuMessage(ctx, b, chatID)
-
-	anchorID := r.hubAnchorID(chatID)
-	msgID := r.hubMessageID(chatID)
-
-	// Оба сообщения на месте - перерисовываем на месте (edit), чтобы не
-	// плодить новые сообщения при переключении разделов.
-	if anchorID > 0 && msgID > 0 && r.editHubPair(ctx, b, chatID, anchorID, msgID, sec) {
+	navID := r.navMsgID(chatID)
+	if navID > 0 && r.editHubPair(ctx, b, chatID, navID, sec) {
+		r.setNavLevel(chatID, "hub")
 		return true
 	}
 
-	// Не удалось отредактировать (сообщения удалены пользователем и т.п.) -
-	// чистим остатки и отправляем хаб заново.
-	r.deleteHubBlock(ctx, b, chatID)
-
-	// 1) Якорь: описание раздела + единая Reply-клавиатура [Назад].
-	newAnchorID, anchorErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
+	newMsgID, err := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
 		ChatID:      chatID,
-		Text:        sec.text,
-		ReplyMarkup: keyboards.BackMenu(),
+		Text:        sec.text + "\n\n👇 Выберите действие:",
+		ReplyMarkup: sec.actions,
 		ParseMode:   "Markdown",
 	})
-	// 2) Блок: под-действия раздела + подсказка «👇 Выберите действие:».
-	newMsgID, blockErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        "Выберите действие:",
-		ReplyMarkup: sec.actions,
-	})
-	if anchorErr == nil && newAnchorID > 0 {
-		r.setHubAnchorID(chatID, newAnchorID)
-	}
-	if blockErr == nil && newMsgID > 0 {
-		r.setHubMessageID(chatID, newMsgID)
-		r.setLastMsg(chatID, newMsgID)
+	if err == nil && newMsgID > 0 {
+		r.setNavMsgID(chatID, newMsgID)
+		r.setNavLevel(chatID, "hub")
 	}
 	return true
 }
 
-// editHubPair пытается перерисовать существующий хаб на месте: якорь
-// (описание раздела) и блок (подсказка + инлайн-кнопки действий). Возвращает
-// true, если редактирование удалось (в т.ч. при «message is not modified»).
-func (r *router) editHubPair(ctx context.Context, b *tgbot.Bot, chatID int64, anchorID, msgID int, sec hubSection) bool {
-	// Якорь: описание раздела.
-	_, aErr := b.EditMessageText(ctx, &tgbot.EditMessageTextParams{
-		ChatID:    chatID,
-		MessageID: anchorID,
-		Text:      sec.text,
-		ParseMode: "Markdown",
-	})
-	if aErr != nil && !strings.Contains(aErr.Error(), "message is not modified") {
-		log.Printf("[HUB] не удалось отредактировать якорь msgID=%d chatID=%d: %v", anchorID, chatID, aErr)
-		return false
-	}
-	// Блок: подсказка + инлайн-кнопки действий.
-	_, bErr := b.EditMessageText(ctx, &tgbot.EditMessageTextParams{
+// editHubPair пытается перерисовать существующий хаб на месте: единое
+// сообщение. Возвращает true, если редактирование удалось.
+func (r *router) editHubPair(ctx context.Context, b *tgbot.Bot, chatID int64, navID int, sec hubSection) bool {
+	_, err := b.EditMessageText(ctx, &tgbot.EditMessageTextParams{
 		ChatID:      chatID,
-		MessageID:   msgID,
-		Text:        "Выберите действие:",
+		MessageID:   navID,
+		Text:        sec.text + "\n\n👇 Выберите действие:",
 		ReplyMarkup: sec.actions,
+		ParseMode:   "Markdown",
 	})
-	if bErr != nil && !strings.Contains(bErr.Error(), "message is not modified") {
-		log.Printf("[HUB] не удалось отредактировать блок msgID=%d chatID=%d: %v", msgID, chatID, bErr)
+	if err != nil && !strings.Contains(err.Error(), "message is not modified") {
+		log.Printf("[HUB] не удалось отредактировать хаб msgID=%d chatID=%d: %v", navID, chatID, err)
 		return false
 	}
-	log.Printf("[HUB] блок переключён на вкладку (anchor=%d block=%d chatID=%d)", anchorID, msgID, chatID)
 	return true
 }
 
-// deleteHubBlock - удаляет текущий «блок-хаб» (раздел Анализы/Здоровье/
-// Сервис) из чата вместе с «якорем» (Reply-клавиатура [Назад]) и сбрасывает
-// сохранённые id. Используется, когда пользователь выбирает под-действие
-// (анализ/консультация и т.п.) или нажимает «Назад» из раздела: в чате не
-// должно висеть устаревшее меню раздела (иначе - «куча непонятно чего»).
-// Безопасно, если блока/якоря нет.
+// deleteHubBlock - удаляет текущее навигационное сообщение (main_menu_msg_id)
+// и сбрасывает сохранённый id. Используется, когда пользователь выбирает
+// под-действие, запускающее отдельный поток (биоскан/опросник), или при
+// удалении аккаунта - в чате не должно висеть устаревшее меню раздела.
 func (r *router) deleteHubBlock(ctx context.Context, b *tgbot.Bot, chatID int64) {
-	msgID := r.hubMessageID(chatID)
-	anchorID := r.hubAnchorID(chatID)
-	if msgID > 0 {
-		helpers.DeleteMessage(ctx, b, chatID, msgID)
+	if id := r.navMsgID(chatID); id > 0 {
+		helpers.DeleteMessage(ctx, b, chatID, id)
+		r.setNavMsgID(chatID, 0)
 	}
-	if anchorID > 0 {
-		helpers.DeleteMessage(ctx, b, chatID, anchorID)
-	}
-	if msgID > 0 || anchorID > 0 {
-		log.Printf("[HUB] блок удалён (msgID=%d anchorID=%d chatID=%d)", msgID, anchorID, chatID)
-	}
-	r.setHubAnchorID(chatID, 0)
-	r.setHubMessageID(chatID, 0)
-	// Также убираем «висячее» закреплённое сообщение главного меню: оно
-	// могло остаться, если пользователь ушёл из главного меню в раздел/флоу
-	// (например, нажал «Анализы»). Безопасно при отсутствии.
-	r.deleteMainMenuMessage(ctx, b, chatID)
 }
 
-// hubMessageID / setHubMessageID - чтение/запись message_id текущего блока-хаба.
-func (r *router) hubMessageID(chatID int64) int {
-	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, hubMessageKey))
-	if err != nil || n <= 0 {
-		return 0
-	}
-	return n
+// navMsgID / setNavMsgID - чтение/запись message_id единственного
+// навигационного сообщения (главное меню / хаб / под-действие / Premium).
+// Совпадает с main_menu_msg_id - это то же сообщение, перерисовываемое
+// «на месте» при переходах.
+func (r *router) navMsgID(chatID int64) int {
+	return r.mainMenuMsgID(chatID)
 }
 
-func (r *router) setHubMessageID(chatID int64, msgID int) {
-	r.stateManager.SetUserData(chatID, hubMessageKey, strconv.Itoa(msgID))
-}
-
-// hubAnchorID / setHubAnchorID - чтение/запись message_id «якоря» раздела
-// (сообщение с Reply-клавиатурой [Назад]).
-func (r *router) hubAnchorID(chatID int64) int {
-	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, hubAnchorKey))
-	if err != nil || n <= 0 {
-		return 0
-	}
-	return n
-}
-
-func (r *router) setHubAnchorID(chatID int64, msgID int) {
-	r.stateManager.SetUserData(chatID, hubAnchorKey, strconv.Itoa(msgID))
-}
-
-// lastMsgID / setLastMsg - чтение/запись message_id последнего «шагового»
-// сообщения раздела/флоу (для удаления при нажатии «Назад»).
-func (r *router) lastMsgID(chatID int64) int {
-	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, lastMsgKey))
-	if err != nil || n <= 0 {
-		return 0
-	}
-	return n
-}
-
-func (r *router) setLastMsg(chatID int64, msgID int) {
-	r.stateManager.SetUserData(chatID, lastMsgKey, strconv.Itoa(msgID))
+func (r *router) setNavMsgID(chatID int64, msgID int) {
+	r.setMainMenuMsgID(chatID, msgID)
 }
 
 // mainMenuMsgID / setMainMenuMsgID - чтение/запись message_id закреплённого
-// сообщения главного меню.
+// сообщения главного меню (оно же navMsgID - единое навигационное сообщение).
 func (r *router) mainMenuMsgID(chatID int64) int {
-	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, mainMenuMsgKey))
+	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, helpers.MainMenuMsgKey))
 	if err != nil || n <= 0 {
 		return 0
 	}
@@ -244,11 +145,11 @@ func (r *router) mainMenuMsgID(chatID int64) int {
 }
 
 func (r *router) setMainMenuMsgID(chatID int64, msgID int) {
-	r.stateManager.SetUserData(chatID, mainMenuMsgKey, strconv.Itoa(msgID))
+	r.stateManager.SetUserData(chatID, helpers.MainMenuMsgKey, strconv.Itoa(msgID))
 }
 
-// deleteMainMenuMessage - удаляет закреплённое сообщение главного меню (если
-// есть) и сбрасывает его id. Безопасно при отсутствии.
+// deleteMainMenuMessage - удаляет закреплённое сообщение главного меню и
+// сбрасывает его id. Безопасно при отсутствии.
 func (r *router) deleteMainMenuMessage(ctx context.Context, b *tgbot.Bot, chatID int64) {
 	if id := r.mainMenuMsgID(chatID); id > 0 {
 		helpers.DeleteMessage(ctx, b, chatID, id)
@@ -256,40 +157,80 @@ func (r *router) deleteMainMenuMessage(ctx context.Context, b *tgbot.Bot, chatID
 	}
 }
 
-// showMainMenuMessage - показывает ПЕРСИСТЕНТНОЕ сообщение главного меню
-// (text + Reply-клавиатура MainMenu) и закрепляет его id в user-data,
-// предварительно удалив предыдущее закреплённое сообщение. Используется
-// вместо helpers.SendAndDelete(MsgBackToMainMenu): по глобальному правилу
-// «кнопка/выбор удаляется после ответа» исходные сообщения с кнопками
-// (включая «Назад») исчезают, поэтому возврат в главное меню должен оставить
-// видимое меню, а не самоудаляющуюся запись - иначе внизу чата образуется
-// «пустое дно».
+// showMainMenuMessage - показывает/перерисовывает ПЕРСИСТЕНТНОЕ сообщение
+// главного меню (inline-кнопки) в едином навигационном сообщении. Если
+// сообщение уже открыто - редактирует его на месте (editMessage), иначе
+// отправляет новое. Переходы главное меню <-> хаб <-> под-действие не плодят
+// новые сообщения в чате.
 func (r *router) showMainMenuMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
-	r.deleteMainMenuMessage(ctx, b, chatID)
+	navID := r.navMsgID(chatID)
+	if navID > 0 {
+		_, err := b.EditMessageText(ctx, &tgbot.EditMessageTextParams{
+			ChatID:      chatID,
+			MessageID:   navID,
+			Text:        text,
+			ReplyMarkup: keyboards.MainMenuInline(),
+			ParseMode:   "Markdown",
+		})
+		if err == nil {
+			r.setNavLevel(chatID, "main")
+			return
+		}
+		// edit не удался (сообщение удалено пользователем) - шлём новое.
+	}
 	msg, err := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        text,
-		ReplyMarkup: keyboards.MainMenu(),
+		ReplyMarkup: keyboards.MainMenuInline(),
+		ParseMode:   "Markdown",
 	})
 	if err == nil && msg != nil {
-		r.setMainMenuMsgID(chatID, msg.ID)
+		r.setNavMsgID(chatID, msg.ID)
+		r.setNavLevel(chatID, "main")
 	}
 }
 
-// handleFeedbackStart - запускает режим ввода отзыва/предложения: описывает
-// раздел и переводит пользователя в StateWaitingFeedback, ожидая следующее
-// сообщение (текст/фото/документ), которое будет переслано разработчику.
+// editNavMessage - перерисовывает единое навигационное сообщение «на месте»:
+// текст + inline-клавиатура. Используется для экранов под-действий, чтобы не
+// плодить сообщения в чате.
+func (r *router) editNavMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string, keyboard models.InlineKeyboardMarkup) {
+	// Экран под-действия (не хаб и не главное меню) - отмечаем уровень
+	// "action", чтобы «Назад» возвращал именно в хаб раздела, а не сразу в
+	// Главное меню (иначе навигация «прыгала» бы через уровень).
+	r.setNavLevel(chatID, "action")
+	navID := r.navMsgID(chatID)
+	if navID > 0 {
+		_, err := b.EditMessageText(ctx, &tgbot.EditMessageTextParams{
+			ChatID:      chatID,
+			MessageID:   navID,
+			Text:        text,
+			ReplyMarkup: keyboard,
+			ParseMode:   "Markdown",
+		})
+		if err == nil || strings.Contains(err.Error(), "message is not modified") {
+			return
+		}
+	}
+	msg, err := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        text,
+		ReplyMarkup: keyboard,
+		ParseMode:   "Markdown",
+	})
+	if err == nil && msg > 0 {
+		r.setNavMsgID(chatID, msg)
+	}
+}
+
+// handleFeedbackStart - запускает режим ввода отзыва/предложения.
 func (r *router) handleFeedbackStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf("[FEEDBACK] открытие раздела для chatID=%d", chatID)
-
-	// Выбрано под-действие - убираем блок-хаб.
-	r.deleteHubBlock(ctx, b, chatID)
 
 	if !r.agreementStorage.IsAgreed(chatID) {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanAgreementRequired,
-			ReplyMarkup: keyboards.StartMenu(),
+			ReplyMarkup: models.ReplyKeyboardRemove{RemoveKeyboard: true},
 		})
 		return true
 	}
@@ -297,42 +238,25 @@ func (r *router) handleFeedbackStart(ctx context.Context, b *tgbot.Bot, chatID i
 	r.stateManager.SetState(chatID, states.StateWaitingFeedback)
 	r.setCurrentSection(chatID, "service")
 
-	// Единая Reply-клавиатура [Назад] внизу на всём протяжении ввода отзыва.
-	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgFeedbackIntro,
-		ReplyMarkup: keyboards.BackMenu(),
-		ParseMode:   "Markdown",
-	})
-	if msg != nil {
-		r.setLastMsg(chatID, msg.ID)
-	}
+	r.editNavMessage(ctx, b, chatID, locales.MsgFeedbackIntro, keyboards.BackCancelInline())
 	return true
 }
 
-// handleFeedbackMessage - пересылает сообщение пользователя (текст/фото/
-// документ) разработчику (adminChatID) и подтверждает доставку. Срабатывает
-// при любом сообщении в режиме StateWaitingFeedback. Возвращает true, если
-// сообщение обработано как отзыв.
+// handleFeedbackMessage - пересылает сообщение пользователя разработчику и
+// подтверждает доставку.
 func (r *router) handleFeedbackMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string, update *models.Update) bool {
 	log.Printf("[FEEDBACK] ввод сообщения от chatID=%d", chatID)
 
-	// Отмена / возврат - на уровень выше (хаб Сервис), а не в главное меню.
 	if text == locales.BtnCancel || text == locales.BtnBack {
 		log.Printf("[FEEDBACK] отмена ввода chatID=%d", chatID)
 		r.backToParent(ctx, b, chatID)
 		return true
 	}
 
-	// Получатель не настроен - отзыв некуда доставлять.
 	if r.adminChatID == 0 {
 		log.Printf("[FEEDBACK] adminChatID не задан, доставка невозможна chatID=%d", chatID)
 		r.stateManager.SetState(chatID, states.StateIdle)
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgFeedbackUnavailable,
-			ReplyMarkup: keyboards.MainMenu(),
-		})
+		r.editNavMessage(ctx, b, chatID, locales.MsgFeedbackUnavailable, keyboards.BackInline())
 		return true
 	}
 
@@ -349,15 +273,12 @@ func (r *router) handleFeedbackMessage(ctx context.Context, b *tgbot.Bot, chatID
 		}
 	}
 
-	// Служебная «шапка» админу перед пересланным сообщением.
 	_, metaErr := b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:    r.adminChatID,
 		Text:      fmt.Sprintf(locales.MsgFeedbackMeta, fullName, chatID, username),
 		ParseMode: "Markdown",
 	})
 
-	// Пересылаем само сообщение (текст/фото/документ) как есть - так
-	// разработчик видит оригинал, включая вложения.
 	if update.Message != nil {
 		if _, fErr := b.ForwardMessage(ctx, &tgbot.ForwardMessageParams{
 			ChatID:     r.adminChatID,
@@ -371,22 +292,77 @@ func (r *router) handleFeedbackMessage(ctx context.Context, b *tgbot.Bot, chatID
 	if metaErr != nil {
 		log.Printf("[FEEDBACK] ошибка отправки админу chatID=%d: %v", chatID, metaErr)
 		r.stateManager.SetState(chatID, states.StateIdle)
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgFeedbackSendError,
-			ReplyMarkup: keyboards.MainMenu(),
-		})
+		r.editNavMessage(ctx, b, chatID, locales.MsgFeedbackSendError, keyboards.BackInline())
 		return true
 	}
 
 	r.stateManager.SetState(chatID, states.StateIdle)
 	log.Printf("[FEEDBACK] отзыв доставлен админу от chatID=%d", chatID)
+	r.editNavMessage(ctx, b, chatID, locales.MsgFeedbackConfirmed, keyboards.MainMenuInline())
+	return true
+}
+
+// ============================================================================
+// Удаление аккаунта (раздел «Сервис»)
+// ============================================================================
+
+// handleDeleteAccountStart - открывает экран подтверждения удаления аккаунта.
+func (r *router) handleDeleteAccountStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf("[DELETE-ACCOUNT] подтверждение для chatID=%d", chatID)
+
+	r.setCurrentSection(chatID, "service")
+
+	r.editNavMessage(ctx, b, chatID, locales.MsgDeleteAccountConfirm, keyboards.DeleteAccountMenu())
+	return true
+}
+
+// handleDeleteAccountConfirm - реально удаляет ВСЕ данные пользователя.
+func (r *router) handleDeleteAccountConfirm(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf("[DELETE-ACCOUNT] удаление всех данных для chatID=%d", chatID)
+
+	r.deleteHubBlock(ctx, b, chatID)
+
+	if r.appStorage != nil {
+		if err := r.appStorage.DeleteAccount(ctx, chatID); err != nil {
+			log.Printf("[DELETE-ACCOUNT] ошибка удаления профиля chatID=%d: %v", chatID, err)
+		}
+	}
+	if r.monitorRepo != nil {
+		if err := r.monitorRepo.DeleteByUser(ctx, chatID); err != nil {
+			log.Printf("[DELETE-ACCOUNT] ошибка удаления мониторинга chatID=%d: %v", chatID, err)
+		}
+	}
+	if svc := r.getNotificationsSvc(); svc != nil {
+		if err := svc.DeleteUser(ctx, chatID); err != nil {
+			log.Printf("[DELETE-ACCOUNT] ошибка удаления уведомлений chatID=%d: %v", chatID, err)
+		}
+	}
+	if r.agreementStorage != nil {
+		r.agreementStorage.Reset(chatID)
+	}
+	menu.ClearPremiumScreen(ctx, b, r.stateManager, chatID)
+	r.stateManager.Reset(chatID)
+
+	// Подтверждение удаления - без reply-клавиатуры: после сброса
+	// пользователь «как новый» и обязан нажать /start (онбординг), поэтому
+	// меню показывать нельзя (оно сломано без соглашения/онбординга).
+	// Навигация вообще только inline - reply-меню не используем. Снимаем
+	// возможную «висящую» reply-клавиатуру (могла остаться от потока
+	// ввода до удаления), чтобы после /start пользователь видел ТОЛЬКО
+	// инлайн-онбординг, без дублирующей reply-клавиатуры.
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
-		Text:        locales.MsgFeedbackConfirmed,
-		ReplyMarkup: keyboards.MainMenu(),
+		Text:        locales.MsgAccountDeleted,
+		ReplyMarkup: models.ReplyKeyboardRemove{RemoveKeyboard: true},
 		ParseMode:   "Markdown",
 	})
+	return true
+}
+
+// handleDeleteAccountCancel - отмена удаления аккаунта: возврат в хаб Сервис.
+func (r *router) handleDeleteAccountCancel(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
+	log.Printf("[DELETE-ACCOUNT] отмена для chatID=%d", chatID)
+	r.renderHub(ctx, b, chatID, "service")
 	return true
 }
 
@@ -397,7 +373,7 @@ func (r *router) handleRegularAnalysis(ctx context.Context, b *tgbot.Bot, chatID
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanAgreementRequired,
-			ReplyMarkup: keyboards.StartMenu(),
+			ReplyMarkup: models.ReplyKeyboardRemove{RemoveKeyboard: true},
 		})
 		return true
 	}
@@ -407,20 +383,7 @@ func (r *router) handleRegularAnalysis(ctx context.Context, b *tgbot.Bot, chatID
 	r.stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
 	r.setCurrentSection(chatID, "analysis")
 
-	// Выбрано под-действие - убираем блок-хаб, чтобы в чате не висело меню
-	// раздела поверх начатого анализа.
-	r.deleteHubBlock(ctx, b, chatID)
-
-	// Единая Reply-клавиатура [Назад] внизу на всём протяжении анализа.
-	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgRegularAnalysisIntro,
-		ReplyMarkup: keyboards.BackMenu(),
-		ParseMode:   "Markdown",
-	})
-	if msg != nil {
-		r.setLastMsg(chatID, msg.ID)
-	}
+	r.editNavMessage(ctx, b, chatID, locales.MsgRegularAnalysisIntro, keyboards.BackCancelInline())
 	return true
 }
 
@@ -431,56 +394,41 @@ func (r *router) handleExtendedAnalysis(ctx context.Context, b *tgbot.Bot, chatI
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanAgreementRequired,
-			ReplyMarkup: keyboards.StartMenu(),
+			ReplyMarkup: models.ReplyKeyboardRemove{RemoveKeyboard: true},
 		})
 		return true
 	}
 
-	// Расширенный анализ - функция Premium: без подписки не запускаем
-	// опросник, предлагаем оформить Premium.
 	if !r.paymentService.IsUserPremium(chatID) {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgExtendedAnalysisPremiumRequired,
-			ReplyMarkup: keyboards.BackMenu(),
-			ParseMode:   "Markdown",
-		})
+		r.editNavMessage(ctx, b, chatID, locales.MsgExtendedAnalysisPremiumRequired, keyboards.BackInline())
 		return true
 	}
 
 	r.stateManager.SetUserData(chatID, "analysis_type", "extended")
 	r.stateManager.SetUserData(chatID, "analysis_subtype", "extended")
-
 	r.stateManager.SetState(chatID, states.StateWaitingName)
 	r.setCurrentSection(chatID, "analysis")
 
-	// Выбрано под-действие - убираем блок-хаб.
 	r.deleteHubBlock(ctx, b, chatID)
-
-	// Единая Reply-клавиатура [Назад / ❌ Отмена] на всём протяжении
-	// опросника; первый вопрос показывается с прогресс-баром.
 	userdata.NewUserDataCollector(r.stateManager).SendStep(ctx, b, chatID, states.StateWaitingName, locales.MsgExtendedAnalysisIntro)
 	return true
 }
 
-// handleBioscanBasicStart - запускает БАЗОВЫЙ (бесплатный) Bioscan: 1 фото ->
-// текстовый результат в чат. Доступен всем (проверка соглашения + busy).
+// handleBioscanBasicStart - запускает БАЗОВЫЙ (бесплатный) Bioscan.
 func (r *router) handleBioscanBasicStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf("[BIOSCAN] запуск БАЗОВОГО для chatID=%d", chatID)
 
 	if !r.agreementStorage.IsAgreed(chatID) {
-		log.Printf(locales.LogRouterAgreeNotDone, chatID)
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanAgreementRequired,
-			ReplyMarkup: keyboards.StartMenu(),
+			ReplyMarkup: models.ReplyKeyboardRemove{RemoveKeyboard: true},
 		})
 		return true
 	}
 
 	currentState := r.stateManager.GetState(chatID)
 	if currentState != states.StateIdle {
-		log.Printf(locales.LogRouterUserBusy, chatID, currentState)
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,
 			Text:   locales.MsgUserBusy,
@@ -494,25 +442,21 @@ func (r *router) handleBioscanBasicStart(ctx context.Context, b *tgbot.Bot, chat
 	return true
 }
 
-// handleBioscanExtendedStart - запускает РАСШИРЕННЫЙ (Premium) Bioscan PRO:
-// 4 фото -> детальный PDF-отчёт. Premium-гейт: без подписки - сообщение об
-// оформлении Premium (анализ не начинается).
+// handleBioscanExtendedStart - запускает РАСШИРЕННЫЙ (Premium) Bioscan PRO.
 func (r *router) handleBioscanExtendedStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf("[BIOSCAN] запуск РАСШИРЕННОГО (PRO) для chatID=%d", chatID)
 
 	if !r.agreementStorage.IsAgreed(chatID) {
-		log.Printf(locales.LogRouterAgreeNotDone, chatID)
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanAgreementRequired,
-			ReplyMarkup: keyboards.StartMenu(),
+			ReplyMarkup: models.ReplyKeyboardRemove{RemoveKeyboard: true},
 		})
 		return true
 	}
 
 	currentState := r.stateManager.GetState(chatID)
 	if currentState != states.StateIdle {
-		log.Printf(locales.LogRouterUserBusy, chatID, currentState)
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: chatID,
 			Text:   locales.MsgUserBusy,
@@ -520,52 +464,38 @@ func (r *router) handleBioscanExtendedStart(ctx context.Context, b *tgbot.Bot, c
 		return true
 	}
 
+	r.setCurrentSection(chatID, "analysis")
+
 	if !r.paymentService.IsUserPremium(chatID) {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgBioscanExtendedPremiumRequired,
-			ReplyMarkup: keyboards.BackMenu(),
-			ParseMode:   "Markdown",
-		})
+		// Премиум-заглушка: перерисовываем единое навигационное сообщение
+		// «на месте» (edit-in-place). «Назад» (hub_back) возвращает в хаб
+		// «Анализы». Не шлём отдельное сообщение с reply-клавиатурой - иначе
+		// нарушается единообразие навигации с прочими экранами-заглушками.
+		r.editNavMessage(ctx, b, chatID, locales.MsgBioscanExtendedPremiumRequired, keyboards.BackInline())
 		return true
 	}
 
-	r.setCurrentSection(chatID, "analysis")
-	r.deleteHubBlock(ctx, b, chatID)
-
-	// Принудительно устанавливаем состояние
+	// Запуск опросника Bioscan PRO: интро редактирует навигационное сообщение
+	// «на месте» (как у Обычного анализа / Консультации), чтобы «Назад»
+	// возвращал в хаб «Анализы», а не плодил новые сообщения. Дальше опросник
+	// шлёт вопросы отдельными сообщениями (это ввод данных, не навигация - по
+	// согласованному дизайну они остаются новыми сообщениями).
 	r.stateManager.SetState(chatID, states.StateWaitingBioscanName)
 	log.Printf(locales.LogRouterForceBioscan, chatID)
 
-	// Единая Reply-клавиатура [Назад] внизу на всём протяжении Bioscan.
-	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgBioscanIntro,
-		ParseMode:   "Markdown",
-		ReplyMarkup: keyboards.BackMenu(),
-	})
-	if msg != nil {
-		r.setLastMsg(chatID, msg.ID)
-	}
+	r.editNavMessage(ctx, b, chatID, locales.MsgBioscanIntro, keyboards.BackInline())
 	return true
 }
 
-// handleDashboard - открывает веб-дашборд. Если demo=true - добавляет
-// ?demo=1 к URL, чтобы открыть «полностью заполненную» синтетическую
-// сводку без реальных анализов и без Premium (для предпросмотра графиков).
+// handleDashboard - открывает веб-дашборд.
 func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64, demo bool) bool {
 	log.Printf(locales.LogRouterDashboard, chatID)
 
-	// Выбрано под-действие - убираем блок-хаб, чтобы в чате не висело меню
-	// раздела поверх открытого дашборда.
-	r.deleteHubBlock(ctx, b, chatID)
 	r.setCurrentSection(chatID, "health")
 
 	isPremium := r.paymentService.IsUserPremium(chatID)
 	log.Printf(locales.LogDashboardPremiumCheck, chatID, isPremium)
 
-	// Версия в URL сбрасывает кэш Telegram WebView (см. keyboards.WebAppAssetsVersion).
-	// При demo добавляем ?demo=1 - бэкенд отдаст синтетические метрики.
 	webAppTarget := keyboards.WithWebAppVersion(r.webAppURL)
 	if demo {
 		if strings.Contains(webAppTarget, "?") {
@@ -575,24 +505,18 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 		}
 	}
 	if webAppTarget == "" {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        "⚠️ URL дашборда не настроен. Задайте WEBAPP_URL или запустите `make mini`.",
-			ReplyMarkup: keyboards.MainMenu(),
-			ParseMode:   "Markdown",
-		})
+		r.editNavMessage(ctx, b, chatID,
+			"⚠️ URL дашборда не настроен. Задайте WEBAPP_URL или запустите `make mini`.",
+			keyboards.BackInline())
 		return true
 	}
 
 	text := locales.MsgHealthSummaryIntro + "\n\n"
 	if !isPremium {
-		// Полный доступ к показателям - по Premium, но профиль заполнить
-		// можно бесплатно (онбординг доступен всем).
 		text += "📝 Профиль можно заполнить бесплатно - после этого Мой профиль оживёт. " +
 			"Полный доступ к показателям крови и динамике - по Premium-подписке.\n\n"
 	}
 
-	// Только Mini App - без ссылок и «открыть в браузере».
 	rows := [][]models.InlineKeyboardButton{
 		{
 			{Text: "Открыть", WebApp: &models.WebAppInfo{URL: webAppTarget}},
@@ -602,17 +526,7 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 		},
 	}
 
-	msgID, sendErr := botutil.SendSafe(ctx, b, tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        text,
-		ReplyMarkup: models.InlineKeyboardMarkup{InlineKeyboard: rows},
-		ParseMode:   "Markdown",
-	})
-	if sendErr != nil {
-		log.Printf(locales.LogDashboardSendErr, chatID, sendErr)
-	} else {
-		log.Printf(locales.LogDashboardSent, chatID, msgID, webAppTarget, len(rows))
-	}
+	r.editNavMessage(ctx, b, chatID, text, models.InlineKeyboardMarkup{InlineKeyboard: rows})
 	return true
 }
 
@@ -620,15 +534,10 @@ func (r *router) handleDashboard(ctx context.Context, b *tgbot.Bot, chatID int64
 // Быстрая консультация (с ИИ)
 // ============================================================================
 
-// freeConsultationLimit - сколько бесплатных консультаций доступно
-// не-Premium пользователю. Premium - безлимит.
 const freeConsultationLimit = 3
 
-// consultUserKey - ключ счётчика использованных бесплатных консультаций
-// в user-data состояния.
 const consultUserKey = "ai_consult_count"
 
-// consultCount - сколько бесплатных консультаций уже использовано.
 func (r *router) consultCount(chatID int64) int {
 	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, consultUserKey))
 	if err != nil || n < 0 {
@@ -637,24 +546,19 @@ func (r *router) consultCount(chatID int64) int {
 	return n
 }
 
-// consultSetCount - сохраняет счётчик использованных бесплатных консультаций.
 func (r *router) consultSetCount(chatID int64, n int) {
 	r.stateManager.SetUserData(chatID, consultUserKey, strconv.Itoa(n))
 }
 
-// consultationTextPrompt - формирует запрос к ИИ для текстовой консультации:
-// задаёт роль консультанта и просит дать рекомендации + дисклеймер.
 func consultationTextPrompt(question string) string {
 	return "Вопрос пользователя о здоровье: " + strings.TrimSpace(question) +
 		"\n\nТвоя задача - дать медицинскую консультацию: ответь на вопрос, " +
 		"объясни возможные причины, дай практические рекомендации по облегчению " +
-		"состояния. В конце обязательно напомни, что это информационная " +
-		"консультация и не заменяет очный визит к врачу."
+		"состояния. В конце ОБЯЗАТЕЛЬНО напомни, что это не является диагнозом, " +
+		"а лишь информационные рекомендации; при ухудшении состояния нужно " +
+		"обратиться к врачу."
 }
 
-// consultationImageContext - формирует контекст к ИИ для консультации по
-// фотографии (травма/проблемная зона). При наличии добавляет текстовый
-// вопрос пользователя к фото.
 func consultationImageContext(question string) string {
 	base := "Это фото травмы или проблемной зоны пользователя. Пожалуйста, дай " +
 		"медицинскую консультацию по фото: опиши, что видишь, возможные причины, " +
@@ -667,60 +571,40 @@ func consultationImageContext(question string) string {
 	return base
 }
 
-// handleConsultationStart - запускает режим консультации: проверяет
-// соглашение, Premium и оставшуюся бесплатную квоту. Если квота исчерпана и
-// Premium нет - предлагает оформить подписку. Иначе переводит пользователя
-// в StateWaitingConsultation, ожидая вопрос (текст) или фото.
+// handleConsultationStart - запускает режим консультации.
 func (r *router) handleConsultationStart(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf("[CONSULT] запуск для chatID=%d", chatID)
-
-	// Выбрано под-действие - убираем блок-хаб.
-	r.deleteHubBlock(ctx, b, chatID)
 
 	if !r.agreementStorage.IsAgreed(chatID) {
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanAgreementRequired,
-			ReplyMarkup: keyboards.StartMenu(),
+			ReplyMarkup: models.ReplyKeyboardRemove{RemoveKeyboard: true},
 		})
 		return true
 	}
 
 	isPremium := r.paymentService.IsUserPremium(chatID)
 	if !isPremium && r.consultCount(chatID) >= freeConsultationLimit {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgConsultationPremiumRequired,
-			ReplyMarkup: keyboards.BackMenu(),
-			ParseMode:   "Markdown",
-		})
+		r.editNavMessage(ctx, b, chatID, locales.MsgConsultationPremiumRequired, keyboards.BackInline())
 		return true
 	}
 
 	r.stateManager.SetState(chatID, states.StateWaitingConsultation)
 	r.setCurrentSection(chatID, "health")
+	// Новая сессия консультации - сбрасываем накопленные id ответов ИИ
+	// (защита на случай повторного входа в консультацию без /start).
+	r.consultClearResultMsgIDs(chatID)
 
-	// Единая Reply-клавиатура [Назад] внизу на всём протяжении консультации.
-	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgConsultationStart,
-		ReplyMarkup: keyboards.BackMenu(),
-		ParseMode:   "Markdown",
-	})
-	if msg != nil {
-		r.setLastMsg(chatID, msg.ID)
-	}
+	r.editNavMessage(ctx, b, chatID, locales.MsgConsultationStart, keyboards.BackCancelInline())
 	return true
 }
 
 // handleConsultationMessage - обрабатывает сообщение пользователя в режиме
-// StateWaitingConsultation: текстовый вопрос или фото травмы. Отправляет его
-// ИИ (GenerateAnalysisSummary / анализ фото) и возвращает консультацию.
-// Возвращает true, если сообщение обработано как консультация.
+// StateWaitingConsultation.
 func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string, update *models.Update) bool {
 	log.Printf("[CONSULT] ввод сообщения от chatID=%d", chatID)
 
-	// Отмена / возврат - на уровень выше (хаб Здоровье), а не в главное меню.
 	if text == locales.BtnCancel || text == locales.BtnBack {
 		log.Printf("[CONSULT] отмена chatID=%d", chatID)
 		r.backToParent(ctx, b, chatID)
@@ -729,34 +613,20 @@ func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, ch
 
 	hasPhoto := update.Message != nil && len(update.Message.Photo) > 0
 
-	// Пустое/неподдерживаемое сообщение (стикер, голос, ничего) - просим
-	// прислать вопрос или фото.
 	if strings.TrimSpace(text) == "" && !hasPhoto {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgConsultationEmpty,
-			ReplyMarkup: keyboards.BackMenu(),
-		})
+		r.editNavMessage(ctx, b, chatID, locales.MsgConsultationEmpty, keyboards.BackCancelInline())
 		return true
 	}
 
 	isPremium := r.paymentService.IsUserPremium(chatID)
 
-	// Повторная проверка квоты на случай «залипшего» состояния.
 	if !isPremium && r.consultCount(chatID) >= freeConsultationLimit {
 		r.stateManager.SetState(chatID, states.StateIdle)
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgConsultationPremiumRequired,
-			ReplyMarkup: keyboards.MainMenu(),
-			ParseMode:   "Markdown",
-		})
+		r.editNavMessage(ctx, b, chatID, locales.MsgConsultationPremiumRequired, keyboards.BackInline())
 		return true
 	}
 
-	// Индикатор ожидания: стикер + анимированный текст (формирую отчёт /
-	// считаю показатели и т.п.). Гасится при получении результата или ошибке.
-	loadingMsg, textMsg := helpers.SendLoadingMessages(ctx, b, chatID, r.stickerID, nil)
+	loadingMsg, textMsg := helpers.SendLoadingMessages(ctx, b, chatID, r.stickerID, locales.ConsultationLoadingSteps)
 
 	var (
 		result string
@@ -770,15 +640,11 @@ func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, ch
 		if dlErr != nil {
 			log.Printf("[CONSULT] ошибка загрузки фото chatID=%d: %v", chatID, dlErr)
 			r.stateManager.SetState(chatID, states.StateIdle)
-			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-				ChatID:      chatID,
-				Text:        locales.MsgConsultationError,
-				ReplyMarkup: keyboards.MainMenu(),
-			})
+			r.editNavMessage(ctx, b, chatID, locales.MsgConsultationError, keyboards.BackInline())
 			helpers.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
 			return true
 		}
-		result, err = r.analysisService.HandleAnalysisFromFileWithContext(ctx, data, mimeType, consultationImageContext(text))
+		result, err = r.analysisService.HandleConsultationImage(ctx, data, mimeType, consultationImageContext(text))
 	} else {
 		result, err = r.analysisService.HandleAnalysis(ctx, consultationTextPrompt(text))
 	}
@@ -786,24 +652,18 @@ func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, ch
 	if err != nil || strings.TrimSpace(result) == "" {
 		log.Printf("[CONSULT] ошибка генерации chatID=%d: %v", chatID, err)
 		r.stateManager.SetState(chatID, states.StateIdle)
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgConsultationError,
-			ReplyMarkup: keyboards.MainMenu(),
-		})
+		r.editNavMessage(ctx, b, chatID, locales.MsgConsultationError, keyboards.BackInline())
 		helpers.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
 		return true
 	}
 
-	// Успех: считаем бесплатную квоту только для не-Premium пользователей.
 	if !isPremium {
 		r.consultSetCount(chatID, r.consultCount(chatID)+1)
 	}
-	r.stateManager.SetState(chatID, states.StateIdle)
+	// Переходим в «финиш»-состояние: ответ показан, но из флоу можно выйти
+	// ТОЛЬКО по кнопке «Закончить консультацию» (см. handleConsultationFinish).
+	r.stateManager.SetState(chatID, states.StateWaitingConsultationFinish)
 
-	// Собираем итоговый текст (без Markdown - результат ИИ неконтролируем,
-	// чтобы не сломать разметку). Клавиатуру (главное меню) крепим к
-	// последнему куску через sendLongMessage.
 	full := locales.MsgConsultationResultIntro + result
 	if !isPremium {
 		freeLeft := freeConsultationLimit - r.consultCount(chatID)
@@ -816,74 +676,208 @@ func (r *router) handleConsultationMessage(ctx context.Context, b *tgbot.Bot, ch
 	}
 
 	helpers.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
-	sendLongMessage(ctx, b, chatID, full, keyboards.MainMenu())
+
+	// Ответ ИИ - отдельным(и) сообщением(и) БЕЗ клавиатуры, чтобы результат
+	// не «прятался» под inline-меню и не плодил висящую навигацию. id
+	// запоминаем (sendConsultationResult), чтобы убрать ответ целиком при
+	// завершении консультации (иначе «мусорный» ответ ИИ остаётся в чате).
+	r.sendConsultationResult(ctx, b, chatID, full)
+
+	// ОТДЕЛЬНОЕ сообщение с reply-кнопкой «Закончить консультацию» (+ «Задать
+	// ещё вопрос»). Внизу БОЛЬШЕ НЕТ главного меню - только этот флоу, поэтому
+	// пользователь не может случайно «выйти» в раздел до явного «Закончить».
+	finishMsg, ferr := b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        locales.MsgConsultationFinishHint,
+		ReplyMarkup: keyboards.ConsultFinishMenu(),
+	})
+	if ferr == nil && finishMsg != nil {
+		r.setConsultFinishMsgID(chatID, finishMsg.ID)
+	}
+
+	// Нейтрализуем навигационное сообщение (инлайн «Назад/Отмена»
+	// консультации): удаляем его, чтобы из флоу нельзя было выйти иначе,
+	// кроме как по «Закончить консультацию» (его перерисовка/удаление
+	// происходит в finishConsultation / continueConsultation).
+	r.deleteMainMenuMessage(ctx, b, chatID)
 	return true
 }
 
-// sendLongMessage - отправляет текст, разбивая его на куски по 3500 байт
-// (байтовый лимит Telegram - 4096, с запасом на кириллицу/эмодзи), чтобы не
-// упереться в ограничение API. Клавиатура (keyboard) крепится только к
-// последнему куску. Разбиение делегируется общему байтовому хелперу
-// helpers.SplitLongMessage - единственный источник истины по чанкованию.
-func sendLongMessage(ctx context.Context, b *tgbot.Bot, chatID int64, text string, keyboard models.ReplyKeyboardMarkup) {
-	chunks := helpers.SplitLongMessage(text, helpers.MaxMessageChunk)
-	if len(chunks) == 0 {
+// consultFinishMsgKey - ключ в user-data для message_id сообщения с
+// reply-кнопкой «Закончить консультацию» (финиш-состояние). Хранится в
+// user-data (а не в выделенном map, как Premium), т.к. сбрасывается вместе с
+// состоянием через stateManager.Reset - это и нужно.
+const consultFinishMsgKey = "consult_finish_msg_id"
+
+func (r *router) consultFinishMsgID(chatID int64) int {
+	n, err := strconv.Atoi(r.stateManager.GetUserData(chatID, consultFinishMsgKey))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
+
+func (r *router) setConsultFinishMsgID(chatID int64, msgID int) {
+	r.stateManager.SetUserData(chatID, consultFinishMsgKey, strconv.Itoa(msgID))
+}
+
+// consultResultMsgKey - ключ в user-data для message_id ВСЕХ сообщений ответа
+// ИИ в рамках одной консультации (результат из-за лимита Telegram 4096 байт
+// может быть разбит на несколько сообщений). Хранится через запятую. Нужно,
+// чтобы при завершении консультации («Закончить консультацию») убрать из
+// чата ВЕСЬ ответ, а не только подсказку-кнопку - иначе «мусорный» ответ ИИ
+// остаётся висеть после возврата в главное меню (жалоба пользователя).
+const consultResultMsgKey = "consult_result_msg_ids"
+
+func (r *router) consultResultMsgIDs(chatID int64) []int {
+	raw := r.stateManager.GetUserData(chatID, consultResultMsgKey)
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var ids []int
+	for _, p := range strings.Split(raw, ",") {
+		if n, err := strconv.Atoi(strings.TrimSpace(p)); err == nil && n > 0 {
+			ids = append(ids, n)
+		}
+	}
+	return ids
+}
+
+func (r *router) consultAppendResultMsgID(chatID int64, msgID int) {
+	if msgID <= 0 {
 		return
 	}
-	for i, chunk := range chunks {
-		kb := models.ReplyKeyboardMarkup{}
-		if i == len(chunks)-1 {
-			kb = keyboard
-		}
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        chunk,
-			ReplyMarkup: kb,
-		})
+	ids := r.consultResultMsgIDs(chatID)
+	ids = append(ids, msgID)
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		parts = append(parts, strconv.Itoa(id))
 	}
+	r.stateManager.SetUserData(chatID, consultResultMsgKey, strings.Join(parts, ","))
+}
+
+func (r *router) consultClearResultMsgIDs(chatID int64) {
+	r.stateManager.SetUserData(chatID, consultResultMsgKey, "")
+}
+
+// sendConsultationResult - отправляет результат ИИ консультации (возможно,
+// несколькими сообщениями из-за лимита Telegram) БЕЗ клавиатуры и
+// запоминает их message_id, чтобы при завершении консультации (finishConsultation)
+// убрать ответ из чата целиком. Аналог helpers.SendLongMessagePlain, но с
+// трекингом id сообщений.
+func (r *router) sendConsultationResult(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
+	for _, chunk := range helpers.SplitLongMessage(text, helpers.MaxMessageChunk) {
+		msg, err := b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: chunk})
+		if err == nil && msg != nil {
+			r.consultAppendResultMsgID(chatID, msg.ID)
+		}
+	}
+}
+
+// handleConsultationFinish - обработка сообщений в режиме
+// StateWaitingConsultationFinish. Доступны ТОЛЬКО две reply-кнопки:
+// «Закончить консультацию» (выход в главное меню) и «Задать ещё вопрос»
+// (продолжить диалог). Любые прочие сообщения/кнопки игнорируются - иначе
+// меню «прыгало» бы и дублировалось.
+func (r *router) handleConsultationFinish(ctx context.Context, b *tgbot.Bot, chatID int64, text string, update *models.Update) bool {
+	switch strings.TrimSpace(text) {
+	case locales.BtnConsultFinish:
+		r.finishConsultation(ctx, b, chatID, update)
+	case locales.BtnConsultAgain:
+		r.continueConsultation(ctx, b, chatID, update)
+	default:
+		// Команды (/start, /resetme, /promo и т.п.) пропускаем дальше по
+		// цепочке обработки, чтобы бот оставался отзывчивым; всё иное
+		// (свободный текст, фото) игнорируем, пока не нажата «Закончить».
+		if strings.HasPrefix(strings.TrimSpace(text), "/") {
+			return false
+		}
+		return true
+	}
+	return true
+}
+
+// finishConsultation - завершение флоу консультации по кнопке «Закончить
+// консультацию»: сброс состояния, удаление сообщения с кнопкой «Закончить» и
+// показ обычного главного меню (инлайн; reply-клавиатура флоу снимается).
+func (r *router) finishConsultation(ctx context.Context, b *tgbot.Bot, chatID int64, update *models.Update) {
+	r.stateManager.SetState(chatID, states.StateIdle)
+
+	// Удаляем ВСЕ сообщения ответа ИИ (возможно несколько, если результат
+	// длинный и был разбит на части из-за лимита Telegram), чтобы после
+	// завершения консультации в чате не висел «мусорный» ответ - пользователь
+	// возвращается к чистому главному меню (жалоба: ответ оставался после
+	// «Закончить консультацию»).
+	for _, id := range r.consultResultMsgIDs(chatID) {
+		helpers.DeleteMessage(ctx, b, chatID, id)
+	}
+	r.consultClearResultMsgIDs(chatID)
+
+	// Удаляем сообщение, несшее reply-кнопку «Закончить» (+ «Задать ещё
+	// вопрос»), чтобы убрать нижнюю клавиатуру флоу.
+	if id := r.consultFinishMsgID(chatID); id > 0 {
+		helpers.DeleteMessage(ctx, b, chatID, id)
+		r.setConsultFinishMsgID(chatID, 0)
+	}
+	// И «тап» пользователя по кнопке (правило «кнопка/выбор удаляется после
+	// ответа») - чтобы в истории не висел «✅ Закончить консультацию».
+	if update != nil && update.Message != nil && update.Message.ID != 0 {
+		helpers.DeleteAfterReply(ctx, b, chatID, update.Message.ID)
+	}
+
+	// Обычное главное меню (инлайн). Reply-клавиатура флоу снята удалением
+	// несущих её сообщений выше, поэтому внизу не остаётся «Закончить».
+	r.showMainMenuMessage(ctx, b, chatID, locales.MsgBackToMainMenu)
+}
+
+// continueConsultation - возврат в режим ожидания вопроса после нажатия
+// «Задать ещё вопрос» из финиш-состояния: убирает reply-кнопку «Закончить» и
+// показывает инлайн-подсказку ввода вопроса (без главного меню снизу).
+func (r *router) continueConsultation(ctx context.Context, b *tgbot.Bot, chatID int64, update *models.Update) {
+	// Убираем reply-кнопку «Закончить» (сообщение + «тап» пользователя).
+	if id := r.consultFinishMsgID(chatID); id > 0 {
+		helpers.DeleteMessage(ctx, b, chatID, id)
+		r.setConsultFinishMsgID(chatID, 0)
+	}
+	if update != nil && update.Message != nil && update.Message.ID != 0 {
+		helpers.DeleteAfterReply(ctx, b, chatID, update.Message.ID)
+	}
+	r.enterConsultationWaiting(ctx, b, chatID)
+}
+
+// enterConsultationWaiting - перевод пользователя в режим ожидания вопроса
+// консультации (StateWaitingConsultation) и показ инлайн-подсказки ввода.
+// Главное меню снизу при этом НЕ показывается (только инлайн «Назад/Отмена»).
+func (r *router) enterConsultationWaiting(ctx context.Context, b *tgbot.Bot, chatID int64) {
+	isPremium := r.paymentService.IsUserPremium(chatID)
+	if !isPremium && r.consultCount(chatID) >= freeConsultationLimit {
+		r.stateManager.SetState(chatID, states.StateIdle)
+		r.editNavMessage(ctx, b, chatID, locales.MsgConsultationPremiumRequired, keyboards.BackInline())
+		return
+	}
+	r.stateManager.SetState(chatID, states.StateWaitingConsultation)
+	r.setCurrentSection(chatID, "health")
+	r.editNavMessage(ctx, b, chatID, locales.MsgConsultationStart, keyboards.BackCancelInline())
 }
 
 // ============================================================================
 // Тест уведомлений (раздел «Сервис» → 🧪 Тест уведомлений)
 // ============================================================================
 
-// testNotifyDelay - через сколько секунд приходит ТЕСТОВОЕ уведомление после
-// нажатия кнопки в под-меню «Сервис → 🧪 Тест уведомлений». Сделано малым,
-// чтобы разработчик мог быстро проверить систему уведомлений «вживую».
 const testNotifyDelay = 10 * time.Second
 
-// handleTestNotifyMenu - открывает под-меню проверки уведомлений (раздел
-// «Сервис», только в development): поясняет, что нажатие кнопки пришлёт
-// реальный образец уведомления через 10 секунд.
 func (r *router) handleTestNotifyMenu(ctx context.Context, b *tgbot.Bot, chatID int64) bool {
 	log.Printf("[TEST-NOTIFY] открытие меню для chatID=%d", chatID)
 
-	// Выбрано под-действие - убираем блок-хаб.
-	r.deleteHubBlock(ctx, b, chatID)
 	r.setCurrentSection(chatID, "service")
 
-	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgTestNotifyIntro,
-		ReplyMarkup: keyboards.TestNotifyMenu(),
-		ParseMode:   "Markdown",
-	})
-	if msg != nil {
-		r.setLastMsg(chatID, msg.ID)
-	}
+	r.editNavMessage(ctx, b, chatID, locales.MsgTestNotifyIntro, keyboards.TestNotifyMenu())
 	return true
 }
 
-// handleTestNotifyAction - планирует отправку ТЕСТОВОГО уведомления указанного
-// типа (sub_7d/sub_3d/sub_1d/sub_today/analytics_check/analytics_send) через
-// 10 секунд и подтверждает это пользователю, оставляя открытым тестовое
-// меню (можно проверить иные типы). Реальную отправку/проверку выполняет
-// runTestNotification уже после задержки.
 func (r *router) handleTestNotifyAction(ctx context.Context, b *tgbot.Bot, chatID int64, kind string) bool {
 	log.Printf("[TEST-NOTIFY] планирование уведомления kind=%s для chatID=%d", kind, chatID)
 
-	// Используем фоновый контекст: контекст апдейта отменяется сразу после
-	// ответа, а уведомление должно прийти спустя 10 секунд.
 	go func() {
 		select {
 		case <-time.After(testNotifyDelay):
@@ -891,25 +885,14 @@ func (r *router) handleTestNotifyAction(ctx context.Context, b *tgbot.Bot, chatI
 		}
 	}()
 
-	msg, _ := b.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        locales.MsgTestNotifyScheduled,
-		ReplyMarkup: keyboards.TestNotifyMenu(),
-		ParseMode:   "Markdown",
-	})
-	if msg != nil {
-		r.setLastMsg(chatID, msg.ID)
-	}
+	r.editNavMessage(ctx, b, chatID, locales.MsgTestNotifyScheduled, keyboards.TestNotifyMenu())
 	return true
 }
 
-// runTestNotification выполняет отложенную (после 10 сек) отправку
-// ТЕСТОВОГО уведомления заданного типа в чат. Доступно только из dev-меню
-// «🧪 Тест уведомлений» (само меню скрыто в продакшене).
 func (r *router) runTestNotification(ctx context.Context, b *tgbot.Bot, chatID int64, kind string) {
 	svc := r.getNotificationsSvc()
 	if svc == nil {
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+		r.editNavMessage(ctx, b, chatID, locales.MsgNotifTestInvalid, keyboards.BackInline())
 		return
 	}
 	switch kind {
@@ -925,48 +908,33 @@ func (r *router) runTestNotification(ctx context.Context, b *tgbot.Bot, chatID i
 		case "sub_today":
 			days = 0
 		}
-		// ВАЖНО: SendSubscriptionTest САМ отправляет уведомление в Telegram
-		// (источник истины по отправке), поэтому здесь НЕ шлём text
-		// повторно - иначе пользователь получит одно и то же уведомление
-		// ДВАЖДЫ. Просто проверяем ошибку (неизвестный kind).
 		if _, err := svc.SendSubscriptionTest(ctx, chatID, days); err != nil {
-			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+			r.editNavMessage(ctx, b, chatID, locales.MsgNotifTestInvalid, keyboards.BackInline())
 			return
 		}
 	case "analytics_check":
-		// Предпросмотр: показываем, какие отклонения нашлись, БЕЗ отправки.
 		findings, err := svc.RunAnalyticsDryRun(ctx, chatID)
 		if errors.Is(err, notifications.ErrNoAnalysisData) {
-			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifAnalyticsNoData})
+			r.editNavMessage(ctx, b, chatID, locales.MsgNotifAnalyticsNoData, keyboards.BackInline())
 			return
 		}
 		if err != nil {
-			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+			r.editNavMessage(ctx, b, chatID, locales.MsgNotifTestInvalid, keyboards.BackInline())
 			return
 		}
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:    chatID,
-			Text:      svc.DryRunMessage(findings),
-			ParseMode: "Markdown",
-		})
+		r.editNavMessage(ctx, b, chatID, svc.DryRunMessage(findings), keyboards.BackInline())
 	case "analytics_send":
-		// Реальная отправка уведомлений по найденным отклонениям
-		// (с подавлением на 14 дней, как в боевой рассылке).
 		n, err := svc.SendAnalyticsTest(ctx, chatID)
 		if errors.Is(err, notifications.ErrNoAnalysisData) {
-			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifAnalyticsNoData})
+			r.editNavMessage(ctx, b, chatID, locales.MsgNotifAnalyticsNoData, keyboards.BackInline())
 			return
 		}
 		if err != nil {
-			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+			r.editNavMessage(ctx, b, chatID, locales.MsgNotifTestInvalid, keyboards.BackInline())
 			return
 		}
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:    chatID,
-			Text:      fmt.Sprintf(locales.MsgNotifAnalyticsSent, n),
-			ParseMode: "Markdown",
-		})
+		r.editNavMessage(ctx, b, chatID, fmt.Sprintf(locales.MsgNotifAnalyticsSent, n), keyboards.BackInline())
 	default:
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{ChatID: chatID, Text: locales.MsgNotifTestInvalid})
+		r.editNavMessage(ctx, b, chatID, locales.MsgNotifTestInvalid, keyboards.BackInline())
 	}
 }

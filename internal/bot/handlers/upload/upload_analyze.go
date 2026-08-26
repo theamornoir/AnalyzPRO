@@ -44,7 +44,7 @@ func StartAnalysis(
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgUploadStaleButton,
-			ReplyMarkup: keyboards.MainMenu(),
+			ReplyMarkup: keyboards.MainMenuInline(),
 		})
 		return
 	}

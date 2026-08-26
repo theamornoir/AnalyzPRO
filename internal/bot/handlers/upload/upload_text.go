@@ -29,6 +29,7 @@ func handleTextUpload(
 	uploadDir string,
 	stickerID string,
 	chatID int64,
+	msgID int,
 	text string,
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
@@ -42,6 +43,11 @@ func handleTextUpload(
 		})
 		return
 	}
+
+	// Трекаем ID исходного сообщения пользователя, чтобы удалить его из
+	// чата после успешной обработки анализа (приватность: исходные
+	// материалы не остаются в истории).
+	appendUploadedMsgID(stateManager, chatID, msgID)
 
 	userData := stateManager.GetAllUserData(chatID)
 	contextInfo := helpers.BuildAnalysisText(userData)

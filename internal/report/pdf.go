@@ -56,7 +56,7 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 		w.heading(locales.RptMsgPdfOverallAssessment)
 		line := ""
 		if rep.Score > 0 {
-			line += locales.RptMsgPdfScoreLabel + strconv.Itoa(rep.Score)
+			line += locales.RptMsgPdfScoreLabel + strconv.Itoa(int(rep.Score))
 		}
 		if rep.Level != "" {
 			if line != "" {
@@ -295,7 +295,7 @@ func (w *pdfWriter) bullet(s string) {
 }
 
 // barRow рисует подпись и цветной столбик-диаграмму для оценки (0..100).
-func (w *pdfWriter) barRow(label string, score int) {
+func (w *pdfWriter) barRow(label string, score models.FlexInt) {
 	if score < 0 {
 		score = 0
 	}
@@ -319,13 +319,13 @@ func (w *pdfWriter) barRow(label string, score int) {
 	w.pdf.SetFillColor(c[0], c[1], c[2])
 	w.pdf.Rect(x0, y+1, barMax*float64(score)/100.0, 5, "F")
 	w.pdf.SetTextColor(0, 0, 0)
-	w.pdf.Text(x0+barMax+1, y+4, strconv.Itoa(score))
+	w.pdf.Text(x0+barMax+1, y+4, strconv.Itoa(int(score)))
 
 	w.pdf.SetXY(pdfMargin, y+8)
 }
 
 // scoreColor возвращает цвет столбика по величине оценки.
-func scoreColor(score int) [3]int {
+func scoreColor(score models.FlexInt) [3]int {
 	switch {
 	case score >= 80:
 		return [3]int{76, 175, 80} // зелёный

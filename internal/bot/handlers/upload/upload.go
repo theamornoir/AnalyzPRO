@@ -71,22 +71,23 @@ func UploadHandler(
 		cleanupUploadedFilesByChat(stateManager, chatID)
 		stateManager.SetUserData(chatID, "uploaded_files", "")
 		stateManager.SetUserData(chatID, "file_count", "")
+		stateManager.SetUserData(chatID, "uploaded_msg_ids", "")
 
 		if update.Message.Document != nil {
 			log.Printf(locales.LogUploadHandlingDoc)
-			handleFileUpload(ctx, b, stateManager, uploadDir, chatID, update.Message.Document)
+			handleFileUpload(ctx, b, stateManager, uploadDir, chatID, update.Message.ID, update.Message.Document)
 			return
 		}
 
 		if update.Message.Photo != nil {
 			log.Printf(locales.LogUploadHandlingPhoto)
-			handlePhotoUpload(ctx, b, stateManager, uploadDir, chatID, update.Message.Photo)
+			handlePhotoUpload(ctx, b, stateManager, uploadDir, chatID, update.Message.ID, update.Message.Photo)
 			return
 		}
 
 		if update.Message.Text != "" {
 			log.Printf(locales.LogProcessingUploadText, update.Message.Text)
-			handleTextUpload(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, update.Message.Text, appStorage, saver, webAppURL)
+			handleTextUpload(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, update.Message.ID, update.Message.Text, appStorage, saver, webAppURL)
 			return
 		}
 

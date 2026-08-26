@@ -34,7 +34,7 @@ func (r *router) handleRegularAnalysisDemo(ctx context.Context, b *tgbot.Bot, ch
 
 	full := "ДЕМО-режим - пример результата «Обычный анализ» " +
 		"(без ИИ, просто образец формата):\n\n" + demoRegularAnalysisText
-	sendLongMessage(ctx, b, chatID, full, keyboards.MainMenu())
+	helpers.SendLongMessagePlain(ctx, b, chatID, full)
 	helpers.SendSavedToSummaryDemo(ctx, b, chatID, r.webAppURL)
 	return true
 }
@@ -52,7 +52,7 @@ func (r *router) handleExtendedAnalysisDemo(ctx context.Context, b *tgbot.Bot, c
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgUploadRenderError,
-			ReplyMarkup: keyboards.MainMenu(),
+			ReplyMarkup: keyboards.MainMenuInline(),
 		})
 		return true
 	}
@@ -87,7 +87,7 @@ func (r *router) handleExtendedAnalysisDemo(ctx context.Context, b *tgbot.Bot, c
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgAnalysisComplete,
-		ReplyMarkup: keyboards.MainMenu(),
+		ReplyMarkup: keyboards.MainMenuInline(),
 		ParseMode:   "HTML",
 	})
 	helpers.SendSavedToSummaryDemo(ctx, b, chatID, r.webAppURL)
@@ -102,7 +102,7 @@ func (r *router) handleBioscanBasicDemo(ctx context.Context, b *tgbot.Bot, chatI
 
 	text := report.RenderBioscanPlainText(demoBioscanReport())
 	full := "ДЕМО-режим - пример базового Bioscan (1 фото -> текстом в чат, без ИИ):\n\n" + text
-	sendLongMessage(ctx, b, chatID, full, keyboards.MainMenu())
+	helpers.SendLongMessagePlain(ctx, b, chatID, full)
 	helpers.SendSavedToSummaryDemo(ctx, b, chatID, r.webAppURL)
 	return true
 }
@@ -121,7 +121,7 @@ func (r *router) handleBioscanExtendedDemo(ctx context.Context, b *tgbot.Bot, ch
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgUploadRenderError,
-			ReplyMarkup: keyboards.MainMenu(),
+			ReplyMarkup: keyboards.MainMenuInline(),
 		})
 		return true
 	}
@@ -162,7 +162,7 @@ func (r *router) handleBioscanExtendedDemo(ctx context.Context, b *tgbot.Bot, ch
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgBioscanDone,
-		ReplyMarkup: keyboards.MainMenu(),
+		ReplyMarkup: keyboards.MainMenuInline(),
 		ParseMode:   "Markdown",
 	})
 	helpers.SendSavedToSummaryDemo(ctx, b, chatID, r.webAppURL)

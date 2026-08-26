@@ -12,7 +12,7 @@ type Report struct {
 	IsBioscan       bool       `json:"-"`
 
 	// Для Bioscan
-	Score          int             `json:"score"`
+	Score          FlexInt             `json:"score"`
 	Level          string          `json:"level"`
 	Body           Body            `json:"body"`
 	Composition    string          `json:"composition"`
@@ -30,16 +30,16 @@ type Report struct {
 type Profile struct {
 	Name              string `json:"name"`
 	Date              string `json:"date"`
-	Age               int    `json:"age"`
+	Age               FlexInt    `json:"age"`
 	Gender            string `json:"gender"`
-	Composition       int    `json:"composition"`
-	MuscleDevelopment int    `json:"muscle_development"`
-	Balance           int    `json:"balance"`
-	Potential         int    `json:"potential"`
-	CompositionAngle  int    `json:"-"`
-	MuscleAngle       int    `json:"-"`
-	BalanceAngle      int    `json:"-"`
-	PotentialAngle    int    `json:"-"`
+	Composition       FlexInt    `json:"composition"`
+	MuscleDevelopment FlexInt    `json:"muscle_development"`
+	Balance           FlexInt    `json:"balance"`
+	Potential         FlexInt    `json:"potential"`
+	CompositionAngle  FlexInt    `json:"-"`
+	MuscleAngle       FlexInt    `json:"-"`
+	BalanceAngle      FlexInt    `json:"-"`
+	PotentialAngle    FlexInt    `json:"-"`
 }
 
 type Category struct {
@@ -75,7 +75,7 @@ type Body struct {
 
 type Zone struct {
 	Name           string `json:"name"`
-	Score          int    `json:"score"`
+	Score          FlexInt    `json:"score"`
 	Status         string `json:"status"`
 	Description    string `json:"description"`
 	Recommendation string `json:"recommendation"`
@@ -138,12 +138,12 @@ type BodyScanReport struct {
 	Name      string `json:"name"`
 	Age       string `json:"age"`
 	Gender    string `json:"gender"`
-	Score     int    `json:"score"`
+	Score     FlexInt    `json:"score"`
 	Level     string `json:"level"`
 	Summary   string `json:"summary"`
-	Potential int    `json:"potential"`
+	Potential FlexInt    `json:"potential"`
 	// Gap - разрыв между текущим и потенциальным (вычисляется в Go).
-	Gap int `json:"gap"`
+	Gap FlexInt `json:"gap"`
 
 	// CoverMetrics - 5 ключевых метрик обложки.
 	CoverMetrics []BodyScanMetric `json:"cover_metrics"`
@@ -203,20 +203,20 @@ type BodyScanCard struct {
 // BodyScanZone - зона тела (плечи, пресс, ноги и т.п.).
 type BodyScanZone struct {
 	Name    string `json:"name"`
-	Score   int    `json:"score"`
+	Score   FlexInt    `json:"score"`
 	Status  string `json:"status"` // good, warning, critical
 	Comment string `json:"comment"`
 }
 
 // BodyScanPosture - осанка и баланс (7 осей для radar).
 type BodyScanPosture struct {
-	PostureScore    int    `json:"posture_score"`
-	Symmetry        int    `json:"symmetry"`
-	ShoulderBalance int    `json:"shoulder_balance"`
-	PelvicBalance   int    `json:"pelvic_balance"`
-	SpinalAlignment int    `json:"spinal_alignment"`
-	Mobility        int    `json:"mobility"`
-	Stability       int    `json:"stability"`
+	PostureScore    FlexInt    `json:"posture_score"`
+	Symmetry        FlexInt    `json:"symmetry"`
+	ShoulderBalance FlexInt    `json:"shoulder_balance"`
+	PelvicBalance   FlexInt    `json:"pelvic_balance"`
+	SpinalAlignment FlexInt    `json:"spinal_alignment"`
+	Mobility        FlexInt    `json:"mobility"`
+	Stability       FlexInt    `json:"stability"`
 	Narrative       string `json:"narrative"`
 }
 

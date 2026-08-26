@@ -57,7 +57,7 @@ Cloudflare error исчезает полностью, потому что это
       `https://<домен>/dashboard`.
 - [ ] `DB_PATH` указывает на персистентный том (данные SQLite переживают рестарт).
 - [ ] Роль `ai.languageModels.user` на каталог в Yandex Cloud (иначе YandexGPT —
-      403). Или используется Google/Gemini-ключ.
+      403).
 - [ ] YooKassa подключена отдельно (в этой сборке платёж — мок, как договорено).
 - [ ] `make build` проходит; `bin/analyzpro` запускается под systemd/supervisor
       с корректным `.env`.

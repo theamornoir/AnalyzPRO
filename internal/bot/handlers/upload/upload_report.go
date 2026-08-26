@@ -52,7 +52,7 @@ func renderAndSendReport(
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgUploadJSONError,
-			ReplyMarkup: keyboards.MainMenu(),
+			ReplyMarkup: keyboards.MainMenuInline(),
 		})
 		return
 	}
@@ -66,7 +66,7 @@ func renderAndSendReport(
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgUploadRenderError,
-			ReplyMarkup: keyboards.MainMenu(),
+			ReplyMarkup: keyboards.MainMenuInline(),
 		})
 		return
 	}
@@ -190,7 +190,7 @@ func renderAndSendDossier(
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgUploadJSONError,
-			ReplyMarkup: keyboards.MainMenu(),
+			ReplyMarkup: keyboards.MainMenuInline(),
 		})
 		return
 	}
@@ -204,7 +204,7 @@ func renderAndSendDossier(
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgUploadRenderError,
-			ReplyMarkup: keyboards.MainMenu(),
+			ReplyMarkup: keyboards.MainMenuInline(),
 		})
 		return
 	}

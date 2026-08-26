@@ -13,6 +13,13 @@ const (
 	StateIdle                State = "idle"
 	StateWaitingAnalysisFile State = "waiting_analysis_file"
 
+	// StateWaitingHealthAssessment - терминальное состояние опросника
+	// «Общая оценка здоровья»: собраны все ответы, маршрутизатор должен
+	// сгенерировать отчёт ИИ на основе ТОЛЬКО текста опросника (без шага
+	// загрузки файлов). Именно сюда переводит finishCollection для потока
+	// «extended» (теперь - Общая оценка здоровья).
+	StateWaitingHealthAssessment State = "waiting_health_assessment"
+
 	StateWaitingName               State = "waiting_name"
 	StateWaitingGender             State = "waiting_gender"
 	StateWaitingAge                State = "waiting_age"
@@ -33,6 +40,18 @@ const (
 	StateWaitingDigestion          State = "waiting_digestion"      // ЖКТ / пищеварение
 	StateWaitingSportType          State = "waiting_sport_type"
 	StateWaitingGoal               State = "waiting_goal"
+
+	// Новые вопросы «Общей оценки здоровья» (расширение опросника
+	// 20 -> 28 вопросов). Идут ПОСЛЕ цели (StateWaitingGoal) и до
+	// завершения сбора. Последний вопрос переводит в StateWaitingHealthAssessment.
+	StateWaitingEnergy         State = "waiting_energy"          // Уровень энергии
+	StateWaitingMood           State = "waiting_mood"            // Настроение / эмоц. состояние
+	StateWaitingWorkRegimen    State = "waiting_work_regimen"    // Режим работы / учёбы, сидячий образ жизни
+	StateWaitingScreenTime     State = "waiting_screen_time"     // Экранное время
+	StateWaitingMealRegularity State = "waiting_meal_regularity" // Регулярность питания
+	StateWaitingCaffeine       State = "waiting_caffeine"        // Кофеин
+	StateWaitingIllnessFreq    State = "waiting_illness_freq"    // Частота болезней / восстановление
+	StateWaitingPainAreas      State = "waiting_pain_areas"      // Боли / дискомфорт
 
 	StateWaitingBioscanName   State = "waiting_bioscan_name"
 	StateWaitingBioscanAge    State = "waiting_bioscan_age"
@@ -69,8 +88,18 @@ const (
 	StateWaitingBioscanPhoto4  State = "waiting_bioscan_photo4"
 	StateWaitingBioscanConfirm State = "waiting_bioscan_confirm"
 
-	// StateWaitingBioscanBasicPhoto - базовый (бесплатный) Bioscan: ожидание
-	// одного фото пользователя (без вопросника и без PDF).
+	// StateWaitingBioscanBasicQ - базовый (бесплатный) Bioscan: мини-
+	// опросник (пол, возраст, рост, вес, цель, тренировки), который идёт
+	// ПОСЛЕ приёма фото. Текстовая модель YandexGPT не «видит» фото фигуры,
+	// поэтому отчёт строится по замерам из опросника + OCR-тексту с фото,
+	// а не только по фото.
+	StateWaitingBioscanBasicQ State = "waiting_bioscan_basic_q"
+
+	// StateWaitingBioscanBasicPhoto - базовый (бесплатный) Bioscan: первый
+	// шаг - приём фото пользователя (фигура целиком ИЛИ скриншот показателей
+	// умных весов/фитнес-приложения). Фото сохраняется (FileID), затем
+	// запускается мини-опросник. OCR достаёт текст с экранов весов, а
+	// опросник даёт модели реальные замеры для отчёта.
 	StateWaitingBioscanBasicPhoto State = "waiting_bioscan_basic_photo"
 
 	StateWaitingUploadConfirm State = "waiting_upload_confirm"
@@ -83,6 +112,14 @@ const (
 	// следующее сообщение пользователя (текстовый вопрос или фото травмы)
 	// отправляется ИИ для генерации консультации с рекомендациями.
 	StateWaitingConsultation State = "waiting_consultation"
+
+	// StateWaitingConsultationFinish - режим «финиш консультации»: ответ
+	// ИИ уже получен и показан пользователю. Внизу висит ТОЛЬКО
+	// reply-клавиатура «Закончить консультацию» (+ «Задать ещё вопрос») -
+	// общего главного меню в этот момент НЕТ. Выйти из флоу можно ТОЛЬКО по
+	// кнопке «Закончить консультацию» (иначе меню «прыгает» и дублируется).
+	// Любые прочие сообщения/кнопки в этом состоянии игнорируются.
+	StateWaitingConsultationFinish State = "waiting_consultation_finish"
 )
 
 type StateManager interface {

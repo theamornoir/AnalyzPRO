@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/dashboard"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/router"
+	"github.com/theamornoir/analyzpro/internal/bot/httpratelimit"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/ratelimit"
 	"github.com/theamornoir/analyzpro/internal/bot/reminders"
@@ -65,6 +67,12 @@ type Bot struct {
 	// одного пользователя множеством фото/документов/сообщений, которые
 	// иначе породили бы неограниченное число горутин и очередь ИИ-запросов.
 	rateLimiter *ratelimit.Limiter
+	// premiumLink - глубокая ссылка на экран Premium бота
+	// (https://t.me/<username>?start=premium), по которой Mini App
+	// «Мой профиль» открывает подписку по клику на апселл. Авто-выводится
+	// из username бота (GetMe), либо задаётся вручную через
+	// env WEBAPP_PREMIUM_LINK.
+	premiumLink string
 }
 
 func New(
@@ -101,6 +109,23 @@ func New(
 		return nil, err
 	}
 
+	// Узнаём username бота, чтобы построить глубокую ссылку на экран
+	// Premium (открывается из Mini App «Мой профиль» по клику на апселл).
+	// Ссылка приоритетно берётся из env WEBAPP_PREMIUM_LINK (если задана
+	// вручную, например для кастомного домена/борда), иначе
+	// авто-выводится как https://t.me/<username>?start=premium. Это
+	// устраняет баг, когда premiumLink был пустым (env не задан) и клик
+	// «Открыть всю историю / Оформить» не вёл в Premium, а лишь
+	// показывал текст-подсказку.
+	botUsername := ""
+	if me, gerr := client.GetMe(context.Background()); gerr == nil && me != nil {
+		botUsername = me.Username
+	}
+	premiumLink := strings.TrimSpace(os.Getenv("WEBAPP_PREMIUM_LINK"))
+	if premiumLink == "" && botUsername != "" {
+		premiumLink = "https://t.me/" + botUsername + "?start=premium"
+	}
+
 	botInstance := &Bot{
 		client:            client,
 		stateManager:      stateManager,
@@ -117,6 +142,7 @@ func New(
 		dashboardURL:      dashboardURL,
 		httpAddr:          httpAddr,
 		botToken:          token,
+		premiumLink:       premiumLink,
 		monitorRepo:       monitorRepo,
 		monitorSvc:        monitoring.NewService(monitorRepo),
 		appEnv:            appEnv,
@@ -183,6 +209,19 @@ func (b *Bot) Start(ctx context.Context) {
 
 	go func() {
 		mux := http.NewServeMux()
+		apiLimiter := httpratelimit.New(120, time.Minute)
+		go func() {
+			ticker := time.NewTicker(time.Minute)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					apiLimiter.Cleanup()
+				}
+			}
+		}()
 		mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
@@ -235,9 +274,9 @@ func (b *Bot) Start(ctx context.Context) {
 		mux.HandleFunc("/monitoring/", monitoring.ServeWebApp)
 		mux.HandleFunc("/api/monitoring/", monitoring.NewAPIHandler(b.monitorSvc, b.botToken, func(id int64) bool {
 			return b.paymentService.IsPremium(id)
-		}).Handler())
+		}, b.premiumLink).Handler())
 
-		srv := &http.Server{Addr: listenAddr, Handler: mux}
+		srv := &http.Server{Addr: listenAddr, Handler: apiLimiter.Middleware(mux)}
 		go func() {
 			<-ctx.Done()
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

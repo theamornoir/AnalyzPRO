@@ -45,6 +45,14 @@ type Service struct {
 	sendFn func(ctx context.Context, chatID int64, text string) bool
 }
 
+// driverOrDefault возвращает "sqlite" если драйвер не задан.
+func driverOrDefault(d []string) string {
+	if len(d) > 0 && d[0] != "" {
+		return d[0]
+	}
+	return "sqlite"
+}
+
 // NewService создаёт сервис уведомлений. botClient может быть задан позже
 // через SetBotClient (он создаётся в app.go после бота, поэтому на момент
 // NewService его ещё может не быть).
@@ -54,10 +62,11 @@ func NewService(
 	pay *payment.PaymentService,
 	monitorRepo monitoring.Repository,
 	isDev bool,
+	driver ...string,
 ) *Service {
 	return &Service{
 		db:          db,
-		repo:        newRepo(db),
+		repo:        newRepo(db, driverOrDefault(driver)),
 		store:       store,
 		payment:     pay,
 		monitorRepo: monitorRepo,
@@ -1045,6 +1054,18 @@ func (s *Service) SendAnalyticsTest(ctx context.Context, chatID int64) (int, err
 	}
 	cancel()
 	return sent, nil
+}
+
+// DeleteUser полностью удаляет данные уведомлений пользователя
+// (использованные промокоды, логи напоминаний о подписке, подавления
+// уведомлений об отклонениях). Используется функцией «Удалить аккаунт» -
+// необратимо. Сами профили/анализы удаляются хранилищем и модулем
+// мониторинга.
+func (s *Service) DeleteUser(ctx context.Context, telegramID int64) error {
+	if s.repo == nil {
+		return fmt.Errorf("notifications repo not initialized")
+	}
+	return s.repo.deleteByUser(ctx, telegramID)
 }
 
 // DryRunMessage формирует текст предпросмотра проверки анализов из списка

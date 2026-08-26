@@ -18,8 +18,11 @@ func (c *UserDataCollector) HandleSportType(ctx context.Context, b *tgbot.Bot, c
 	c.SendStep(ctx, b, chatID, states.StateWaitingGoal, locales.MsgUserGoal)
 }
 
-// HandleGoal - обрабатывает цель и завершает сбор (20 вопросов).
+// HandleGoal - обрабатывает цель и переводит на первый из новых вопросов
+// «Общей оценки здоровья» (расширение опросника 20 -> 28 вопросов).
 func (c *UserDataCollector) HandleGoal(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
 	c.stateManager.SetUserData(chatID, "goal", strings.TrimSpace(text))
-	c.finishCollection(ctx, b, chatID)
+	c.stateManager.SetState(chatID, states.StateWaitingEnergy)
+
+	c.SendStep(ctx, b, chatID, states.StateWaitingEnergy, locales.MsgUserEnergy)
 }

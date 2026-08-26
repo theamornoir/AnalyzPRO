@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"strings"
 
@@ -92,7 +91,7 @@ func MessageRouter(
 		notifSvc:         notifSvcPtr,
 		webAppURL:        webAppURL,
 		dashboardURL:     dashboardURL,
-		appEnv:          appEnv,
+		appEnv:           appEnv,
 	}
 
 	return r.handle
@@ -211,6 +210,17 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 		return
 	}
 
+	// Режим «финиш консультации»: ответ ИИ уже показан, внизу висит ТОЛЬКО
+	// reply-клавиатура «Закончить консультацию» (+ «Задать ещё вопрос»).
+	// Любые прочие сообщения/кнопки игнорируются - выйти из флоу можно
+	// ТОЛЬКО по «Закончить консультацию», чтобы меню не «прыгало» и не
+	// дублировалось. Перехват идёт ДО прочих состояний.
+	if r.stateManager.GetState(chatID) == states.StateWaitingConsultationFinish {
+		if r.handleConsultationFinish(ctx, b, chatID, text, update) {
+			return
+		}
+	}
+
 	// Режим «Быстрая консультация (с ИИ)»: перехватываем ЛЮБОЕ сообщение
 	// пользователя (текстовый вопрос или фото), чтобы отправить его ИИ.
 	// Перехват идёт ДО режима отзыва и ДО обычной загрузки файлов (иначе
@@ -218,7 +228,14 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 	// меню во время консультации выходит из режима и навигирует как обычно.
 	if r.stateManager.GetState(chatID) == states.StateWaitingConsultation {
 		if text != "" && r.isMainMenuButton(text) {
+			// Выход из режима консультации И навигация по самой кнопке
+			// главного меню (иначе пользователю приходилось нажимать
+			// её дважды: первый раз только сбрасывал состояние).
 			r.stateManager.SetState(chatID, states.StateIdle)
+			if r.handleMenuButtons(ctx, b, chatID, text, update) {
+				r.deleteUserMessageAfterReply(ctx, b, update)
+				return
+			}
 		} else if r.handleConsultationMessage(ctx, b, chatID, text, update) {
 			return
 		}
@@ -233,7 +250,14 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 	// «залипло» бы в режиме ввода).
 	if r.stateManager.GetState(chatID) == states.StateWaitingFeedback {
 		if text != "" && r.isMainMenuButton(text) {
+			// Выход из режима отзыва И навигация по самой кнопке
+			// главного меню (иначе пользователю приходилось нажимать
+			// её дважды: первый раз только сбрасывал состояние).
 			r.stateManager.SetState(chatID, states.StateIdle)
+			if r.handleMenuButtons(ctx, b, chatID, text, update) {
+				r.deleteUserMessageAfterReply(ctx, b, update)
+				return
+			}
 		} else if r.handleFeedbackMessage(ctx, b, chatID, text, update) {
 			return
 		}
@@ -276,6 +300,12 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 
 	// Обработка состояний опросника
 	if r.handleQuestionnaireStates(ctx, b, chatID, text) {
+		// Если последний вопрос завершил сбор и перевёл состояние в
+		// терминальное StateWaitingHealthAssessment («Общая оценка
+		// здоровья») - сразу генерируем отчёт по тексту опросника.
+		if r.stateManager.GetState(chatID) == states.StateWaitingHealthAssessment {
+			r.handleHealthAssessment(ctx, b, chatID)
+		}
 		return
 	}
 
@@ -340,15 +370,36 @@ func (r *router) deleteCallbackMessageAfterReply(ctx context.Context, b *tgbot.B
 	helpers.DeleteAfterReply(ctx, b, cq.From.ID, m.ID)
 }
 
-// isHubTabSwitch - true для inline-кнопок переключения вкладок раздела-хаба
-// (Анализы/Здоровье/Сервис). Эти хендлеры РЕДАКТИРУЮТ исходное сообщение на
-// месте (renderHub → editHubPair), поэтому его нельзя удалять по глобальному
-// правилу «кнопка/выбор удаляется после ответа» - иначе исчезнет сам ответ.
-// Все прочие inline-нажатия отправляют НОВОЕ сообщение, и их исходное
-// сообщение с клавиатурой должно быть убрано.
-func isHubTabSwitch(callbackData string) bool {
-	switch callbackData {
-	case "section_analysis", "section_health", "section_service":
+// isNavDelete - true для inline-нажатий, после которых исходное сообщение
+// (с клавиатурой) ДОЛЖНО быть удалено по глобальному правилу «кнопка/выбор
+// удаляется после ответа». Сюда относятся экраны, которые ШЛЮТ НОВОЕ
+// сообщение (или свой набор сообщений) вместо редактирования текущего:
+// Premium (свой якорь + список тарифов/оплата), онбординг (свои шаги),
+// запуск потоков (загрузка/биоскан/подтверждение) и экран подтверждения
+// удаления аккаунта.
+//
+// ВСЕ ПРОЧИЕ навигационные нажатия (вход в хаб, выбор под-действия, «Назад»)
+// РЕДАКТИРУЮТ ОДНО и то же навигационное сообщение «на месте»
+// (editNavMessage / renderHub / showMainMenuMessage) и НЕ удаляются - чтобы
+// меню «перерисовывалось» в одном сообщении без мусора в чате.
+func isNavDelete(callbackData string) bool {
+	switch {
+	case strings.HasPrefix(callbackData, "premium_"),
+		strings.HasPrefix(callbackData, "premium_confirm_"),
+		callbackData == "premium_change",
+		strings.HasPrefix(callbackData, "onboarding_"),
+		callbackData == "upload_process",
+		callbackData == "upload_cancel",
+		callbackData == "bioscan_confirm",
+		callbackData == "bioscan_restart",
+		callbackData == "bioscan_basic_gender_m",
+		callbackData == "bioscan_basic_gender_f",
+		callbackData == "bioscan_basic_goal_mass",
+		callbackData == "bioscan_basic_goal_cut",
+		callbackData == "bioscan_basic_goal_keep",
+		callbackData == "bioscan_basic_goal_endure",
+		callbackData == "bioscan_basic_goal_flex",
+		callbackData == "delete_account_confirm":
 		return true
 	}
 	return false
@@ -371,7 +422,7 @@ func (r *router) handleOnboarding(ctx context.Context, b *tgbot.Bot, chatID int6
 
 	switch {
 	case callbackData == "onboarding_agreement":
-		// Шаг 4 → соглашение.
+		// 1-е сообщение (интро) → 2-е сообщение (согласие со ссылкой).
 		onboarding.SendAgreement(ctx, b, chatID)
 	case callbackData == "onboarding_accept":
 		// Финал: фиксируем соглашение + онбординг, показываем главное меню.
@@ -380,20 +431,12 @@ func (r *router) handleOnboarding(ctx context.Context, b *tgbot.Bot, chatID int6
 			_ = r.appStorage.SetOnboardingCompleted(ctx, chatID, true)
 		}
 		r.stateManager.SetState(chatID, states.StateIdle)
-		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        locales.MsgOnboardingDone,
-			ReplyMarkup: keyboards.MainMenu(),
-			ParseMode:   "Markdown",
-		})
-	default:
-		// Переход к следующему шагу: onboarding_step_N (N от 2 до 4).
-		var nextStep int
-		if _, err := fmt.Sscanf(callbackData, "onboarding_step_%d", &nextStep); err == nil {
-			if nextStep >= 2 && nextStep <= len(onboarding.Steps) {
-				onboarding.SendStep(ctx, b, chatID, nextStep)
-			}
-		}
+		// Главное меню - ТОЛЬКО inline (edit-in-place), без reply-
+		// клавиатуры: чтобы навигация была единообразной со всем приложением
+		// и не плодила «меню в реплай плюс меню в инлайн». navMsgID/уровень
+		// выставляются в showMainMenuMessage, дальше «Назад»/разделы
+		// перерисовывают это же сообщение на месте.
+		r.showMainMenuMessage(ctx, b, chatID, locales.MsgOnboardingDone)
 	}
 
 	_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
@@ -418,7 +461,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// service): эти хендлеры РЕДАКТИРУЮТ то же сообщение на месте
 	// (renderHub → editHubPair), поэтому удалять его нельзя - иначе
 	// исчезнет сам ответ.
-	if !isHubTabSwitch(callbackData) {
+	if isNavDelete(callbackData) {
 		r.deleteCallbackMessageAfterReply(ctx, b, update)
 	}
 
@@ -465,6 +508,22 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		return
 	}
 
+	// Premium из inline-главного меню (кнопка «💎 Premium»). Должен быть ДО
+	// проверки префикса «premium_», иначе «premium_open» попал бы в выбор
+	// тарифа и не находил тариф "open". Экран Premium использует собственные
+	// сообщения (якорь + список), поэтому навигационное сообщение главного
+	// меню удаляется общим правилом (premium_open входит в isNavDelete).
+	if callbackData == "premium_open" {
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "premium_open")
+		r.deleteMainMenuMessage(ctx, b, chatID)
+		r.setCurrentSection(chatID, "premium")
+		menu.PremiumHandler(r.stateManager, r.paymentService)(ctx, b, update)
+		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
+		return
+	}
+
 	// Premium callback (выбор тарифа → экран оплаты)
 	if strings.HasPrefix(callbackData, "premium_") {
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "premium")
@@ -484,10 +543,8 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	if callbackData == "hub_back" || callbackData == "msg_back" || callbackData == "test_notify_back" {
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, callbackData)
 
-		// Удаляем именно это сообщение (id сообщения под-действия).
-		if mm := update.CallbackQuery.Message; mm.Message != nil {
-			helpers.DeleteMessage(ctx, b, chatID, mm.Message.ID)
-		}
+		// Сообщение под-действия НЕ удаляем: backToParent редактирует его
+		// «на месте» в хаб раздела (edit-in-place навигации).
 		r.backToParent(ctx, b, chatID)
 
 		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
@@ -500,9 +557,8 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// само сообщение и возвращаем пользователя в Главное меню.
 	if callbackData == "back_to_main" {
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "back_to_main")
-		if mm := update.CallbackQuery.Message; mm.Message != nil {
-			helpers.DeleteMessage(ctx, b, chatID, mm.Message.ID)
-		}
+		// Сообщение хаба НЕ удаляем: showMainMenuMessage редактирует его
+		// «на месте» в Главное меню (edit-in-place навигации).
 		r.stateManager.SetState(chatID, states.StateIdle)
 		r.showMainMenuMessage(ctx, b, chatID, locales.MsgBackToMainMenu)
 		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
@@ -515,6 +571,25 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// «Сервис»). Диспетчеризуем на существующие обработчики; сам
 	// callback-запрос отвечается в конце функции (спиннер кнопки).
 	switch callbackData {
+	// «Назад» внутри опросника расширенного анализа: возврат к
+	// предыдущему вопросу (без сброса собранных данных). Inline-аналог
+	// бывшей reply-кнопки «Назад» - навигация остаётся ТОЛЬКО инлайн.
+	case "questionnaire_back":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "questionnaire_back")
+		r.backQuestionnaire(ctx, b, chatID, r.stateManager.GetState(chatID))
+		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
+		return
+	// «Назад» внутри опросника Bioscan PRO / вопросов Bioscan: возврат к
+	// предыдущему вопросу. Inline-аналог бывшей reply-кнопки «Назад».
+	case "bioscan_question_back":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_question_back")
+		r.backBioscanQuestionnaire(ctx, b, chatID, r.stateManager.GetState(chatID))
+		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
+		return
 	case "section_analysis":
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_analysis")
 		r.renderHub(ctx, b, chatID, "analysis")
@@ -562,10 +637,29 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		r.handleFeedbackStart(ctx, b, chatID)
 	case "section_about":
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_about")
-		// Выбрано под-действие - убираем блок-хаб.
-		r.deleteHubBlock(ctx, b, chatID)
+		// Экран «О сервисе» редактирует навигационное сообщение «на месте»
+		// (edit-in-place); кнопка «Назад» (back_to_main) вернёт в Главное меню.
 		r.setCurrentSection(chatID, "service")
-		menu.AboutHandler()(ctx, b, update)
+		r.editNavMessage(ctx, b, chatID, locales.MsgAboutText, keyboards.BackInline())
+	case "section_delete_account":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_delete_account")
+		r.handleDeleteAccountStart(ctx, b, chatID)
+	case "delete_account_confirm":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "delete_account_confirm")
+		r.handleDeleteAccountConfirm(ctx, b, chatID)
+	case "delete_account_cancel":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "delete_account_cancel")
+		r.handleDeleteAccountCancel(ctx, b, chatID)
+
+	case "cancel_flow":
+		// «Отмена» с экрана под-действия (intro-экран флоу): сбрасываем
+		// состояние и возвращаемся в хаб текущего раздела. Сообщение
+		// редактируется «на месте» (навигационное, не удаляется).
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "cancel_flow")
+		r.stateManager.SetState(chatID, states.StateIdle)
+		r.stateManager.SetUserData(chatID, "analysis_type", "")
+		r.stateManager.SetUserData(chatID, "analysis_subtype", "")
+		r.backToParent(ctx, b, chatID)
 
 	// Под-меню теста уведомлений (раздел «Сервис» → 🧪 Тест уведомлений,
 	// только в development): вывод меню и планирование тестовых
@@ -592,6 +686,29 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	case "test_analytics_send":
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "test_analytics_send")
 		r.handleTestNotifyAction(ctx, b, chatID, "analytics_send")
+
+	// Базовый Bioscan: выбор пола и цели в мини-опроснике (inline-кнопки).
+	case "bioscan_basic_gender_m":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_basic_gender")
+		bioscan.HandleBioscanBasicGender(ctx, b, r.stateManager, chatID, "Мужской")
+	case "bioscan_basic_gender_f":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_basic_gender")
+		bioscan.HandleBioscanBasicGender(ctx, b, r.stateManager, chatID, "Женский")
+	case "bioscan_basic_goal_mass":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_basic_goal")
+		bioscan.HandleBioscanBasicGoal(ctx, b, r.stateManager, chatID, locales.BtnBioscanBasicGoalMass)
+	case "bioscan_basic_goal_cut":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_basic_goal")
+		bioscan.HandleBioscanBasicGoal(ctx, b, r.stateManager, chatID, locales.BtnBioscanBasicGoalCut)
+	case "bioscan_basic_goal_keep":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_basic_goal")
+		bioscan.HandleBioscanBasicGoal(ctx, b, r.stateManager, chatID, locales.BtnBioscanBasicGoalKeep)
+	case "bioscan_basic_goal_endure":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_basic_goal")
+		bioscan.HandleBioscanBasicGoal(ctx, b, r.stateManager, chatID, locales.BtnBioscanBasicGoalEndure)
+	case "bioscan_basic_goal_flex":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_basic_goal")
+		bioscan.HandleBioscanBasicGoal(ctx, b, r.stateManager, chatID, locales.BtnBioscanBasicGoalFlex)
 
 	// Подтверждение загрузки файлов (inline-кнопки «Обработать/Отмена»).
 	case "upload_process":

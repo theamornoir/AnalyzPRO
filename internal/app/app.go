@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/theamornoir/analyzpro/internal/ai/gemini"
+	"github.com/theamornoir/analyzpro/internal/ai/yandexgpt"
 	"github.com/theamornoir/analyzpro/internal/analytics"
 	"github.com/theamornoir/analyzpro/internal/bot"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/upload"
@@ -56,45 +56,33 @@ func New() (*App, error) {
 	// Единая реляционная БД (SQLite по умолчанию, см. internal/db). Хранит
 	// профили/диагнозы/курсы/предпочтения И историю мониторинга. Создаётся и
 	// мигрируется при старте; данные переживают перезапуск бота.
-	dbConn, err := db.Open(cfg.DBPath)
+	dbConn, err := db.OpenConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("не удалось открыть БД: %w", err)
 	}
-	if err := db.Migrate(dbConn); err != nil {
+	if err := db.Migrate(dbConn, cfg.DBDriver); err != nil {
 		return nil, fmt.Errorf("не удалось применить миграции БД: %w", err)
 	}
-	log.Printf(locales.LogDBInitialized, cfg.DBPath)
+	log.Printf(locales.LogDBInitialized, cfg.DBDriver+":"+cfg.DBPath)
 
 	stateManager := states.NewMemoryStateManager("./data/states.json")
 
-	// Единый мультимодальный Gemini-клиент (все файлы в одном запросе).
+	// Единый текстовый YandexGPT-клиент (файлы/фото предварительно
+	// распознаются через Yandex Vision OCR, текст передаётся модели).
 	// Конфигурация полностью из env (через config.Config) - клиент сам не
 	// читает env и не логирует внутри (чистые функции).
-	aiClient, err := gemini.NewClient(gemini.Config{
-		APIKey:         cfg.GeminiAPIKey,
-		Model:          cfg.GeminiModel,
-		Proxy:          cfg.GeminiProxy,
-		APIBase:        cfg.GeminiAPIBase,
-		MaxConcurrency: cfg.GeminiMaxConcurrency,
-		Timeout:        gemini.DefaultTimeout,
+	aiClient, err := yandexgpt.NewClient(yandexgpt.Config{
+		APIKey:         cfg.YandexAPIKey,
+		FolderID:       cfg.YandexFolderID,
+		Model:          cfg.YandexModel,
+		MaxConcurrency: cfg.YandexMaxConcurrency,
+		Timeout:        yandexgpt.DefaultTimeout,
 	})
 	if err != nil {
-		// Не удалось настроить прокси - логируем и создаём клиента без
-		// прокси (запросы пойдут через системный прокси/напрямую).
-		log.Printf(locales.LogGeminiProxyError, cfg.GeminiProxy, err)
-		aiClient, err = gemini.NewClient(gemini.Config{
-			APIKey:         cfg.GeminiAPIKey,
-			Model:          cfg.GeminiModel,
-			APIBase:        cfg.GeminiAPIBase,
-			MaxConcurrency: cfg.GeminiMaxConcurrency,
-			Timeout:        gemini.DefaultTimeout,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("не удалось создать Gemini-клиент: %w", err)
-		}
+		return nil, fmt.Errorf("не удалось создать YandexGPT-клиент: %w", err)
 	}
-	if cfg.GeminiAPIKey == "" {
-		log.Printf(locales.LogGeminiKeyNotSet)
+	if cfg.YandexAPIKey == "" {
+		log.Printf(locales.LogYandexKeyNotSet)
 	}
 
 	// HTML Renderer для отчётов
@@ -119,14 +107,14 @@ func New() (*App, error) {
 		appStorage = storage.NewMockStorage()
 		log.Printf(locales.LogUsingMockStorage)
 	} else {
-		appStorage = storage.NewSQLStorage(dbConn)
+		appStorage = storage.NewSQLStorage(dbConn, cfg.DBDriver)
 		log.Printf(locales.LogSQLStorageInit,
 			appStorage.Users, appStorage.Diagnoses, appStorage.Cycles, appStorage.Preferences)
 	}
 
 	// Репозиторий модуля Мониторинг (проекты + история) поверх той же БД.
 	// История анализов/биосканов сохраняется между перезапусками бота.
-	monitorRepo := monitoring_sqlrepo.New(dbConn)
+	monitorRepo := monitoring_sqlrepo.New(dbConn, cfg.DBDriver)
 
 	// Сервис платежей (YooKassa). Состояние Premium дублируется в БД
 	// (источник истины, переживает перезапуск) - передаём usersRepo.
@@ -151,7 +139,7 @@ func New() (*App, error) {
 	// bot-клиент задаётся позже (bot.New создаётся ниже), поэтому здесь
 	// передаём без него - он устанавливается через SetBotClient сразу
 	// после создания бота.
-	notifService := notifications.NewService(dbConn, appStorage, paymentService, monitorRepo, cfg.AppEnv == "development")
+	notifService := notifications.NewService(dbConn, appStorage, paymentService, monitorRepo, cfg.AppEnv == "development", cfg.DBDriver)
 
 	// Слой аналитики (события: старт, анализ, премиум, ошибки). Персистентный
 	// JSONL-файл (ANALYTICS_PATH).
@@ -202,7 +190,7 @@ func New() (*App, error) {
 	log.Printf(locales.LogAppInitialized)
 	log.Printf(locales.LogConfiguration)
 	log.Printf(locales.LogAppEnv, cfg.AppEnv)
-	log.Printf(locales.LogGeminiModel, cfg.GeminiModel)
+	log.Printf(locales.LogYandexModel, cfg.YandexModel)
 	log.Printf(locales.LogUploadDir, cfg.UploadDir)
 	log.Printf(locales.LogMockMode, useMock)
 	log.Printf(locales.LogAdminChatID, cfg.AdminChatID)

@@ -5,6 +5,7 @@ import (
 	"log"
 
 	tgbot "github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
@@ -22,11 +23,18 @@ func (r *router) handleAgreement(ctx context.Context, b *tgbot.Bot, chatID int64
 	switch text {
 	case locales.BtnAgreement:
 		log.Printf(locales.LogShowingAgreementText)
+		// Текст соглашения + инлайн-кнопка «Принять» (onboarding_accept).
+		// Reply-клавиатуру НЕ используем - навигация только инлайн, чтобы
+		// не плодить «меню в реплай плюс меню в инлайн» (см. общий дизайн).
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        keyboards.UserAgreementText(),
-			ReplyMarkup: keyboards.AgreementMenu(),
-			ParseMode:   "Markdown",
+			ChatID: chatID,
+			Text:   keyboards.UserAgreementText(),
+			ReplyMarkup: models.InlineKeyboardMarkup{
+				InlineKeyboard: [][]models.InlineKeyboardButton{
+					{{Text: locales.BtnAcceptAgreement, CallbackData: "onboarding_accept"}},
+				},
+			},
+			ParseMode: "Markdown",
 		})
 		return true
 
@@ -35,12 +43,17 @@ func (r *router) handleAgreement(ctx context.Context, b *tgbot.Bot, chatID int64
 		r.agreementStorage.SetAgreed(chatID)
 		r.stateManager.SetState(chatID, states.StateIdle)
 
+		// Снимаем висящую reply-клавиатуру (могла остаться от AgreementMenu),
+		// чтобы навигация была ТОЛЬКО inline - без «меню в реплай плюс меню
+		// в инлайн». ReplyKeyboardRemove убирает клавиатуру, а главное меню
+		// показываем inline (edit-in-place), как после онбординга.
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgAgreementAccepted,
-			ReplyMarkup: keyboards.MainMenu(),
+			ReplyMarkup: models.ReplyKeyboardRemove{RemoveKeyboard: true},
 			ParseMode:   "Markdown",
 		})
+		r.showMainMenuMessage(ctx, b, chatID, locales.MsgStartWelcomeBack)
 		return true
 	}
 
@@ -49,7 +62,7 @@ func (r *router) handleAgreement(ctx context.Context, b *tgbot.Bot, chatID int64
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgAgreementPrompt,
-			ReplyMarkup: keyboards.StartMenu(),
+			ReplyMarkup: models.ReplyKeyboardRemove{RemoveKeyboard: true},
 			ParseMode:   "Markdown",
 		})
 		return true

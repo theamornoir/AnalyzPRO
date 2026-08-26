@@ -173,7 +173,7 @@ func TestAPIHandler(t *testing.T) {
 	repo := NewMockRepository()
 	svc := NewService(repo)
 	botToken := "TEST_BOT_TOKEN"
-	h := NewAPIHandler(svc, botToken, func(int64) bool { return true }).Handler()
+	h := NewAPIHandler(svc, botToken, func(int64) bool { return true }, "").Handler()
 
 	initData := buildInitData(botToken, 111)
 	authHeader := func(req *http.Request) { req.Header.Set("X-Telegram-Init-Data", initData) }
@@ -327,7 +327,7 @@ func TestAPIHandlerFreeGate(t *testing.T) {
 	svc := NewService(repo)
 	botToken := "TEST_BOT_TOKEN"
 	// Free-пользователь: premiumCheck всегда false.
-	h := NewAPIHandler(svc, botToken, func(int64) bool { return false }).Handler()
+	h := NewAPIHandler(svc, botToken, func(int64) bool { return false }, "").Handler()
 	initData := buildInitData(botToken, 111)
 	authHeader := func(req *http.Request) { req.Header.Set("X-Telegram-Init-Data", initData) }
 

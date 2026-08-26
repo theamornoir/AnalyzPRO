@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"html"
 	"html/template"
 	"math"
 	"strings"
@@ -91,7 +92,7 @@ const donutCirc = 502.65
 
 // donutDash возвращает stroke-dasharray для доната по оценке 0-100:
 // "заполнено остаток" в координатах длины окружности.
-func donutDash(score int) string {
+func donutDash(score models.FlexInt) string {
 	if score < 0 {
 		score = 0
 	}
@@ -155,8 +156,10 @@ func nl2p(s string) template.HTML {
 		if p == "" {
 			continue
 		}
-		// Внутри абзаца сохраняем одиночные переносы строк.
-		withBreaks := strings.ReplaceAll(p, "\n", "<br>")
+		// Экранируем текст (приходит из ИИ, возможна prompt-injection):
+		// template.HTML - выход из autoescape, поэтому экранируем явно, затем <br>.
+		escaped := html.EscapeString(p)
+		withBreaks := strings.ReplaceAll(escaped, "\n", "<br>")
 		sb.WriteString("<p>")
 		sb.WriteString(withBreaks)
 		sb.WriteString("</p>")
@@ -173,6 +176,8 @@ func zoneDonuts(zones []models.BodyScanZone) template.HTML {
 	}
 	const r = 28.0
 	circ := 2 * math.Pi * r
+	// Имя зоны приходит из ИИ - экранируем перед вставкой.
+	safeName := func(z models.BodyScanZone) string { return html.EscapeString(z.Name) }
 	var sb strings.Builder
 	sb.WriteString(`<div class="zdonut-grid">`)
 	for _, z := range zones {
@@ -186,12 +191,12 @@ func zoneDonuts(zones []models.BodyScanZone) template.HTML {
 		filled := float64(score) / 100 * circ
 		color := bodyStatusColor(z.Status)
 		sb.WriteString(`<div class="zdonut">`)
-		sb.WriteString(fmt.Sprintf(`<svg viewBox="0 0 72 72" width="72" height="72" role="img" aria-label="%s">`, z.Name))
+		sb.WriteString(fmt.Sprintf(`<svg viewBox="0 0 72 72" width="72" height="72" role="img" aria-label="%s">`, safeName(z)))
 		sb.WriteString(fmt.Sprintf(`<circle cx="36" cy="36" r="%.1f" fill="none" stroke="#E4EDEC" stroke-width="7"/>`, r))
 		sb.WriteString(fmt.Sprintf(`<circle cx="36" cy="36" r="%.1f" fill="none" stroke="%s" stroke-width="7" stroke-linecap="round" stroke-dasharray="%.2f %.2f" transform="rotate(-90 36 36)"/>`, r, color, filled, circ-filled))
 		sb.WriteString(fmt.Sprintf(`<text x="36" y="41" text-anchor="middle" font-size="18" font-weight="700" fill="#102F35">%d</text>`, score))
 		sb.WriteString(`</svg>`)
-		sb.WriteString(fmt.Sprintf(`<div class="zdonut-label">%s</div>`, z.Name))
+		sb.WriteString(fmt.Sprintf(`<div class="zdonut-label">%s</div>`, safeName(z)))
 		sb.WriteString(`</div>`)
 	}
 	sb.WriteString(`</div>`)
@@ -205,13 +210,13 @@ func postureRadar(p models.BodyScanPosture) template.HTML {
 		label string
 		value int
 	}{
-		{locales.RptMsgPdfPosture, p.PostureScore},
-		{locales.RptMsgRadarAxisSymmetry, p.Symmetry},
-		{locales.RptMsgRadarAxisShoulders, p.ShoulderBalance},
-		{locales.RptMsgRadarAxisPelvis, p.PelvicBalance},
-		{locales.RptMsgRadarAxisSpine, p.SpinalAlignment},
-		{locales.RptMsgRadarAxisMobility, p.Mobility},
-		{locales.RptMsgRadarAxisStability, p.Stability},
+		{locales.RptMsgPdfPosture, int(p.PostureScore)},
+		{locales.RptMsgRadarAxisSymmetry, int(p.Symmetry)},
+		{locales.RptMsgRadarAxisShoulders, int(p.ShoulderBalance)},
+		{locales.RptMsgRadarAxisPelvis, int(p.PelvicBalance)},
+		{locales.RptMsgRadarAxisSpine, int(p.SpinalAlignment)},
+		{locales.RptMsgRadarAxisMobility, int(p.Mobility)},
+		{locales.RptMsgRadarAxisStability, int(p.Stability)},
 	}
 	const size = 230
 	cx, cy, R := float64(size)/2, float64(size)/2, 88.0
@@ -341,7 +346,7 @@ func NewRenderer() (*Renderer, error) {
 				return ""
 			}
 		},
-		"scoreColor": func(score int) string {
+		"scoreColor": func(score models.FlexInt) string {
 			if score >= 80 {
 				return "#4CAF50"
 			} else if score >= 60 {

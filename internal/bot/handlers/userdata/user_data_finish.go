@@ -15,8 +15,6 @@ import (
 
 // finishCollection - завершает сбор данных.
 func (c *UserDataCollector) finishCollection(ctx context.Context, b *tgbot.Bot, chatID int64) {
-	c.stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
-
 	// Показываем собранные данные
 	userData := c.stateManager.GetAllUserData(chatID)
 	summary := formatUserData(userData)
@@ -26,10 +24,27 @@ func (c *UserDataCollector) finishCollection(ctx context.Context, b *tgbot.Bot, 
 		name = locales.MsgUserDefaultName
 	}
 
+	// «Общая оценка здоровья» (бывший расширенный анализ): самодостаточный
+	// блок БЕЗ загрузки файлов. Все ответы уже собраны - переводим в
+	// терминальное состояние, маршрутизатор сгенерирует отчёт ИИ по тексту
+	// опросника. Шаг загрузки PDF/фото здесь не нужен.
+	if c.stateManager.GetUserData(chatID, "analysis_subtype") == "extended" {
+		c.stateManager.SetState(chatID, states.StateWaitingHealthAssessment)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:    chatID,
+			Text:      fmt.Sprintf(locales.MsgHealthAssessmentCollecting, name, summary),
+			ParseMode: "Markdown",
+		})
+		return
+	}
+
+	// legacy-путь (загрузка файлов) - не используется, оставлен для
+	// обратной совместимости состояний.
+	c.stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        fmt.Sprintf(locales.MsgUserDataSaved, name, summary),
-		ReplyMarkup: keyboards.BackMenu(),
+		ReplyMarkup: keyboards.BackInline(),
 		ParseMode:   "Markdown",
 	})
 }
@@ -114,6 +129,38 @@ func formatUserData(data map[string]string) string {
 	if digestion := data["digestion"]; digestion != "" && strings.ToLower(digestion) != "нет" {
 		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryDigestion, digestion))
 	}
+	if energy := data["energy"]; energy != "" {
+		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryEnergy, energy))
+	}
+	if mood := data["mood"]; mood != "" {
+		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryMood, mood))
+	}
+	if work := data["work_regimen"]; work != "" {
+		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryWorkRegimen, work))
+	}
+	if screen := data["screen_time"]; screen != "" {
+		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryScreenTime, screen))
+	}
+	if meal := data["meal_regularity"]; meal != "" {
+		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryMealRegularity, meal))
+	}
+	if caffeine := data["caffeine"]; caffeine != "" {
+		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryCaffeine, caffeine))
+	}
+	if illness := data["illness_freq"]; illness != "" {
+		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryIllnessFreq, illness))
+	}
+	if pain := data["pain_areas"]; pain != "" && strings.ToLower(pain) != "нет" {
+		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryPainAreas, pain))
+	}
 
 	return strings.Join(parts, "\n")
+}
+
+// FormatCollected - возвращает отформатированный текст всех собранных ответов
+// опросника для передачи ИИ (без прогресс-бара и служебных префиксов).
+// Используется «Общей оценкой здоровья»: отчёт строится ИСКЛЮЧИТЕЛЬНО по
+// тексту опросника (без загрузки медицинских файлов).
+func (c *UserDataCollector) FormatCollected(chatID int64) string {
+	return formatUserData(c.stateManager.GetAllUserData(chatID))
 }

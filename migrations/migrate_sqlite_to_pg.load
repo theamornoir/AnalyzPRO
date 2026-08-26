@@ -1,0 +1,6 @@
+LOAD DATABASE
+  FROM sqlite://./data/analyzpro.db
+  INTO postgresql://prisma:CHANGE_ME@c-xxxx.rw.mdb.yandexcloud.net:6432/prisma?sslmode=verify-full&sslrootcert=/etc/prisma/ssl/yb-ca.pem
+
+  WITH include drop, create tables, create indexes, reset sequences, foreign keys
+  SET work_mem to '16MB', maintenance_work_mem to '512MB';

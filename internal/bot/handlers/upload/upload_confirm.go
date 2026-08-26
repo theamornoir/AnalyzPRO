@@ -33,6 +33,7 @@ func CancelUpload(
 	cleanupUploadedFilesByChat(stateManager, chatID)
 	stateManager.SetUserData(chatID, "uploaded_files", "")
 	stateManager.SetUserData(chatID, "file_count", "")
+	stateManager.SetUserData(chatID, "uploaded_msg_ids", "")
 	stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
 	// Персистентное (не самоудаляющееся) сообщение: иначе после удаления
 	// кнопки по глобальному правилу внизу чата осталось бы «пустое дно».
@@ -41,7 +42,7 @@ func CancelUpload(
 	helpers.ShowPersistentMessage(ctx, b, stateManager, chatID, helpers.MainMenuMsgKey, tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgUploadCancelled,
-		ReplyMarkup: keyboards.MainMenu(),
+		ReplyMarkup: keyboards.MainMenuInline(),
 	})
 }
 
@@ -65,13 +66,13 @@ func handleUploadConfirm(
 
 	if message.Document != nil {
 		log.Printf(locales.LogUploadAddAnotherDoc)
-		handleFileUpload(ctx, b, stateManager, uploadDir, chatID, message.Document)
+		handleFileUpload(ctx, b, stateManager, uploadDir, chatID, message.ID, message.Document)
 		return
 	}
 
 	if message.Photo != nil {
 		log.Printf(locales.LogUploadAddAnotherPhoto)
-		handlePhotoUpload(ctx, b, stateManager, uploadDir, chatID, message.Photo)
+		handlePhotoUpload(ctx, b, stateManager, uploadDir, chatID, message.ID, message.Photo)
 		return
 	}
 
@@ -88,6 +89,7 @@ func handleUploadConfirm(
 		cleanupUploadedFilesByChat(stateManager, chatID)
 		stateManager.SetUserData(chatID, "uploaded_files", "")
 		stateManager.SetUserData(chatID, "file_count", "")
+		stateManager.SetUserData(chatID, "uploaded_msg_ids", "")
 		stateManager.SetState(chatID, states.StateWaitingAnalysisFile)
 
 		// Персистентное (не самоудаляющееся) сообщение - см. обоснование в
@@ -95,7 +97,7 @@ func handleUploadConfirm(
 		helpers.ShowPersistentMessage(ctx, b, stateManager, chatID, helpers.MainMenuMsgKey, tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgUploadCancelled,
-			ReplyMarkup: keyboards.MainMenu(),
+			ReplyMarkup: keyboards.MainMenuInline(),
 		})
 		return
 	}
@@ -103,7 +105,7 @@ func handleUploadConfirm(
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgUploadComplete,
-		ReplyMarkup: keyboards.MainMenu(),
+		ReplyMarkup: keyboards.MainMenuInline(),
 		ParseMode:   "HTML",
 	})
 }

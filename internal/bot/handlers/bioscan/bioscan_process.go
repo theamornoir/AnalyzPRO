@@ -53,7 +53,7 @@ func ProcessBioscanWithPhotos(
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanIncompleteData,
-			ReplyMarkup: keyboards.MainMenu(),
+			ReplyMarkup: keyboards.MainMenuInline(),
 		})
 		return
 	}
@@ -85,7 +85,7 @@ func ProcessBioscanWithPhotos(
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 				ChatID:      chatID,
 				Text:        locales.MsgBioscanDownloadError,
-				ReplyMarkup: keyboards.MainMenu(),
+				ReplyMarkup: keyboards.MainMenuInline(),
 			})
 			return
 		}
@@ -98,7 +98,7 @@ func ProcessBioscanWithPhotos(
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanDownloadError,
-			ReplyMarkup: keyboards.MainMenu(),
+			ReplyMarkup: keyboards.MainMenuInline(),
 		})
 		return
 	}
@@ -121,7 +121,7 @@ func ProcessBioscanWithPhotos(
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanProcessingError,
-			ReplyMarkup: keyboards.MainMenu(),
+			ReplyMarkup: keyboards.MainMenuInline(),
 		})
 		return
 	}
@@ -205,12 +205,16 @@ func ProcessBioscanWithPhotos(
 
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
-		Text:        locales.MsgBioscanDone,
-		ReplyMarkup: keyboards.MainMenu(),
+		Text:        locales.MsgBioscanDone + "\n\n" + locales.MsgMaterialsDeleted,
+		ReplyMarkup: keyboards.MainMenuInline(),
 		ParseMode:   "Markdown",
 	})
 
 	// Сообщаем, что результат сохранён в «Мой профиль», и даём
 	// кнопку для мгновенного открытия (все типы биосканов хранятся там).
 	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
+
+	// Удаляем исходные фото из чата (приватность: исходные материалы не
+	// остаются в истории и не хранятся ботом).
+	deleteBioscanSubmittedMessages(ctx, b, sm, chatID)
 }

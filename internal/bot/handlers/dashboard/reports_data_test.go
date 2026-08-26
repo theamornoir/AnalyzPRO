@@ -66,6 +66,47 @@ func TestParseReportBlockAnalysisSections(t *testing.T) {
 	}
 }
 
+func TestParseReportBlockRich(t *testing.T) {
+	// Bioscan PRO: есть score + zones -> Rich=true.
+	pro := parseReportBlock(monitoring.HistoryEntry{
+		JsonData: `{"title":"Bioscan PRO","score":86,"zones":[{"name":"Плечи","score":88}]}`,
+		Date:     time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC),
+	}, "bioscan")
+	if !pro.Rich {
+		t.Error("Bioscan PRO должен быть Rich=true")
+	}
+
+	// Базовый Bioscan: только текстовая сводка {"title","note"} -> Rich=false.
+	basic := parseReportBlock(monitoring.HistoryEntry{
+		JsonData: `{"title":"Базовый Bioscan","note":"Ваши показатели в норме."}`,
+		Date:     time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC),
+	}, "bioscan")
+	if basic.Rich {
+		t.Error("базовый Bioscan не должен быть Rich")
+	}
+	if basic.Summary != "Ваши показатели в норме." {
+		t.Errorf("Summary (note) = %q, want %q", basic.Summary, "Ваши показатели в норме.")
+	}
+
+	// Расширенный анализ-досье: есть scores -> Rich=true.
+	ext := parseReportBlock(monitoring.HistoryEntry{
+		JsonData: `{"title":"Расширенный анализ","sections":[{"indicators":[{"name":"Гемоглобин","value":"152","score":85}]}]}`,
+		Date:     time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC),
+	}, "analysis")
+	if !ext.Rich {
+		t.Error("расширенный анализ должен быть Rich=true")
+	}
+
+	// Обычный анализ (plain): без структуры -> Rich=false.
+	plain := parseReportBlock(monitoring.HistoryEntry{
+		JsonData: `{"title":"Анализ","summary":"Краткий текстовый разбор."}`,
+		Date:     time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC),
+	}, "analysis")
+	if plain.Rich {
+		t.Error("обычный анализ не должен быть Rich")
+	}
+}
+
 func TestParseReportBlockEmpty(t *testing.T) {
 	block := parseReportBlock(monitoring.HistoryEntry{JsonData: "", Date: time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)}, "analysis")
 	if block.Available {

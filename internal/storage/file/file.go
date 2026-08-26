@@ -228,6 +228,39 @@ func (s *Store) MarkPromoCodeUsed(ctx context.Context, userID int64, code string
 	return nil
 }
 
+// DeleteAccount полностью удаляет пользователя и все связанные данные
+// (анализы, курсы, предпочтения, промокоды) по Telegram ID. Необратимо.
+func (s *Store) DeleteAccount(ctx context.Context, telegramID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	u, ok := s.data.Users[telegramID]
+	if !ok || u == nil {
+		return nil // и так нет - считаем удалённым
+	}
+	userID := u.ID
+	delete(s.data.Users, telegramID)
+	delete(s.data.Preferences, userID)
+	delete(s.data.UsedPromo, telegramID)
+
+	keptDiag := s.data.Diagnoses[:0]
+	for _, d := range s.data.Diagnoses {
+		if d.UserID != userID {
+			keptDiag = append(keptDiag, d)
+		}
+	}
+	s.data.Diagnoses = keptDiag
+	keptCycle := s.data.Cycles[:0]
+	for _, c := range s.data.Cycles {
+		if c.UserID != userID {
+			keptCycle = append(keptCycle, c)
+		}
+	}
+	s.data.Cycles = keptCycle
+	s.save()
+	return nil
+}
+
 // ---------------------------------------------------------------
 // DiagnosisRepository
 // ---------------------------------------------------------------
@@ -382,3 +415,18 @@ var (
 	_ interfaces.CycleRepository      = (*Store)(nil)
 	_ interfaces.PreferenceRepository = (*Store)(nil)
 )
+
+// UpdateUserPremiumStatusByTelegramID обновляет Premium по Telegram ID.
+func (s *Store) UpdateUserPremiumStatusByTelegramID(ctx context.Context, telegramID int64, isPremium bool, expiresAt time.Time, tariffID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if u, ok := s.data.Users[telegramID]; ok && u != nil {
+		u.IsPremium = isPremium
+		u.PremiumExpiresAt = expiresAt
+		u.TariffID = tariffID
+		s.save()
+		return nil
+	}
+	return fmt.Errorf("user with telegram_id %d not found", telegramID)
+}

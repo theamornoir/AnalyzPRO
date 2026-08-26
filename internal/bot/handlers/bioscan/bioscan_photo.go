@@ -14,13 +14,18 @@ import (
 )
 
 // HandleBioscanPhoto - обработка фотографий.
-func HandleBioscanPhoto(ctx context.Context, b *tgbot.Bot, sm states.StateManager, chatID int64, photos []models.PhotoSize) {
+func HandleBioscanPhoto(ctx context.Context, b *tgbot.Bot, sm states.StateManager, chatID int64, photos []models.PhotoSize, msgID int) {
 	if len(photos) == 0 {
 		return
 	}
 
 	state := sm.GetState(chatID)
 	photo := photos[len(photos)-1]
+
+	// Трекаем ID исходного фото-сообщения, чтобы удалить его из чата после
+	// успешной обработки Bioscan (приватность: исходные материалы не
+	// остаются в истории).
+	appendBioscanMsgID(sm, chatID, msgID)
 
 	switch state {
 	case states.StateWaitingBioscanPhoto1:
@@ -76,7 +81,7 @@ func HandleBioscanPhoto(ctx context.Context, b *tgbot.Bot, sm states.StateManage
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID:      chatID,
 			Text:        locales.MsgBioscanError,
-			ReplyMarkup: keyboards.BackMenu(),
+			ReplyMarkup: keyboards.BackQuestionInline(),
 		})
 	}
 }
@@ -102,7 +107,7 @@ func sendPhotoPrompt(ctx context.Context, b *tgbot.Bot, sm states.StateManager, 
 		ChatID:      chatID,
 		Text:        prompt,
 		ParseMode:   "Markdown",
-		ReplyMarkup: keyboards.BackMenu(),
+		ReplyMarkup: keyboards.BackQuestionInline(),
 	})
 	if err == nil && msg != nil {
 		sm.SetUserData(chatID, "last_msg_id", strconv.Itoa(msg.ID))

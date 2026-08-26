@@ -128,7 +128,7 @@ const MockAnalysisWithContextTemplate = `📊 Результаты анализ�
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-ℹ️ Важно: Это тестовый ответ. Для реального анализа подключите Gemini API.`
+ℹ️ Важно: Это тестовый ответ. Для реального анализа подключите YandexGPT API.`
 
 // MockBioscanJSONText - мок-ответ JSON для bioscan.
 const MockBioscanJSONText = `{

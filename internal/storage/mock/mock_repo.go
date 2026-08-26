@@ -122,6 +122,17 @@ func (m *MockUserRepository) MarkPromoCodeUsed(ctx context.Context, userID int64
 	return nil
 }
 
+// DeleteAccount - удаляет пользователя (и связанные данные) из мока по
+// Telegram ID. В mock-режиме детальные таблицы не ведутся, поэтому
+// достаточно убрать саму запись пользователя и использованные промокоды.
+func (m *MockUserRepository) DeleteAccount(ctx context.Context, telegramID int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.users, telegramID)
+	delete(m.usedPromo, telegramID)
+	return nil
+}
+
 // MockDiagnosisRepository - мок-реализация DiagnosisRepository.
 type MockDiagnosisRepository struct {
 	mu        sync.RWMutex
@@ -275,4 +286,17 @@ func (m *MockPreferenceRepository) UpdatePreferences(ctx context.Context, prefer
 	defer m.mu.Unlock()
 	m.preferences[preferences.UserID] = preferences
 	return nil
+}
+
+// UpdateUserPremiumStatusByTelegramID обновляет Premium по Telegram ID.
+func (m *MockUserRepository) UpdateUserPremiumStatusByTelegramID(ctx context.Context, telegramID int64, isPremium bool, expiresAt time.Time, tariffID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if user, ok := m.users[telegramID]; ok {
+		user.IsPremium = isPremium
+		user.PremiumExpiresAt = expiresAt
+		user.TariffID = tariffID
+		return nil
+	}
+	return fmt.Errorf("user with telegram_id %d not found", telegramID)
 }

@@ -39,6 +39,11 @@ type Repository interface {
 	// привязок в проектах). Позволяет пользователю удалять свои
 	// анализы/отчёты/профиль прямо из «Мой профиль».
 	DeleteHistoryEntry(ctx context.Context, id int64) error
+
+	// DeleteByUser - полностью удаляет все проекты мониторинга и историю
+	// пользователя по Telegram ID. Используется функцией «Удалить
+	// аккаунт» - необратимо.
+	DeleteByUser(ctx context.Context, telegramID int64) error
 }
 
 // MockRepository - потокобезопасная in-memory реализация Repository.
@@ -273,6 +278,24 @@ func (m *MockRepository) DeleteHistoryEntry(ctx context.Context, id int64) error
 			}
 		}
 		p.EntryIDs = filtered
+	}
+	return nil
+}
+
+// DeleteByUser полностью удаляет проекты мониторинга и историю
+// пользователя по Telegram ID (вместе с привязками записей в проектах).
+func (m *MockRepository) DeleteByUser(ctx context.Context, telegramID int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, p := range m.projects {
+		if p.TelegramID == telegramID {
+			delete(m.projects, id)
+		}
+	}
+	for id, h := range m.histories {
+		if h.TelegramID == telegramID {
+			delete(m.histories, id)
+		}
 	}
 	return nil
 }

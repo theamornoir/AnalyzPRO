@@ -167,7 +167,7 @@ func send(ctx context.Context, b *tgbot.Bot, chatID int64, text string) bool {
 			ChatID:      chatID,
 			Text:        text,
 			ParseMode:   "Markdown",
-			ReplyMarkup: keyboards.MainMenu(),
+			ReplyMarkup: keyboards.MainMenuInline(),
 		})
 		if err == nil {
 			return true

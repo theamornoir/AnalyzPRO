@@ -47,8 +47,8 @@ func NewFileStorage(path string) *Storage {
 // NewSQLStorage создаёт хранилище поверх *sql.DB (SQLite/Postgres). Все четыре
 // под-репозитория реализованы одним SQL-бэкендом. Это основной способ
 // хранения для прод-деплоя: данные переживают перезапуск бота.
-func NewSQLStorage(db *sql.DB) *Storage {
-	s := sqlrepo.New(db)
+func NewSQLStorage(db *sql.DB, driver ...string) *Storage {
+	s := sqlrepo.New(db, driver...)
 	return &Storage{
 		Users:       s,
 		Diagnoses:   s,

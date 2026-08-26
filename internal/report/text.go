@@ -26,7 +26,7 @@ func RenderBioscanPlainText(rep models.Report) string {
 	if rep.Score > 0 || rep.Level != "" {
 		b.WriteString(locales.RptMsgTextOverallAssessment)
 		if rep.Score > 0 {
-			b.WriteString(strconv.Itoa(rep.Score))
+			b.WriteString(strconv.Itoa(int(rep.Score)))
 			b.WriteString("/100")
 		}
 		if rep.Level != "" {
@@ -65,16 +65,16 @@ func RenderBioscanPlainText(rep models.Report) string {
 		if rep.Profile.Composition > 0 || rep.Profile.MuscleDevelopment > 0 ||
 			rep.Profile.Balance > 0 || rep.Profile.Potential > 0 {
 			b.WriteString(locales.RptMsgTextScoreComp)
-			b.WriteString(strconv.Itoa(rep.Profile.Composition))
+			b.WriteString(strconv.Itoa(int(rep.Profile.Composition)))
 			b.WriteString("/100\n")
 			b.WriteString(locales.RptMsgTextScoreMuscle)
-			b.WriteString(strconv.Itoa(rep.Profile.MuscleDevelopment))
+			b.WriteString(strconv.Itoa(int(rep.Profile.MuscleDevelopment)))
 			b.WriteString("/100\n")
 			b.WriteString(locales.RptMsgTextScoreBalance)
-			b.WriteString(strconv.Itoa(rep.Profile.Balance))
+			b.WriteString(strconv.Itoa(int(rep.Profile.Balance)))
 			b.WriteString("/100\n")
 			b.WriteString(locales.RptMsgTextScorePotential)
-			b.WriteString(strconv.Itoa(rep.Profile.Potential))
+			b.WriteString(strconv.Itoa(int(rep.Profile.Potential)))
 			b.WriteString("/100\n")
 		}
 		b.WriteString("\n")
@@ -92,7 +92,7 @@ func RenderBioscanPlainText(rep models.Report) string {
 			b.WriteString(locales.RptMsgTextZoneBullet)
 			b.WriteString(z.Name)
 			b.WriteString(" — ")
-			b.WriteString(strconv.Itoa(z.Score))
+			b.WriteString(strconv.Itoa(int(z.Score)))
 			b.WriteString("/100")
 			if zoneNeedsAttention(z.Status) {
 				b.WriteString(" ⚡")
@@ -269,7 +269,7 @@ func RenderAnalysisPlainText(data reportmodels.AdaptiveReportData) string {
 		b.WriteString("\n● ПРОФИЛЬ ЗДОРОВЬЯ\n")
 		if sec.Score > 0 {
 			b.WriteString("Общая оценка: ")
-			b.WriteString(strconv.Itoa(sec.Score))
+			b.WriteString(strconv.Itoa(int(sec.Score)))
 			b.WriteString("/100\n")
 		}
 		if s := strings.TrimSpace(sec.Summary); s != "" {

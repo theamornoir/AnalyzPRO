@@ -41,7 +41,7 @@ const (
 	LogRouterAgreeNotDone      = "⚠️ Соглашение не принято для chatID=%d"
 	LogRouterDiagnostics       = "🏥 Обработка: Диагностика анализов для chatID=%d"
 	LogRouterRegular           = "📊 Обработка: Обычный анализ для chatID=%d"
-	LogRouterExtended          = "🔬 Обработка: Расширенный анализ для chatID=%d"
+	LogRouterExtended          = "🩺 Обработка: Общая оценка здоровья для chatID=%d"
 	LogRouterBioscanStart      = "📸 Обработка: Bioscan для chatID=%d"
 	LogRouterBioscanLaunch     = "✅ Запускаем Bioscan для chatID=%d"
 	LogRouterUserBusy          = "⚠️ Пользователь chatID=%d занят другим процессом: %s"

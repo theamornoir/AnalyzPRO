@@ -8,7 +8,6 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/upload"
-	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
@@ -44,7 +43,7 @@ func (r *router) handleUpload(ctx context.Context, b *tgbot.Bot, chatID int64, t
 			_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 				ChatID:      chatID,
 				Text:        locales.MsgBioscanAgreementRequired,
-				ReplyMarkup: keyboards.StartMenu(),
+				ReplyMarkup: models.ReplyKeyboardRemove{RemoveKeyboard: true},
 			})
 			return true
 		}

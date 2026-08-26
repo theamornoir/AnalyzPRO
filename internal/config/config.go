@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/theamornoir/analyzpro/internal/ai/gemini"
+	"github.com/theamornoir/analyzpro/internal/ai/yandexgpt"
 )
 
 type Config struct {
@@ -31,6 +31,21 @@ type Config struct {
 	MonitoringPath string
 	AnalyticsPath  string
 	DBPath         string
+	// DBDriver - драйвер СУБД: "sqlite" (по умолчанию) или "postgres".
+	// При "postgres" OpenConfig открывает управляемую БД Yandex Cloud
+	// по TLS (см. db.OpenConfig). При пустом значении - sqlite.
+	DBDriver string
+	// DBDSN - готовый DSN PostgreSQL (приоритет над отдельными полями
+	// DBHost/DBPort/...). Читается из DB_DSN.
+	DBDSN string
+	// Параметры подключения к PostgreSQL (Yandex Cloud Managed PG).
+	DBHost        string
+	DBPort        string
+	DBUser        string
+	DBPassword    string
+	DBName        string
+	DBSSLMode     string
+	DBSSLRootCert string
 	// PostHogAPIKey - Project API Key сервиса аналитики PostHog. Если пуст -
 	// события не отправляются (клиент posthog-go становится no-op).
 	PostHogAPIKey string
@@ -48,26 +63,20 @@ type Config struct {
 	// YookassaWebhookSecret - секрет для проверки подписи вебхука
 	// X-YooKassa-Signature. Если пуст - используется YookassaSecretKey.
 	YookassaWebhookSecret string
-	// GeminiAPIKey - ключ API Google Gemini (единственный провайдер ИИ;
-	// читает фото и PDF нативно). Читается из GOOGLE_GEMINI_API_KEY. Пустой -
-	// AI-вызовы возвращают ошибку, бот стартует.
-	GeminiAPIKey string
-	// GeminiModel - модель Gemini (например gemini-2.5-flash). Читается из
-	// GOOGLE_AI_MODEL; по умолчанию gemini.DefaultModel. Переопределение
-	// доступно без пересборки (напр. gemini-2.5-flash-lite - ещё дешевле).
-	GeminiModel string
-	// GeminiProxy - egress-прокси ТОЛЬКО для AI-вызовов к Gemini
-	// (socks5/http/https). Читается из GEMINI_PROXY; пустой - системный
-	// прокси (HTTPS_PROXY). Решает гео-блок Gemini.
-	GeminiProxy string
-	// GeminiAPIBase - базовый URL Generative Language API
-	// (REST generateContent). Читается из GEMINI_API_BASE; по умолчанию
-	// gemini.DefaultAPIBase.
-	GeminiAPIBase string
-	// GeminiMaxConcurrency - макс. число одновременных запросов к Gemini
-	// (защита от 429/RPM и OOM). Читается из GEMINI_MAX_CONCURRENCY; по
-	// умолчанию gemini.DefaultMaxConcurrency.
-	GeminiMaxConcurrency int
+	// YandexAPIKey - ключ API Yandex Cloud (IAM/API-ключ). Используется для
+	// YandexGPT (текстовый LLM) и Yandex Vision OCR. Читается из
+	// YANDEX_API_KEY. Пустой - AI-вызовы возвращают ошибку, бот стартует.
+	YandexAPIKey string
+	// YandexFolderID - идентификатор каталога Yandex Cloud. Читается из
+	// YANDEX_FOLDER_ID; используется в modelUri и аутентификации OCR.
+	YandexFolderID string
+	// YandexModel - модель YandexGPT (например yandexgpt, yandexgpt-lite).
+	// Читается из YANDEX_MODEL; по умолчанию yandexgpt.DefaultModel.
+	YandexModel string
+	// YandexMaxConcurrency - макс. число одновременных запросов к YandexGPT
+	// (защита от 429/RPM и OOM). Читается из YANDEX_MAX_CONCURRENCY; по
+	// умолчанию yandexgpt.DefaultMaxConcurrency.
+	YandexMaxConcurrency int
 	// PromoCodes - список одноразовых промокодов на активацию Premium.
 	// Читается из PROMO_CODES (через запятую). Пусто - промокоды отключены.
 	PromoCodes []string
@@ -114,33 +123,41 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		BotToken:             strings.TrimSpace(os.Getenv("BOT_TOKEN")),
-		UploadDir:            getEnv("UPLOAD_DIR", "./uploads"),
-		AppEnv:               getEnv("APP_ENV", "development"),
-		LoadingStickerID:     os.Getenv("LOADING_STICKER_ID"),
-		AdminChatID:          adminID,
-		WebAppURL:            webAppURL,
-		DashboardURL:         dashboardURL,
-		HTTPAddr:             httpAddr,
-		HTML2PDFAPIKey:       getEnv("HTML2PDF_API_KEY", ""),
-		StoragePath:          getEnv("STORAGE_PATH", "./data/analyzpro.db.json"),
-		MonitoringPath:       getEnv("MONITORING_PATH", "./data/monitoring.db.json"),
-		AnalyticsPath:        getEnv("ANALYTICS_PATH", "./data/analytics.jsonl"),
-		DBPath:               getEnv("DB_PATH", "./data/analyzpro.db"),
-		PostHogAPIKey:        os.Getenv("POSTHOG_API_KEY"),
+		BotToken:              strings.TrimSpace(os.Getenv("BOT_TOKEN")),
+		UploadDir:             getEnv("UPLOAD_DIR", "./uploads"),
+		AppEnv:                getEnv("APP_ENV", "development"),
+		LoadingStickerID:      os.Getenv("LOADING_STICKER_ID"),
+		AdminChatID:           adminID,
+		WebAppURL:             webAppURL,
+		DashboardURL:          dashboardURL,
+		HTTPAddr:              httpAddr,
+		HTML2PDFAPIKey:        getEnv("HTML2PDF_API_KEY", ""),
+		StoragePath:           getEnv("STORAGE_PATH", "./data/analyzpro.db.json"),
+		MonitoringPath:        getEnv("MONITORING_PATH", "./data/monitoring.db.json"),
+		AnalyticsPath:         getEnv("ANALYTICS_PATH", "./data/analytics.jsonl"),
+		DBPath:                getEnv("DB_PATH", "./data/analyzpro.db"),
+		DBDriver:              getEnv("DB_DRIVER", "sqlite"),
+		DBDSN:                 os.Getenv("DB_DSN"),
+		DBHost:                os.Getenv("DB_HOST"),
+		DBPort:                getEnv("DB_PORT", "6432"),
+		DBUser:                os.Getenv("DB_USER"),
+		DBPassword:            os.Getenv("DB_PASSWORD"),
+		DBName:                os.Getenv("DB_NAME"),
+		DBSSLMode:             getEnv("DB_SSLMODE", "verify-full"),
+		DBSSLRootCert:         getEnv("DB_SSLROOTCERT", "/etc/prisma/ssl/yb-ca.pem"),
+		PostHogAPIKey:         os.Getenv("POSTHOG_API_KEY"),
 		YookassaShopID:        os.Getenv("YOOKASSA_SHOP_ID"),
 		YookassaSecretKey:     os.Getenv("YOOKASSA_SECRET_KEY"),
 		YookassaAPIURL:        getEnv("YOOKASSA_API_URL", "https://api.yookassa.ru/v3"),
 		YookassaReturnURL:     getEnv("YOOKASSA_RETURN_URL", webAppURL),
 		YookassaWebhookSecret: os.Getenv("YOOKASSA_WEBHOOK_SECRET"),
-		LogLevel:             getEnv("LOG_LEVEL", "INFO"),
-		PromoCodes:           parseCSV(os.Getenv("PROMO_CODES")),
-		PromoCodesMonthly:    parseCSV(os.Getenv("PROMO_CODES_MONTHLY")),
-		GeminiAPIKey:         strings.TrimSpace(os.Getenv("GOOGLE_GEMINI_API_KEY")),
-		GeminiModel:          getEnv("GOOGLE_AI_MODEL", gemini.DefaultModel),
-		GeminiProxy:          os.Getenv("GEMINI_PROXY"),
-		GeminiAPIBase:        getEnv("GEMINI_API_BASE", gemini.DefaultAPIBase),
-		GeminiMaxConcurrency: getEnvInt("GEMINI_MAX_CONCURRENCY", gemini.DefaultMaxConcurrency),
+		LogLevel:              getEnv("LOG_LEVEL", "INFO"),
+		PromoCodes:            parseCSV(os.Getenv("PROMO_CODES")),
+		PromoCodesMonthly:     parseCSV(os.Getenv("PROMO_CODES_MONTHLY")),
+		YandexAPIKey:          strings.TrimSpace(os.Getenv("YANDEX_API_KEY")),
+		YandexFolderID:        strings.TrimSpace(os.Getenv("YANDEX_FOLDER_ID")),
+		YandexModel:           getEnv("YANDEX_MODEL", yandexgpt.DefaultModel),
+		YandexMaxConcurrency:  getEnvInt("YANDEX_MAX_CONCURRENCY", yandexgpt.DefaultMaxConcurrency),
 	}, nil
 }
 

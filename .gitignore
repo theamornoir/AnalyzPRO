@@ -1,5 +1,6 @@
 # Secrets
 .env
+_env_example_tmp
 
 # Runtime data
 data/

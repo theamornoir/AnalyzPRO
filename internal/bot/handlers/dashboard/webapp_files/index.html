@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Prisma - Мой профиль</title>
     <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <link rel="stylesheet" href="style.v44.css">
+    <link rel="stylesheet" href="style.v59.css">
 </head>
 <body>
     <div class="dashboard">
@@ -25,16 +25,28 @@
                 💎 Глубокий анализ-досье и Bioscan PRO доступны на Premium. Оформите подписку в боте (кнопка «💎 Premium» в меню).
             </div>
 
-            <!-- Вкладки: Обзор / Анализы / Bioscan PRO -->
+            <!-- Вкладки: Обзор / Анализы / Bioscan / Оценка здоровья / Мониторинг.
+                 Обёртка .tabs-wrap держит градиенты-индикаторы по краям
+                 (сигнал, что ленту можно прокручивать). Сама лента .tabs
+                 скроллится горизонтально (см. style.css). -->
+            <div class="tabs-wrap">
             <nav class="tabs" role="tablist">
                 <button class="tab-btn active" type="button" data-tab="overview" onclick="showTab('overview')">🔍 Обзор</button>
                 <button class="tab-btn" type="button" data-tab="analysis" onclick="showTab('analysis')">📊 Анализы</button>
                 <button class="tab-btn" type="button" data-tab="bioscan" onclick="showTab('bioscan')">📸 Bioscan</button>
+                <button class="tab-btn" type="button" data-tab="health" onclick="showTab('health')">🩺 Оценка здоровья</button>
                 <button class="tab-btn" type="button" data-tab="monitoring" onclick="showTab('monitoring')">💉 Мониторинг</button>
             </nav>
+            </div>
 
             <!-- Вкладка «Обзор»: индексы, динамика, кровь, рекомендации -->
             <section class="tab-panel active" id="tab-overview">
+                <!-- Карточка «Профиль»: имя/возраст/пол/рост/вес. Заполняется
+                     в renderProfileCard (app.js) из полей userGender/userHeight/
+                     userWeight. Показывается только при заполненной анкете,
+                     иначе скрыта и вместо неё видна форма регистрации. -->
+                <section class="card profile-card" id="profileCard" style="display:none;"></section>
+
                 <!-- Индексы -->
                 <section class="card">
                     <h2>Индекс здоровья</h2>
@@ -143,7 +155,6 @@
                         <canvas id="chartAnalysis"></canvas>
                     </div>
                     <div class="ind-list" id="analysisIndicators"></div>
-                    <div class="free-history-note" id="analysisHistoryNote" style="display:none;"></div>
                     <div class="archive" id="analysisArchive" style="display:none;">
                         <div class="archive-title">📚 История отчётов</div>
                         <div class="archive-list" id="analysisArchiveList"></div>
@@ -178,13 +189,47 @@
                         <canvas id="chartBioscan"></canvas>
                     </div>
                     <div class="zone-grid" id="bioscanZones"></div>
-                    <div class="free-history-note" id="bioscanHistoryNote" style="display:none;"></div>
                     <div class="archive" id="bioscanArchive" style="display:none;">
                         <div class="archive-title">📚 История отчётов</div>
                         <div class="archive-list" id="bioscanArchiveList"></div>
                     </div>
                     <div class="trend-badges" id="bioscanTrendBadges"></div>
                     <p class="hint" id="bioscanHint"></p>
+                </section>
+            </section>
+
+            <!-- Вкладка «Оценка здоровья»: Общая оценка здоровья
+                 (опросник об образе жизни, без загрузки файлов). Последний
+                 отчёт + архив; открывается как чистый HTML в оверлее. -->
+            <section class="tab-panel" id="tab-health">
+                <section class="card placeholder-card" id="healthPlaceholder">
+                    <div class="placeholder-icon">🩺</div>
+                    <h2>Общая оценка здоровья</h2>
+                    <p class="hint">Здесь появится ваша общая оценка здоровья - индекс, разбор образа жизни по сферам, зоны риска и план улучшения. Пройдите опросник в боте (кнопка «🩺 Общая оценка здоровья» в меню), и здесь отобразится результат.</p>
+                </section>
+
+                <section class="card report-card" id="healthReportCard" style="display:none;">
+                    <h2 id="healthReportHeader">🩺 Общая оценка здоровья</h2>
+                    <div class="report-head" id="healthReportHead">
+                        <div>
+                            <div class="report-title" id="healthReportTitle">-</div>
+                            <div class="report-date" id="healthReportDate">-</div>
+                        </div>
+                        <div class="report-right">
+                            <div class="report-score" id="healthReportScore">-</div>
+                        </div>
+                    </div>
+                    <div class="chart-container reports" id="healthChartWrap" style="display:none;">
+                        <canvas id="chartHealth"></canvas>
+                    </div>
+                    <div class="ind-list" id="healthIndicators"></div>
+                    <div class="zone-grid" id="healthZones"></div>
+                    <div class="archive" id="healthArchive" style="display:none;">
+                        <div class="archive-title">📚 История отчётов</div>
+                        <div class="archive-list" id="healthArchiveList"></div>
+                    </div>
+                    <div class="trend-badges" id="healthTrendBadges"></div>
+                    <p class="hint" id="healthHint"></p>
                 </section>
             </section>
 
@@ -268,6 +313,6 @@
         </div>
     </div>
 
-    <script defer src="app.v44.js"></script>
+    <script defer src="app.v59.js"></script>
 </body>
 </html>

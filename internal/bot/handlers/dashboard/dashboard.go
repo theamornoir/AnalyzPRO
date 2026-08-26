@@ -30,7 +30,11 @@ import (
 type MetricsResponse struct {
 	UserName        string    `json:"userName"`
 	UserAge         int       `json:"userAge"`
+	UserGender      string    `json:"userGender"`
+	UserHeight      int       `json:"userHeight"`
+	UserWeight      int       `json:"userWeight"`
 	NoData          bool      `json:"noData"`
+	ProfileMissing  bool      `json:"profileMissing"`
 	PremiumRequired bool      `json:"premiumRequired"`
 	HealthIndex     int       `json:"healthIndex"`
 	EnergyLevel     string    `json:"energyLevel"`
@@ -318,6 +322,7 @@ func (h *Handler) Reports(w http.ResponseWriter, r *http.Request) {
 	if !isPremium {
 		data.Analysis = stripRichReports(data.Analysis)
 		data.Bioscan = stripRichReports(data.Bioscan)
+		data.Health = stripRichReports(data.Health)
 	}
 	data.PremiumRequired = !isPremium
 
@@ -368,12 +373,12 @@ func (h *Handler) ReportFile(w http.ResponseWriter, r *http.Request) {
 	// отчётов нет). Позволяет открывать демо-отчёты прямо из Сводки.
 	if h.demoMode(r) {
 		entryType := r.URL.Query().Get("type")
-		if entryType != "analysis" && entryType != "bioscan" {
+		if entryType != "analysis" && entryType != "bioscan" && entryType != "health_assessment" {
 			http.Error(w, "bad type", http.StatusBadRequest)
 			return
 		}
 		entryID, _ := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
-		html := h.buildDemoReportHTML(entryType, entryID)
+		html := sanitizeReportHTML(h.buildDemoReportHTML(entryType, entryID))
 		if strings.TrimSpace(html) == "" {
 			http.Error(w, "render error", http.StatusInternalServerError)
 			return
@@ -416,7 +421,7 @@ func (h *Handler) ReportFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	entryType := r.URL.Query().Get("type")
-	if entryType != "analysis" && entryType != "bioscan" {
+	if entryType != "analysis" && entryType != "bioscan" && entryType != "health_assessment" {
 		http.Error(w, "bad type", http.StatusBadRequest)
 		return
 	}
@@ -655,32 +660,59 @@ func (h *Handler) Notifications(w http.ResponseWriter, r *http.Request) {
 // готовый ReportHTML - берёт его, иначе перерендеривает из JsonData через
 // report.Renderer (в зависимости от типа записи).
 func (h *Handler) reportHTML(entry *monitoring.HistoryEntry) (string, error) {
-	if strings.TrimSpace(entry.ReportHTML) != "" {
-		return entry.ReportHTML, nil
-	}
 	cleaned := strings.TrimSpace(entry.JsonData)
 	if cleaned == "" {
+		if strings.TrimSpace(entry.ReportHTML) != "" {
+			return sanitizeReportHTML(entry.ReportHTML), nil
+		}
 		return "", fmt.Errorf("пустой отчёт")
+	}
+
+	// Структурированные чистые HTML-отчёты из JsonData (без «воды»,
+	// только фактические значения в таблицах/карточках). Для Bioscan
+	// ВСЕГДА предпочитаем чистые таблицы (показатели тела/зоны/
+	// композиция): «богатый» A4-шаблон оставляем лишь запасным путём,
+	// т.к. в просмотрщике профиля он выглядит перегруженно.
+	switch entry.Type {
+	case "health_assessment":
+		return buildHealthAssessmentHTML(entry), nil
+	case "analysis":
+		if html := buildAnalysisStructuredHTML(entry); html != "" {
+			return html, nil
+		}
+	case "bioscan":
+		if html := buildBioscanStructuredHTML(entry); html != "" {
+			return html, nil
+		}
+	}
+
+	// 3) Запасной путь: «богатый» print-ready HTML (досье расширенного
+	//    анализа, сгенерированное через report.Renderer) либо перерендер
+	//    шаблоном (на случай непредвиденной формы JsonData).
+	if isRichHTML(entry.ReportHTML) {
+		return sanitizeReportHTML(entry.ReportHTML), nil
+	}
+	if strings.TrimSpace(entry.ReportHTML) != "" {
+		return sanitizeReportHTML(entry.ReportHTML), nil
 	}
 	if entry.Type == "bioscan" {
 		var bs apmodels.BodyScanReport
-		if err := json.Unmarshal([]byte(cleaned), &bs); err != nil {
-			return "", err
+		if err := json.Unmarshal([]byte(cleaned), &bs); err == nil {
+			if html, rerr := h.reportRenderer.RenderBodyScan(bs); rerr == nil && strings.TrimSpace(html) != "" {
+				return sanitizeReportHTML(html), nil
+			}
 		}
-		return h.reportRenderer.RenderBodyScan(bs)
 	}
-	// analysis: либо models.Report (расширенный анализ), либо
-	// models.HealthDossier (досье). Пробуем оба варианта.
 	var rep apmodels.Report
 	if err := json.Unmarshal([]byte(cleaned), &rep); err == nil {
 		if html, rerr := h.reportRenderer.Render(rep); rerr == nil && strings.TrimSpace(html) != "" {
-			return html, nil
+			return sanitizeReportHTML(html), nil
 		}
 	}
 	var dossier apmodels.HealthDossier
 	if err := json.Unmarshal([]byte(cleaned), &dossier); err == nil {
 		if html, derr := h.reportRenderer.RenderDossier(dossier); derr == nil && strings.TrimSpace(html) != "" {
-			return html, nil
+			return sanitizeReportHTML(html), nil
 		}
 	}
 	return "", fmt.Errorf("не удалось перерендерить отчёт")
@@ -696,6 +728,8 @@ func (h *Handler) demoReportBlock(kind string, id int64) ReportBlock {
 	group := demo.Analysis
 	if kind == "bioscan" {
 		group = demo.Bioscan
+	} else if kind == "health_assessment" {
+		group = demo.Health
 	}
 	for _, b := range group.Reports {
 		if b.ID == id {
@@ -716,6 +750,8 @@ func (h *Handler) buildDemoReportHTML(kind string, id int64) string {
 		title = "Расширенный анализ"
 		if kind == "bioscan" {
 			title = "Bioscan PRO"
+		} else if kind == "health_assessment" {
+			title = "Общая оценка здоровья"
 		}
 	}
 	date := block.Date
@@ -765,12 +801,13 @@ func (h *Handler) buildDemoReportHTML(kind string, id int64) string {
 <html lang="ru"><head><meta charset="utf-8">
 <title>` + title + ` (демо)</title>
 <style>
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:32px auto;padding:0 16px;color:#1a2330}
-h1{color:#1FA6A8} .sub{color:#6b7785;margin-bottom:8px}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:0 auto;padding:18px 14px 28px;background:#0f1419;color:#e8eef2}
+h1{color:#1FA6A8} .sub{color:#8b9aa7;margin:0 0 8px}
 .score{font-size:40px;font-weight:700;color:#1FA6A8;margin:16px 0}
 table{width:100%;border-collapse:collapse;margin-top:12px}
-td,th{text-align:left;padding:8px 10px;border-bottom:1px solid #e3e8ef}
-.demo{margin-top:24px;padding:12px 14px;background:#f4f8fa;border-radius:12px;color:#6b7785}
+td,th{text-align:left;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.06);color:#c7d2da}
+th{color:#8b9aa7}
+.demo{margin-top:24px;padding:12px 14px;background:#1a212b;border-radius:12px;color:#8b9aa7;line-height:1.5}
 </style></head><body>
 <h1>` + title + `</h1>
 <div class="sub">Демонстрационный отчёт · ` + date + `</div>
@@ -856,6 +893,23 @@ func (h *Handler) buildDemoReports() ReportsResponse {
 		Scores:     map[string]int{"Осанка": 76, "Симметрия": 74, "Плечи": 77, "Таз": 72, "Позвоночник": 79, "Мобильность": 66, "Стабильность": 77},
 	}
 
+	latestH := ReportBlock{
+		ID:         20,
+		Available:  true,
+		Title:      "Общая оценка здоровья",
+		Date:       time.Now().Format("2006-01-02"),
+		MainScore:  72,
+		ScoreLabel: "Индекс здоровья",
+		Scores:     map[string]int{"Сон": 68, "Питание": 74, "Движение": 70, "Энергия": 78},
+		Indicators: []IndicatorView{
+			{Name: "Сон", Value: "68", Status: "normal", Num: 68},
+			{Name: "Питание", Value: "74", Status: "normal", Num: 74},
+			{Name: "Движение", Value: "70", Status: "normal", Num: 70},
+			{Name: "Энергия", Value: "78", Status: "good", Num: 78},
+		},
+		Summary: "Общий образ жизни в целом здоровый, есть зоны для улучшения сна и движения.",
+	}
+
 	return ReportsResponse{
 		PremiumRequired: false,
 		Analysis: ReportsGroup{
@@ -867,6 +921,11 @@ func (h *Handler) buildDemoReports() ReportsResponse {
 			Count:   3,
 			Reports: []ReportBlock{latestB, prevB, olderB},
 			Latest:  latestB,
+		},
+		Health: ReportsGroup{
+			Count:   1,
+			Reports: []ReportBlock{latestH},
+			Latest:  latestH,
 		},
 	}
 }
@@ -995,12 +1054,37 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64, isPremium 
 	entries, _, err := h.repo.ListHistory(ctx, telegramID, "", 1, 0)
 	if err != nil || len(entries) == 0 {
 		resp.NoData = true
+		resp.ProfileMissing = true
 		resp.HealthIndex = 0
 		resp.EnergyLevel = "-"
 		resp.Recommendations = []string{
 			"Загрузите первый анализ или пройдите биоскан, чтобы увидеть свой профиль.",
 		}
 		return resp
+	}
+
+	// Профиль считается незаполненным, если в истории нет записи-анкеты
+	// (тип "questionnaire"). Форма регистрации в Mini App показывается
+	// именно тогда - независимо от наличия прочих данных (анализов/
+	// биосканов/оценок здоровья). Так Premium-пользователь с загруженными
+	// анализами, но без анкеты, увидит форму заполнения профиля.
+	profEntries, _, _ := h.repo.ListHistory(ctx, telegramID, "questionnaire", 1, 1)
+	resp.ProfileMissing = len(profEntries) == 0
+	// Профиль (анкета) - единственный источник пола/роста/веса; имя/возраст
+	// тоже берём из него (приоритет у последнего анализа, см. ниже). Эти
+	// данные отображаются в карточке «Профиль» на вкладке «Обзор» вместе с
+	// остальными полями, а не только именем.
+	if len(profEntries) > 0 {
+		pr := parseReport(profEntries[0].JsonData)
+		resp.UserGender = pr.Gender
+		resp.UserHeight = pr.Height
+		resp.UserWeight = pr.Weight
+		if resp.UserName == "" {
+			resp.UserName = pr.Name
+		}
+		if resp.UserAge == 0 {
+			resp.UserAge = pr.Age
+		}
 	}
 
 	// Дата «Последний анализ» и показатели крови/питания/активности берём
@@ -1293,7 +1377,11 @@ func (h *Handler) buildDemoMetrics() MetricsResponse {
 	return MetricsResponse{
 		UserName:        "Демо Пользователь",
 		UserAge:         34,
+		UserGender:      "Мужской",
+		UserHeight:      178,
+		UserWeight:      75,
 		NoData:          false,
+		ProfileMissing:  false,
 		PremiumRequired: false,
 		HealthIndex:     82,
 		EnergyLevel:     "Высокий",
@@ -1392,6 +1480,9 @@ func intOrZero(f float64) int {
 type reportData struct {
 	Name            string
 	Age             int
+	Gender          string
+	Height          int
+	Weight          int
 	Composition     int
 	Potential       int
 	Recommendations []string
@@ -1420,6 +1511,9 @@ func parseReport(jsonStr string) reportData {
 		Profile struct {
 			Name              string `json:"name"`
 			Age               int    `json:"age"`
+			Gender            string `json:"gender"`
+			Height            int    `json:"height"`
+			Weight            int    `json:"weight"`
 			Composition       int    `json:"composition"`
 			MuscleDevelopment int    `json:"muscle_development"`
 			Potential         int    `json:"potential"`
@@ -1444,6 +1538,9 @@ func parseReport(jsonStr string) reportData {
 
 	out.Name = doc.Profile.Name
 	out.Age = doc.Profile.Age
+	out.Gender = doc.Profile.Gender
+	out.Height = doc.Profile.Height
+	out.Weight = doc.Profile.Weight
 	out.Composition = doc.Profile.Composition
 	out.Potential = doc.Profile.Potential
 	out.Recommendations = doc.Recommendations

@@ -46,6 +46,14 @@ var stepOrder = []states.State{
 	states.StateWaitingDigestion,
 	states.StateWaitingSportType,
 	states.StateWaitingGoal,
+	states.StateWaitingEnergy,
+	states.StateWaitingMood,
+	states.StateWaitingWorkRegimen,
+	states.StateWaitingScreenTime,
+	states.StateWaitingMealRegularity,
+	states.StateWaitingCaffeine,
+	states.StateWaitingIllnessFreq,
+	states.StateWaitingPainAreas,
 }
 
 // stepPrompt - текст вопроса для каждого состояния опросника.
@@ -70,6 +78,14 @@ var stepPrompt = map[states.State]string{
 	states.StateWaitingDigestion:          locales.MsgUserDigestion,
 	states.StateWaitingSportType:          locales.MsgUserSportType,
 	states.StateWaitingGoal:               locales.MsgUserGoal,
+	states.StateWaitingEnergy:             locales.MsgUserEnergy,
+	states.StateWaitingMood:               locales.MsgUserMood,
+	states.StateWaitingWorkRegimen:        locales.MsgUserWorkRegimen,
+	states.StateWaitingScreenTime:         locales.MsgUserScreenTime,
+	states.StateWaitingMealRegularity:     locales.MsgUserMealRegularity,
+	states.StateWaitingCaffeine:           locales.MsgUserCaffeine,
+	states.StateWaitingIllnessFreq:        locales.MsgUserIllnessFreq,
+	states.StateWaitingPainAreas:          locales.MsgUserPainAreas,
 }
 
 // StepCount - общее число вопросов опросника.
@@ -113,7 +129,7 @@ func (c *UserDataCollector) SendStep(ctx context.Context, b *tgbot.Bot, chatID i
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        header + text,
-		ReplyMarkup: keyboards.BackCancelMenu(),
+		ReplyMarkup: keyboards.BackCancelQuestionInline(),
 		ParseMode:   "Markdown",
 	})
 }

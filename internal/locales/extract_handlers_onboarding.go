@@ -8,19 +8,23 @@ package locales
 // constants directly. No new constants were required for this scope and the
 // source file needed no inline-literal replacements. The reused constants are:
 //
-//   - locales.MsgOnboardingStep1 .. locales.MsgOnboardingStep8  (slider step texts)
-//   - locales.MsgOnboardingDone                                 (post-accept welcome)
-//   - locales.MsgResetDone                                      (admin reset reply)
-//   - locales.BtnOnboardingNext                                 (button "➡️ Дальше")
-//   - locales.BtnOnboardingAgreement                            (button "📝 Соглашение")
-//   - locales.BtnOnboardingAccept                               (button "✅ Принять")
-//   - locales.UserAgreementText                                 (agreement body)
+//   - locales.MsgOnboardingIntro       (1-е сообщение: единое описание функционала)
+//   - locales.MsgOnboardingAgreement   (2-е сообщение: краткое согласие + ссылка)
+//   - locales.MsgOnboardingDone        (post-accept welcome)
+//   - locales.MsgResetDone             (admin reset reply)
+//   - locales.BtnOnboardingAgreement   (button "📝 Согласие")
+//   - locales.BtnOnboardingAccept      (button "✅ Принять")
+//
+// NOTE: онбординг сокращён до ДВУХ сообщений (интро + согласие). Старые
+// константы слайдера (MsgOnboardingStep1..8, BtnOnboardingNext) и
+// UserAgreementText удалены; полный текст согласия теперь размещён на
+// внешнем ресурсе и доступен по короткой ссылке, подставляемой в runtime
+// (onboarding.SendAgreement добавляет строку с внешней ссылкой).
 //
 // After reusing the constants above, the only remaining inline string literals
 // in the onboarding source are NOT eligible for extraction (kept inline on
 // purpose, matching project conventions):
 //
-//   - "onboarding_step_%d"   -> Telegram callback-data string (do-not-extract).
 //   - "onboarding_agreement" -> Telegram callback-data string (do-not-extract).
 //   - "onboarding_accept"    -> Telegram callback-data string (do-not-extract).
 //   - "Markdown" (x2)        -> Telegram ParseMode enum value. The codebase keeps

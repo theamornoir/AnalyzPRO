@@ -8,7 +8,7 @@ import (
 	tgbot "github.com/go-telegram/bot"
 
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/bioscan"
-	"github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
@@ -101,16 +101,13 @@ func (r *router) handleCancel(ctx context.Context, b *tgbot.Bot, chatID int64, t
 }
 
 // backToParent - унифицированный иерархический возврат «назад» (используется
-// и reply-кнопкой «⬅️ Назад», и inline-кнопками hub_back/msg_back).
-// Логика:
-//   - под-шаг раздела (состояние флоу НЕ idle) ИЛИ листовое сообщение раздела
-//     (Мой профиль/Мониторинг/О сервисе - блок-хаб уже удалён) -> возврат в ХАБ
-//     ЭТОГО раздела (на уровень выше, с единой клавиатурой [Назад]);
-//   - нахождение прямо в хабе раздела (state=idle и блок-хаб на месте) ->
-//     возврат в ГЛАВНОЕ меню.
+// и reply-кнопкой «⬅️ Назад», и inline-кнопками hub_back/msg_back). Вся
+// навигация идёт через ОДНО сообщение (main_menu_msg_id), которое
+// перерисовывается «на месте» (editMessage), поэтому «Назад» не плодит новые
+// сообщения в чате. Уровень (main/hub/action) отслеживается в nav_level.
 func (r *router) backToParent(ctx context.Context, b *tgbot.Bot, chatID int64) {
 	currentState := r.stateManager.GetState(chatID)
-	isHubLevel := currentState == states.StateIdle && r.hubMessageID(chatID) > 0
+	navLevel := r.navLevel(chatID)
 
 	// Если мы в BIOSCAN - очищаем собранные данные.
 	if isBioscanState(currentState) {
@@ -124,63 +121,33 @@ func (r *router) backToParent(ctx context.Context, b *tgbot.Bot, chatID int64) {
 	r.stateManager.SetUserData(chatID, "analysis_subtype", "")
 
 	// Premium - верхнеуровневый вход без родительского хаба: «Назад» всегда
-	// возвращает в Главное меню, полностью удаляя экран Premium (якорь +
-	// список тарифов) из чата.
+	// возвращает в Главное меню, полностью удаляя экран Premium.
 	if r.currentSection(chatID) == "premium" || r.premiumScreenTracked(chatID) {
-		for _, key := range []string{"premium_anchor_id", "premium_msg_id"} {
-			if id, err := strconv.Atoi(r.stateManager.GetUserData(chatID, key)); err == nil && id > 0 {
-				helpers.DeleteMessage(ctx, b, chatID, id)
-				r.stateManager.SetUserData(chatID, key, "0")
-			}
-			// Fallback на выделенный трекер (переживает Reset/перезапуск).
-			if id, err := strconv.Atoi(r.stateManager.GetPremiumScreenID(chatID, key)); err == nil && id > 0 {
-				helpers.DeleteMessage(ctx, b, chatID, id)
-			}
-		}
-		// Очищаем выделенный трекер (гарантированно удаляет id, даже если
-		// они пережили Reset при /start или перезапуск бота).
-		r.stateManager.ClearPremiumScreenIDs(chatID)
-		// Выходим в главное меню - текущий раздел больше не Premium
-		// («analysis» - нейтральный дефолт, совпадает с поведением при
-		// отсутствии сохранённого раздела). Иначе «залипшее» значение
-		// «premium» ломало бы последующую иерархию «Назад».
+		menu.ClearPremiumScreen(ctx, b, r.stateManager, chatID)
 		r.setCurrentSection(chatID, "analysis")
-		r.setLastMsg(chatID, 0)
-		// Подстраховка: убираем возможный «висячий» блок-хаб (на случай
-		// рассинхронизации состояния) и показываем персистентное меню -
-		// иначе после удаления экрана Premium внизу могло бы образоваться
-		// «пустое дно» (исчезнувшее меню без кнопок).
-		r.deleteHubBlock(ctx, b, chatID)
+		r.setNavMsgID(chatID, 0)
+		r.setNavLevel(chatID, "main")
 		r.showMainMenuMessage(ctx, b, chatID, locales.MsgBackToMainMenu)
 		return
 	}
 
-	// Безопасность: нет ни хаба, ни последнего сообщения - пользователь уже
-	// в Главном меню (кнопки «Назад» там нет, но на всякий случай - меню).
-	if currentState == states.StateIdle && r.hubMessageID(chatID) == 0 && r.lastMsgID(chatID) == 0 {
+	navID := r.navMsgID(chatID)
+	if navID == 0 {
+		// Нет навигационного сообщения - просто показываем главное меню.
+		r.setNavLevel(chatID, "main")
 		r.showMainMenuMessage(ctx, b, chatID, locales.MsgBackToMainMenu)
 		return
 	}
 
-	if isHubLevel {
-		// Прямо в Главное меню: хаб раздела больше не нужен.
-		r.deleteHubBlock(ctx, b, chatID)
-		if id := r.lastMsgID(chatID); id > 0 {
-			helpers.DeleteMessage(ctx, b, chatID, id)
-			r.setLastMsg(chatID, 0)
-		}
+	if navLevel == "hub" {
+		// Были в хабе раздела - возврат в Главное меню (edit на месте).
+		r.setNavLevel(chatID, "main")
 		r.showMainMenuMessage(ctx, b, chatID, locales.MsgBackToMainMenu)
 		return
 	}
 
-	// Возврат на уровень выше - в хаб текущего раздела. Удаляем текущее
-	// сообщение под-действия и (на всякий случай) блок-хаб, затем показываем
-	// хаб раздела с единой клавиатурой [Назад] внизу.
-	section := r.currentSection(chatID)
-	if id := r.lastMsgID(chatID); id > 0 {
-		helpers.DeleteMessage(ctx, b, chatID, id)
-		r.setLastMsg(chatID, 0)
-	}
-	r.deleteHubBlock(ctx, b, chatID)
-	r.renderHub(ctx, b, chatID, section)
+	// Были в под-действии (action) или неизвестно - возврат в хаб текущего
+	// раздела (edit на месте).
+	r.setNavLevel(chatID, "hub")
+	r.renderHub(ctx, b, chatID, r.currentSection(chatID))
 }

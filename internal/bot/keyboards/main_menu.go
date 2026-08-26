@@ -47,12 +47,11 @@ func StartMenu() models.ReplyKeyboardMarkup {
 	}
 }
 
-// MainMenu - основное меню (после принятия соглашения).
-// Разгружено: вместо 6 плоских кнопок - 4 понятных раздела-хаба в сетке 2×2.
-// Каждый хаб при входе даёт описание и под-действия. 💎 Premium оставлен
-// плоской кнопкой (это точка продажи, её важно держать на виду), остальные
-// функции сгруппированы: «Анализы» (лаб. анализы + Bioscan), «Здоровье»
-// (Мой профиль/Мониторинг/Консультация ИИ), «Сервис» (Отзывы/О сервисе).
+// MainMenu - основное меню (после принятия соглашения) как reply-клавиатура.
+// Используется на РЕЗУЛЬТАТАХ флоу (анализ/биоскан/консультация и т.п.) и в
+// опросниках - там нужна «всегда под рукой» нижняя клавиатура. Сама
+// навигация по меню (главное меню/хабы/под-действия) идёт через inline и
+// редактирует ОДНО сообщение на месте (см. MainMenuInline).
 func MainMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
@@ -69,71 +68,202 @@ func MainMenu() models.ReplyKeyboardMarkup {
 	}
 }
 
-// AnalysisHubMenu - раздел-хаб «Анализы»: под-действия
-// (Обычный / Расширенный анализ / Bioscan). Кнопка «Назад в меню» не нужна:
-// основное меню (reply-клавиатура) и так всегда видно внизу экрана.
-func AnalysisHubMenu() models.InlineKeyboardMarkup {
+// MainMenuInline - основное меню как inline-кнопки. Одно сообщение
+// (main_menu_msg_id) редактируется «на месте» при переходах главное меню
+// <-> хаб <-> под-действие, поэтому новые сообщения в чате не плодятся.
+func MainMenuInline() models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
 			{
-				{Text: locales.BtnRegularAnalysis, CallbackData: "section_diag_regular"},
-				{Text: locales.BtnRegularAnalysisDemo, CallbackData: "section_diag_regular_demo"},
+				{Text: locales.BtnAnalysisHub, CallbackData: "section_analysis"},
+				{Text: locales.BtnHealthHub, CallbackData: "section_health"},
 			},
 			{
-				{Text: locales.BtnExtendedAnalysis, CallbackData: "section_diag_extended"},
-				{Text: locales.BtnExtendedAnalysisDemo, CallbackData: "section_diag_extended_demo"},
-			},
-			{
-				{Text: locales.BtnBioscanBasic, CallbackData: "section_bioscan_basic"},
-				{Text: locales.BtnBioscanBasicDemo, CallbackData: "section_bioscan_basic_demo"},
-			},
-			{
-				{Text: locales.BtnBioscanExtended, CallbackData: "section_bioscan_extended"},
-				{Text: locales.BtnBioscanExtendedDemo, CallbackData: "section_bioscan_extended_demo"},
+				{Text: locales.BtnPremium, CallbackData: "premium_open"},
+				{Text: locales.BtnServiceHub, CallbackData: "section_service"},
 			},
 		},
 	}
+}
+
+// HubBackRow - inline-кнопка «Назад» для возврата из хаба в главное меню.
+func HubBackRow() []models.InlineKeyboardButton {
+	return []models.InlineKeyboardButton{
+		{Text: locales.BtnBack, CallbackData: "back_to_main"},
+	}
+}
+
+// BackInline - inline-кнопка «Назад» для возврата из экрана под-действия в
+// хаб текущего раздела (Анализы/Здоровье/Сервис). Используется на экранах
+// под-действий, премиум-заглушках и экранах ошибок (а также «О сервисе»):
+// «Назад» возвращает именно в хаб раздела (через hub_back → backToParent),
+// а не сразу в Главное меню - чтобы навигация была равномерной с
+// BackCancelInline (у которого «Назад» тоже ведёт в хаб).
+//
+// ВНИМАНИЕ: callback - hub_back, НЕ back_to_main. back_to_main ведёт в
+// Главное меню и предназначен только для кнопки «Назад» на уровне самого
+// хаба (HubBackRow). Раньше BackInline ошибочно переиспользовал HubBackRow и
+// прыгал в Главное меню - отсюда «неравномерный Назад» на части экранов.
+func BackInline() models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{Text: locales.BtnBack, CallbackData: "hub_back"},
+			},
+		},
+	}
+}
+
+// ConsultFinishMenu - reply-клавиатура ПОСЛЕ ответа консультации (режим
+// StateWaitingConsultationFinish). Содержит ТОЛЬКО «Закончить консультацию»
+// (+ «Задать ещё вопрос») - общего главного меню в этот момент НЕТ. Это
+// гарантирует, что пользователь не может «случайно» выйти в главное меню
+// (нажать «Анализы» и т.п.), пока не нажмёт «Закончить консультацию».
+// Кнопки - reply (нижняя клавиатура), а НЕ inline, по требованию UX.
+func ConsultFinishMenu() models.ReplyKeyboardMarkup {
+	return models.ReplyKeyboardMarkup{
+		Keyboard: [][]models.KeyboardButton{
+			{
+				{Text: locales.BtnConsultAgain},
+			},
+			{
+				{Text: locales.BtnConsultFinish},
+			},
+		},
+		ResizeKeyboard: true,
+	}
+}
+
+// BackCancelInline - inline-кнопки «Назад»/«Отмена» для экранов запуска флоу
+// (анализ/биоскан/консультация/отзыв): «Назад» возвращает в хаб, «Отмена»
+// прерывает флоу и возвращает в хаб текущего раздела.
+func BackCancelInline() models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{Text: locales.BtnBack, CallbackData: "hub_back"},
+				{Text: locales.BtnCancel, CallbackData: "cancel_flow"},
+			},
+		},
+	}
+}
+
+// BackQuestionInline - inline-кнопка «Назад» для вопросов опросников
+// (Bioscan PRO / базовый Bioscan / загрузка фото), где пользователь вводит
+// текст. Inline-клавиатура НЕ блокирует ввод текста, поэтому «Назад»
+// доступна параллельно с набором. Возврат на предыдущий вопрос - через
+// callback bioscan_question_back (см. router.handleCallback), который
+// вызывает backBioscanQuestionnaire. Так вся навигация остаётся ТОЛЬКО
+// инлайн (без висящих reply-клавиатур).
+func BackQuestionInline() models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{Text: locales.BtnBack, CallbackData: "bioscan_question_back"},
+			},
+		},
+	}
+}
+
+// BackCancelQuestionInline - inline [Назад / ❌ Отмена] для опросника
+// расширенного анализа. «Назад» -> questionnaire_back (предыдущий вопрос),
+// «Отмена» -> cancel_flow (выход в хаб «Анализы»). Inline вместо reply -
+// чтобы не плодить висящие reply-клавиатуры в чате.
+func BackCancelQuestionInline() models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{Text: locales.BtnBack, CallbackData: "questionnaire_back"},
+				{Text: locales.BtnCancel, CallbackData: "cancel_flow"},
+			},
+		},
+	}
+}
+
+// BackCancelQuestionInlineBioscan - inline [Назад / ❌ Отмена] для опросника
+// Bioscan PRO. «Назад» -> bioscan_question_back (предыдущий вопрос),
+// «Отмена» -> cancel_flow. Аналог BackCancelQuestionInline, но «Назад»
+// ведёт в опросник Bioscan (а не анализа).
+func BackCancelQuestionInlineBioscan() models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{Text: locales.BtnBack, CallbackData: "bioscan_question_back"},
+				{Text: locales.BtnCancel, CallbackData: "cancel_flow"},
+			},
+		},
+	}
+}
+
+// AnalysisHubMenu - раздел-хаб «Анализы»: под-действия
+// (Обычный / Расширенный анализ / Bioscan). Возврат в главное меню - по
+// inline-кнопке «Назад» внизу (сообщение редактируется на месте).
+func AnalysisHubMenu() models.InlineKeyboardMarkup {
+	rows := [][]models.InlineKeyboardButton{
+		{
+			{Text: locales.BtnRegularAnalysis, CallbackData: "section_diag_regular"},
+			{Text: locales.BtnRegularAnalysisDemo, CallbackData: "section_diag_regular_demo"},
+		},
+		{
+			{Text: locales.BtnExtendedAnalysis, CallbackData: "section_diag_extended"},
+			{Text: locales.BtnExtendedAnalysisDemo, CallbackData: "section_diag_extended_demo"},
+		},
+		{
+			{Text: locales.BtnBioscanBasic, CallbackData: "section_bioscan_basic"},
+			{Text: locales.BtnBioscanBasicDemo, CallbackData: "section_bioscan_basic_demo"},
+		},
+		{
+			{Text: locales.BtnBioscanExtended, CallbackData: "section_bioscan_extended"},
+			{Text: locales.BtnBioscanExtendedDemo, CallbackData: "section_bioscan_extended_demo"},
+		},
+		HubBackRow(),
+	}
+	return models.InlineKeyboardMarkup{InlineKeyboard: rows}
 }
 
 // HealthHubMenu - раздел-хаб «Здоровье»: под-действия
-// (Мой профиль / Консультация ИИ). Кнопка «Назад в меню»
-// не нужна: основное меню (reply-клавиатура) и так всегда видно внизу.
-// Мониторинг теперь встроен прямо в «Мой профиль» (4-я вкладка
-// внутри того же Web App), отдельной кнопки больше нет.
+// (Мой профиль / Консультация ИИ). Мониторинг теперь встроен прямо в
+// «Мой профиль» (4-я вкладка внутри того же Web App).
 func HealthHubMenu() models.InlineKeyboardMarkup {
-	return models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{{Text: locales.BtnHealthSummary, CallbackData: "section_health_summary"}},
-			{{Text: locales.BtnConsultation, CallbackData: "section_consult_start"}},
-			{{Text: locales.BtnHealthSummaryDemo, CallbackData: "section_health_summary_demo"}},
-		},
+	rows := [][]models.InlineKeyboardButton{
+		{{Text: locales.BtnHealthSummary, CallbackData: "section_health_summary"}},
+		{{Text: locales.BtnConsultation, CallbackData: "section_consult_start"}},
+		HubBackRow(),
 	}
+	return models.InlineKeyboardMarkup{InlineKeyboard: rows}
 }
 
 // ServiceHubMenu - раздел-хаб «Сервис»: под-действия
-// (Отзывы и предложения / О сервисе / 🧪 Тест уведомлений). Кнопка
-// «Назад в меню» не нужна: основное меню (reply-клавиатура) и так всегда
-// видно внизу экрана.
+// (Отзывы и предложения / О сервисе / 🧪 Тест уведомлений / Удаление аккаунта).
+// Тестовое меню уведомлений - ТОЛЬКО в development.
 func ServiceHubMenu() models.InlineKeyboardMarkup {
 	rows := [][]models.InlineKeyboardButton{
 		{{Text: locales.BtnFeedback, CallbackData: "section_feedback_start"}},
 		{{Text: locales.BtnAbout, CallbackData: "section_about"}},
+		{{Text: locales.BtnDeleteAccount, CallbackData: "section_delete_account"}},
 	}
-	// Тестовое меню уведомлений - ТОЛЬКО в development. В продакшене
-	// эта кнопка не показывается (иначе пользователи увидят dev-инструмент).
 	if isDev {
 		rows = append(rows, []models.InlineKeyboardButton{
 			{Text: locales.BtnTestNotify, CallbackData: "section_test_notify"},
 		})
 	}
+	rows = append(rows, HubBackRow())
 	return models.InlineKeyboardMarkup{InlineKeyboard: rows}
 }
 
+// DeleteAccountMenu - экран подтверждения удаления аккаунта (раздел
+// «Сервис»): «Да, удалить» (необратимо) и «Отмена» (возврат в хаб Сервис).
+func DeleteAccountMenu() models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{{Text: "🗑 Да, удалить", CallbackData: "delete_account_confirm"}},
+			{{Text: locales.BtnCancel, CallbackData: "delete_account_cancel"}},
+		},
+	}
+}
+
 // TestNotifyMenu - под-меню проверки уведомлений (раздел «Сервис», только
-// в development). Кнопки планируют отправку реального образца уведомления
-// через 10 секунд (подписка: за 7/3/1/0 дней; анализы: проверка или
-// реальная отправка по отклонениям), а также «Назад» - возврат в хаб
-// «Сервис».
+// в development).
 func TestNotifyMenu() models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
@@ -162,7 +292,8 @@ func UploadConfirm() models.ReplyKeyboardMarkup {
 	}
 }
 
-// BackMenu - меню с кнопкой "Назад"
+// BackMenu - меню с кнопкой "Назад" (reply). Используется на результатах
+// флоу и в опросниках - там нужна нижняя клавиатура «всегда под рукой».
 func BackMenu() models.ReplyKeyboardMarkup {
 	return models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{

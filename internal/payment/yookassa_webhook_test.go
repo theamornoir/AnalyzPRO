@@ -3,7 +3,7 @@ package payment
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,14 +11,17 @@ import (
 	"strings"
 	"testing"
 
-	sm "github.com/theamornoir/analyzpro/internal/storage/models"
 	"github.com/theamornoir/analyzpro/internal/storage/mock"
+	sm "github.com/theamornoir/analyzpro/internal/storage/models"
 )
 
+// signBody вычисляет подпись так же, как реальная YooKassa: HMAC-SHA256 от
+// тела ключом webhook-секрета, закодированный в Base64 (заголовок
+// X-YooKassa-Signature).
 func signBody(secret string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
-	return hex.EncodeToString(mac.Sum(nil))
+	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
 
 func webhookBody(t *testing.T, id, userID, tariffID, status string) []byte {

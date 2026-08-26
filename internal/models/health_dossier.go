@@ -30,20 +30,20 @@ type DossierPatient struct {
 
 // DossierScores - интегральные оценки для обложки (каждая 0-100).
 type DossierScores struct {
-	Health    int `json:"health"`    // состояние здоровья
-	Potential int `json:"potential"` // потенциал улучшения
+	Health    FlexInt `json:"health"`    // состояние здоровья
+	Potential FlexInt `json:"potential"` // потенциал улучшения
 	// Размерности образа жизни (для баров/донатов на обложке).
-	Wellbeing int `json:"wellbeing"`
-	Sleep     int `json:"sleep"`
-	Stress    int `json:"stress"`
-	Activity  int `json:"activity"`
-	Nutrition int `json:"nutrition"`
-	Focus     int `json:"focus"`
+	Wellbeing FlexInt `json:"wellbeing"`
+	Sleep     FlexInt `json:"sleep"`
+	Stress    FlexInt `json:"stress"`
+	Activity  FlexInt `json:"activity"`
+	Nutrition FlexInt `json:"nutrition"`
+	Focus     FlexInt `json:"focus"`
 }
 
 // SurveyQA - один вопрос/ответ из 20-вопросного опросника.
 type SurveyQA struct {
-	Num      int    `json:"num"`
+	Num      FlexInt    `json:"num"`
 	Question string `json:"question"`
 	Answer   string `json:"answer"`
 }
@@ -53,7 +53,7 @@ type SurveyQA struct {
 type LifestyleSection struct {
 	Key             string   `json:"key"`
 	Title           string   `json:"title"`
-	Score           int      `json:"score"`     // 0-100
+	Score           FlexInt      `json:"score"`     // 0-100
 	Status          string   `json:"status"`    // good | warning | risk
 	Narrative       string   `json:"narrative"` // связный разбор
 	Recommendations []string `json:"recommendations"`

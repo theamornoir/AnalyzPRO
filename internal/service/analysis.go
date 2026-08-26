@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -13,16 +14,22 @@ import (
 )
 
 // AIClient - интерфейс AI-клиента. Реализуется единым мультимодальным
-// Gemini-клиентом (internal/ai/gemini). Выделен как интерфейс, чтобы сервис
+// YandexGPT-клиентом (internal/ai/yandexgpt). Выделен как интерфейс, чтобы сервис
 // не зависел от конкретного провайдера и оставался тестируемым.
 type AIClient interface {
 	GenerateAnalysisSummary(ctx context.Context, userInput string) (string, error)
 	GenerateAnalysisJSON(ctx context.Context, userInput string) (string, error)
 	GenerateAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextText string) (string, error)
+	// GenerateAnalysisFromFileVision - анализ ПРИЛОЖЕННОГО ФОТО (травма/
+	// проблемная зона и т.п.) через мультимодальный (vision) запрос: само
+	// изображение передаётся модели напрямую (messages[].images), чтобы она
+	// реально «видела» снимок, а не только OCR-текст (с «живого» фото
+	// тела OCR извлекает ~0 символов). contextText - доп. контекст.
+	GenerateAnalysisFromFileVision(ctx context.Context, data []byte, mimeType string, contextText string) (string, error)
 	// GenerateAnalysisFromFilesWithContext - анализ НЕСКОЛЬКИХ файлов
 	// (изображения/PDF) одним мультимодальным запросом. Все вложения
 	// передаются в ОДНО сообщение вместе с промптом, как в Bioscan PRO, -
-	// это гарантирует, что ни один файл/показатель не теряется и Gemini видит
+	// это гарантирует, что ни один файл/показатель не теряется и модель видит
 	// связь между несколькими анализами сразу.
 	GenerateAnalysisFromFilesWithContext(ctx context.Context, data [][]byte, mimeTypes []string, contextText string) (string, error)
 	// GenerateAnalysisFromFilesJSON - структурированный JSON-анализ НЕСКОЛЬКИХ
@@ -32,6 +39,10 @@ type AIClient interface {
 	GenerateBodyScanJSON(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error)
 	GenerateAnalysisFromFileJSON(ctx context.Context, data []byte, mimeType string, contextText string) (string, error)
 	GenerateDossierJSON(ctx context.Context, userInput string) (string, error)
+	// GenerateHealthAssessmentJSON - строит JSON отчёта «Общая оценка
+	// здоровья» ИСКЛЮЧИТЕЛЬНО по тексту опросника об образе жизни (без
+	// медицинских файлов).
+	GenerateHealthAssessmentJSON(ctx context.Context, userInput string) (string, error)
 }
 
 // AnalysisService - интерфейс сервиса анализа
@@ -39,6 +50,12 @@ type AnalysisService interface {
 	HandleAnalysis(ctx context.Context, text string) (string, error)
 	HandleAnalysisWithContext(ctx context.Context, text string, contextInfo string) (string, error)
 	HandleAnalysisFromFileWithContext(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error)
+	// HandleConsultationImage - консультация по приложенному фото (травма/
+	// проблемная зона и т.п.) через мультимодальный (vision) запрос: модель
+	// реально «видит» снимок, а не только OCR-текст. contextInfo - доп.
+	// контекст (вопрос пользователя к фото). Возвращает готовый текст
+	// консультации (без markdown) для вывода в чат.
+	HandleConsultationImage(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error)
 	HandleBioscan(ctx context.Context, photosData [][]byte, mimeType string, contextInfo string) (string, error)
 	// HandleBioscanText - базовый (бесплатный) Bioscan: 1 фото -> plain-text
 	// отчёт (без markdown) для вывода обычным сообщением в чат.
@@ -67,6 +84,10 @@ type AnalysisService interface {
 	// здоровья (анализы пользователя + 20-вопросный опросник) и возвращает
 	// сырой JSON для последующего рендера в HTML (report.Renderer.RenderDossier).
 	HandleExtendedDossierJSON(ctx context.Context, combinedText string) (string, error)
+	// HandleHealthAssessment - строит отчёт «Общая оценка здоровья» по ТОЛЬКО
+	// тексту опросника об образе жизни (без медицинских файлов). Возвращает
+	// сырой JSON отчёта для последующего парсинга и рендера в текст/профиль.
+	HandleHealthAssessment(ctx context.Context, userInput string) (string, error)
 }
 
 // analysisService - реализация AnalysisService
@@ -115,6 +136,14 @@ func (s *analysisService) HandleAnalysisFromFileWithContext(
 	return s.aiClient.GenerateAnalysisFromFileWithContext(ctx, data, mimeType, textPrompt)
 }
 
+// HandleConsultationImage - консультация по ПРИЛОЖЕННОМУ ФОТО через
+// мультимодальный (vision) запрос ИИ: модель реально «видит» снимок
+// (травма/проблемная зона), а не только OCR-текст, который с «живого» фото
+// тела извлекает ~0 символов. Возвращает готовый текст консультации.
+func (s *analysisService) HandleConsultationImage(ctx context.Context, data []byte, mimeType string, contextInfo string) (string, error) {
+	return s.aiClient.GenerateAnalysisFromFileVision(ctx, data, mimeType, contextInfo)
+}
+
 // HandleAnalysisFromFilesWithContext - обрабатывает НЕСКОЛЬКО файлов единым
 // мультимодальным запросом. Все вложения уходят в одно сообщение к ИИ
 // (как в Bioscan PRO), что исключает потерю данных между файлами.
@@ -161,6 +190,36 @@ func (s *analysisService) HandleBioscan(
 	return s.renderReportFromJSON(jsonText, true)
 }
 
+// extractJSON очищает ответ ИИ от markdown-фенсов (```json ... ```), BOM и
+// возможного поясняющего текста до/после JSON-объекта, возвращая валидный
+// JSON-фрагмент. YandexGPT иногда оборачивает JSON в фенсы или добавляет
+// вступление на русском (кириллица) - такой ответ не парсится напрямую,
+// поэтому вырезаем подстроку между первой '{' и последней '}'.
+func extractJSON(raw string) string {
+	x := strings.TrimSpace(raw)
+	x = strings.TrimPrefix(x, "```json")
+	x = strings.TrimPrefix(x, "```")
+	x = strings.TrimSuffix(x, "```")
+	x = strings.TrimSpace(x)
+	x = strings.TrimPrefix(x, "\uFEFF") // BOM, если модель вернула его
+	if first := strings.Index(x, "{"); first >= 0 {
+		if last := strings.LastIndex(x, "}"); last > first {
+			x = x[first : last+1]
+		}
+	}
+	return x
+}
+
+// truncateLog обрезает строку для логов до безопасной длины, чтобы не
+// засорять логи большими JSON-ответами ИИ и не раскрывать лишние данные.
+func truncateLog(s string) string {
+	const limit = 500
+	if len(s) > limit {
+		return s[:limit] + fmt.Sprintf("... (обрезано, всего %d символов)", len(s))
+	}
+	return s
+}
+
 // bioscanReportFromJSON анмаршалит JSON от ИИ в models.Report, проставляя
 // флаг IsBioscan и рассчитывая углы диаграмм.
 func (s *analysisService) bioscanReportFromJSON(jsonText string) (models.Report, error) {
@@ -168,8 +227,17 @@ func (s *analysisService) bioscanReportFromJSON(jsonText string) (models.Report,
 		return models.Report{}, fmt.Errorf(locales.ErrEmptyJSONFromAI)
 	}
 
+	cleaned := extractJSON(jsonText)
+	if cleaned == "" {
+		return models.Report{}, fmt.Errorf(locales.ErrEmptyJSONFromAI)
+	}
+
 	var rep models.Report
-	if err := json.Unmarshal([]byte(jsonText), &rep); err != nil {
+	if err := json.Unmarshal([]byte(cleaned), &rep); err != nil {
+		slog.Error("[ANALYSIS] не удалось разобрать JSON Bioscan от ИИ",
+			"err", err,
+			"raw_head", truncateLog(jsonText),
+			"cleaned_head", truncateLog(cleaned))
 		return models.Report{}, fmt.Errorf(locales.ErrParseAnalysisJSON, err)
 	}
 
@@ -251,19 +319,17 @@ func (s *analysisService) HandleBioscanPro(
 		return "", "", fmt.Errorf(locales.ErrGenerateBioscanJSON, err)
 	}
 
-	cleaned := strings.TrimSpace(jsonText)
-	// Снимаем возможную markdown-обёртку ```json ... ```.
-	cleaned = strings.TrimPrefix(cleaned, "```json")
-	cleaned = strings.TrimPrefix(cleaned, "```")
-	cleaned = strings.TrimSuffix(cleaned, "```")
-	cleaned = strings.TrimSpace(cleaned)
-
+	cleaned := extractJSON(jsonText)
 	if cleaned == "" {
 		return "", "", fmt.Errorf(locales.ErrEmptyJSONFromAI)
 	}
 
 	var rep models.BodyScanReport
 	if err := json.Unmarshal([]byte(cleaned), &rep); err != nil {
+		slog.Error("[ANALYSIS] не удалось разобрать JSON Bioscan PRO от ИИ",
+			"err", err,
+			"raw_head", truncateLog(jsonText),
+			"cleaned_head", truncateLog(cleaned))
 		return "", "", fmt.Errorf(locales.ErrParseAnalysisJSON, err)
 	}
 
@@ -304,8 +370,17 @@ func (s *analysisService) renderReportFromJSON(jsonText string, isBioscan bool) 
 		return "", fmt.Errorf(locales.ErrEmptyJSONFromAI)
 	}
 
+	cleaned := extractJSON(jsonText)
+	if cleaned == "" {
+		return "", fmt.Errorf(locales.ErrEmptyJSONFromAI)
+	}
+
 	var rep models.Report
-	if err := json.Unmarshal([]byte(jsonText), &rep); err != nil {
+	if err := json.Unmarshal([]byte(cleaned), &rep); err != nil {
+		slog.Error("[ANALYSIS] не удалось разобрать JSON отчёта от ИИ",
+			"err", err,
+			"raw_head", truncateLog(jsonText),
+			"cleaned_head", truncateLog(cleaned))
 		return "", fmt.Errorf(locales.ErrParseAnalysisJSON, err)
 	}
 
@@ -356,6 +431,25 @@ func (s *analysisService) HandleExtendedDossierJSON(
 	return s.aiClient.GenerateDossierJSON(ctx, combinedText)
 }
 
+// HandleHealthAssessment - строит отчёт «Общая оценка здоровья» ИСКЛЮЧИТЕЛЬНО
+// по тексту опросника об образе жизни (без медицинских файлов). Возвращает
+// сырой JSON отчёта (см. models.HealthAssessment), который далее парсится и
+// рендерится в текст для чата и сохраняется в «Мой профиль».
+func (s *analysisService) HandleHealthAssessment(
+	ctx context.Context,
+	userInput string,
+) (string, error) {
+	slog.Info("[HEALTH] запрос общей оценки здоровья",
+		"input_chars", len(userInput))
+	raw, err := s.aiClient.GenerateHealthAssessmentJSON(ctx, userInput)
+	if err != nil {
+		slog.Error("[HEALTH] не удалось сгенерировать отчёт", "err", err)
+		return "", err
+	}
+	slog.Info("[HEALTH] отчёт получен от ИИ", "output_chars", len(raw))
+	return raw, nil
+}
+
 // HandleAdaptiveAnalysis - возвращает адаптивный HTML-отчёт по тексту
 func (s *analysisService) HandleAdaptiveAnalysis(
 	ctx context.Context,
@@ -390,15 +484,17 @@ func (s *analysisService) renderAdaptiveFromJSON(jsonText string) (string, error
 		return "", fmt.Errorf(locales.ErrEmptyJSONFromAI)
 	}
 
-	// Очищаем JSON от markdown-обёртки
-	cleaned := strings.TrimSpace(jsonText)
-	cleaned = strings.TrimPrefix(cleaned, "```json")
-	cleaned = strings.TrimPrefix(cleaned, "```")
-	cleaned = strings.TrimSuffix(cleaned, "```")
-	cleaned = strings.TrimSpace(cleaned)
+	cleaned := extractJSON(jsonText)
+	if cleaned == "" {
+		return "", fmt.Errorf(locales.ErrEmptyJSONFromAI)
+	}
 
 	var data reportmodels.AdaptiveReportData
 	if err := json.Unmarshal([]byte(cleaned), &data); err != nil {
+		slog.Error("[ANALYSIS] не удалось разобрать JSON адаптивного отчёта от ИИ",
+			"err", err,
+			"raw_head", truncateLog(jsonText),
+			"cleaned_head", truncateLog(cleaned))
 		return "", fmt.Errorf(locales.ErrParseAnalysisJSON, err)
 	}
 

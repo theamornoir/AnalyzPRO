@@ -79,6 +79,14 @@ func (s *Storage) GetAllUsers(ctx context.Context) ([]*sm.User, error) {
 	return s.Users.GetAllUsers(ctx)
 }
 
+// DeleteAccount полностью удаляет аккаунт пользователя по TelegramID:
+// профиль, анализы, курсы, предпочтения. Данные мониторинга и уведомлений
+// удаляются соответствующими сервисами (monitorRepo / notifications).
+// Необратимо. Если пользователя нет - молча завершается.
+func (s *Storage) DeleteAccount(ctx context.Context, telegramID int64) error {
+	return s.Users.DeleteAccount(ctx, telegramID)
+}
+
 // SaveDiagnosisForUser сохраняет результат анализа/биоскана, привязывая
 // к пользователю по TelegramID (создаёт пользователя при необходимости).
 func (s *Storage) SaveDiagnosisForUser(

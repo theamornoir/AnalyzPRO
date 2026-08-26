@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -26,7 +25,14 @@ type APIHandler struct {
 
 // NewAPIHandler создаёт обработчик API. premiumCheck возвращает true,
 // если пользователь с данным telegramID имеет Premium-подписку.
-func NewAPIHandler(svc *Service, botToken string, premiumCheck func(telegramID int64) bool) *APIHandler {
+// premiumLink - глубокая ссылка на экран Premium бота
+// (https://t.me/<username>?start=premium), по которой Mini App «Мой
+// профиль» открывает подписку по клику на апселл. Обычно приходит из
+// вызывающего кода (bot.go), где строится авто-выводом из username бота
+// (GetMe) либо из env WEBAPP_PREMIUM_LINK. Если здесь передать пустую
+// строку, фронтенд просто покажет текст-подсказку вместо перехода в
+// Premium (безопасный fallback, без перехода на неправильные боты).
+func NewAPIHandler(svc *Service, botToken string, premiumCheck func(telegramID int64) bool, premiumLink string) *APIHandler {
 	if premiumCheck == nil {
 		premiumCheck = func(int64) bool { return true }
 	}
@@ -34,7 +40,7 @@ func NewAPIHandler(svc *Service, botToken string, premiumCheck func(telegramID i
 		svc:          svc,
 		botToken:     botToken,
 		premiumCheck: premiumCheck,
-		premiumLink:  strings.TrimSpace(os.Getenv("WEBAPP_PREMIUM_LINK")),
+		premiumLink:  strings.TrimSpace(premiumLink),
 	}
 }
 

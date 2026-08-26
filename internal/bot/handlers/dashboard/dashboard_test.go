@@ -165,6 +165,34 @@ func TestMetricsOK(t *testing.T) {
 	}
 }
 
+func TestMetricsProfileMissingWhenNoQuestionnaire(t *testing.T) {
+	// Суть бага: Premium-пользователь с загруженным анализом, но без
+	// заполненной анкеты (questionnaire) ранее получал NoData=false и
+	// форма регистрации в Mini App не показывалась. Теперь ProfileMissing
+	// должен быть true, чтобы фронтенд отобразил форму заполнения профиля.
+	h, uid := newHandler(t)
+	seedAnalysis(t, h, uid)
+	h.pay.ActivatePremiumManually(uid, "premium_monthly")
+
+	initData := buildInitData(testBotToken, uid)
+	req := httptest.NewRequest(http.MethodGet, "/api/metrics?initData="+url.QueryEscape(initData), nil)
+	w := httptest.NewRecorder()
+	h.Metrics(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("ожидали 200, получили %d: %s", w.Code, w.Body.String())
+	}
+	var resp MetricsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("декод JSON: %v", err)
+	}
+	if resp.NoData {
+		t.Error("NoData=true при наличии анализа - не должно быть")
+	}
+	if !resp.ProfileMissing {
+		t.Error("ProfileMissing=false, а анкета не заполнена - форма не покажется")
+	}
+}
+
 func TestSaveProfileSeedsDashboard(t *testing.T) {
 	h, uid := newHandler(t)
 	h.pay.ActivatePremiumManually(uid, "premium_monthly")
@@ -179,6 +207,9 @@ func TestSaveProfileSeedsDashboard(t *testing.T) {
 	_ = json.Unmarshal(wb.Body.Bytes(), &beforeResp)
 	if !beforeResp.NoData {
 		t.Fatalf("до регистрации ожидали NoData=true")
+	}
+	if !beforeResp.ProfileMissing {
+		t.Fatalf("до регистрации ожидали ProfileMissing=true")
 	}
 
 	// Сохраняем профиль через POST /api/profile.
@@ -205,11 +236,25 @@ func TestSaveProfileSeedsDashboard(t *testing.T) {
 	if afterResp.NoData {
 		t.Error("NoData=true после сохранения профиля")
 	}
+	if afterResp.ProfileMissing {
+		t.Error("ProfileMissing=true после сохранения профиля (анкета есть)")
+	}
 	if afterResp.UserName != "Анна" {
 		t.Errorf("UserName=%q, want Анна", afterResp.UserName)
 	}
 	if afterResp.UserAge != 28 {
 		t.Errorf("UserAge=%d, want 28", afterResp.UserAge)
+	}
+	// Поля профиля (пол/рост/вес) должны приходить в ответ метрик, чтобы
+	// фронтенд показал их в карточке «Профиль» (а не только имя).
+	if afterResp.UserGender != "Женский" {
+		t.Errorf("UserGender=%q, want Женский", afterResp.UserGender)
+	}
+	if afterResp.UserHeight != 168 {
+		t.Errorf("UserHeight=%d, want 168", afterResp.UserHeight)
+	}
+	if afterResp.UserWeight != 60 {
+		t.Errorf("UserWeight=%d, want 60", afterResp.UserWeight)
 	}
 	if len(afterResp.Recommendations) == 0 {
 		t.Error("ожидали рекомендации из профиля")
