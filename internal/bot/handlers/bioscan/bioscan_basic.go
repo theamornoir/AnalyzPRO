@@ -81,7 +81,23 @@ func HandleBioscanBasicPhoto(ctx context.Context, b *tgbot.Bot, sm states.StateM
 
 	// Подтверждаем приём и сразу переходим к опроснику (фото уже сохранено).
 	sm.SetState(chatID, states.StateWaitingBioscanBasicQ)
+	if sm.GetUserData(chatID, basicStepKey) != "" {
+		// Шаг уже выставлен (пользователь выбрал «Использовать» сохранённый
+		// профиль и пропустил демографические вопросы) - сразу к этому шагу
+		// (обычно цель, step 4), не задавая вопрос про пол заново.
+		step, _ := strconv.Atoi(sm.GetUserData(chatID, basicStepKey))
+		askBioscanBasicStep(ctx, b, sm, chatID, step)
+		return
+	}
+	sm.SetUserData(chatID, basicStepKey, strconv.Itoa(basicStepStart))
 	askBioscanBasicStep(ctx, b, sm, chatID, basicStepStart)
+}
+
+// AskBioscanBasicStep - экспортируемая обёртка askBioscanBasicStep (задаёт
+// вопрос текущего шага мини-опросника базового Bioscan). Используется
+// роутером, когда демографические данные уже известны из профиля.
+func AskBioscanBasicStep(ctx context.Context, b *tgbot.Bot, sm states.StateManager, chatID int64, step int) {
+	askBioscanBasicStep(ctx, b, sm, chatID, step)
 }
 
 // bioscanBasicGenderKeyboard - inline-кнопки выбора пола.

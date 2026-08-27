@@ -90,14 +90,9 @@ func (r *router) handleBioscanStates(ctx context.Context, b *tgbot.Bot, chatID i
 		bioscan.HandleBioscanAge(ctx, b, r.stateManager, chatID, text)
 		return true
 
-	case states.StateWaitingBioscanHeight:
-		log.Printf(locales.LogProcessingBioscanHeight, chatID)
-		bioscan.HandleBioscanHeight(ctx, b, r.stateManager, chatID, text)
-		return true
-
-	case states.StateWaitingBioscanWeight:
-		log.Printf(locales.LogProcessingBioscanWeight, chatID)
-		bioscan.HandleBioscanWeight(ctx, b, r.stateManager, chatID, text)
+	case states.StateWaitingBioscanHeightWeight:
+		log.Printf(locales.LogProcessingBioscanHeightWeight, chatID)
+		bioscan.HandleBioscanHeightWeight(ctx, b, r.stateManager, chatID, text)
 		return true
 
 	case states.StateWaitingBioscanGoal:
@@ -125,6 +120,9 @@ func (r *router) handleBioscanStates(ctx context.Context, b *tgbot.Bot, chatID i
 		log.Printf(locales.LogRouterBioscanConfirm, chatID, text)
 		switch text {
 		case locales.BtnBioscanConfirm:
+			// Сохраняем профиль до генерации отчёта (не переспрашиваем
+			// демографию в следующий раз). Ключи bioscan_*.
+			r.saveProfile(ctx, chatID, "bioscan_")
 			bioscan.ProcessBioscanWithPhotos(ctx, b, r.stateManager, r.analysisService, r.pdfConverter, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo, r.webAppURL)
 		case locales.BtnBioscanRestart:
 			bioscan.StartBioscanFlow(ctx, b, r.stateManager, chatID)
@@ -157,6 +155,10 @@ func (r *router) finalizeBioscanBasicReport(ctx context.Context, b *tgbot.Bot, c
 		gender, age, height, weight, goal, activity,
 	)
 	log.Printf("[BIOSCAN] базовый: генерация отчёта chatID=%d", chatID)
+
+	// Сохраняем профиль по собранным данным мини-опросника (чтобы при
+	// следующем запуске не переспрашивать демографию). Ключи bioscan_basic_*.
+	r.saveProfile(ctx, chatID, "bioscan_basic_")
 
 	// Скачиваем присланное фото (если есть) - оно поступает в ИИ вместе с
 	// данными опросника. OCR достанет текст со скриншотов умных весов/
@@ -215,7 +217,7 @@ func (r *router) finalizeBioscanBasicReport(ctx context.Context, b *tgbot.Bot, c
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgBioscanBasicDone + "\n\n" + locales.MsgMaterialsDeleted,
-		ReplyMarkup: keyboards.MainMenuInline(),
+		ReplyMarkup: reportFeedbackKeyboard(),
 	})
 
 	log.Printf("[BIOSCAN] обработка завершена chatID=%d", chatID)

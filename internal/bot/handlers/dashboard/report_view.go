@@ -148,7 +148,7 @@ func buildHealthAssessmentHTML(entry *monitoring.HistoryEntry) string {
 		Plan struct {
 			Sleep     string `json:"sleep"`
 			Nutrition string `json:"nutrition"`
-			Movement  string `json:"movement"`
+			Activity  string `json:"activity"`
 			Stress    string `json:"stress"`
 		} `json:"plan"`
 	}
@@ -187,10 +187,10 @@ func buildHealthAssessmentHTML(entry *monitoring.HistoryEntry) string {
 	// Сферы образа жизни.
 	if len(ha.Lifestyle) > 0 {
 		b.WriteString("<div class=\"card\"><h2>Оценка по сферам</h2>")
-		order := []string{"sleep", "nutrition", "movement", "activity", "stress", "energy", "wellbeing"}
+		order := []string{"sleep", "nutrition", "activity", "stress", "habits"}
 		labels := map[string]string{
-			"sleep": "Сон", "nutrition": "Питание", "movement": "Движение",
-			"activity": "Активность", "stress": "Стресс", "energy": "Энергия", "wellbeing": "Самочувствие",
+			"sleep": "Сон", "nutrition": "Питание", "activity": "Физическая активность",
+			"stress": "Стресс", "habits": "Вредные привычки",
 		}
 		seen := map[string]bool{}
 		add := func(key string, dim struct {
@@ -259,7 +259,7 @@ func buildHealthAssessmentHTML(entry *monitoring.HistoryEntry) string {
 	}{
 		{"Сон", ha.Plan.Sleep},
 		{"Питание", ha.Plan.Nutrition},
-		{"Движение", ha.Plan.Movement},
+		{"Физическая активность", ha.Plan.Activity},
 		{"Стресс", ha.Plan.Stress},
 	}
 	hasPlan := false

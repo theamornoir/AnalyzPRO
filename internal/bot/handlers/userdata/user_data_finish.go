@@ -81,77 +81,14 @@ func formatUserData(data map[string]string) string {
 			}
 		}
 	}
-	if chronic := data["chronic_diseases"]; chronic != "" && strings.ToLower(chronic) != "нет" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryChronicDiseases, chronic))
-	}
-	if allergies := data["allergies"]; allergies != "" && strings.ToLower(allergies) != "нет" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryAllergies, allergies))
-	}
-	if medications := data["medications"]; medications != "" && strings.ToLower(medications) != "нет" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryMedications, medications))
-	}
-	if smoking := data["smoking"]; smoking != "" && strings.ToLower(smoking) != "нет" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummarySmoking, smoking))
-	}
-	if alcohol := data["alcohol"]; alcohol != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryAlcohol, alcohol))
-	}
-	if sport := data["sport_type"]; sport != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummarySportType, sport))
-	}
-	if exp := data["training_experience"]; exp != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryTrainingExperience, exp))
-	}
 	if goal := data["goal"]; goal != "" {
 		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryGoal, goal))
 	}
-	if sleep := data["sleep"]; sleep != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummarySleep, sleep))
+	if lifestyle := data["lifestyle"]; lifestyle != "" {
+		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryLifestyle, lifestyle))
 	}
-	if stress := data["stress"]; stress != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryStress, stress))
-	}
-	if veg := data["nutrition_veg"]; veg != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryNutritionVeg, veg))
-	}
-	if proc := data["nutrition_processed"]; proc != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryNutritionProcessed, proc))
-	}
-	if water := data["water"]; water != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryWater, water))
-	}
-	if activity := data["activity"]; activity != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryActivity, activity))
-	}
-	if family := data["family_history"]; family != "" && strings.ToLower(family) != "нет" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryFamilyHistory, family))
-	}
-	if digestion := data["digestion"]; digestion != "" && strings.ToLower(digestion) != "нет" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryDigestion, digestion))
-	}
-	if energy := data["energy"]; energy != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryEnergy, energy))
-	}
-	if mood := data["mood"]; mood != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryMood, mood))
-	}
-	if work := data["work_regimen"]; work != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryWorkRegimen, work))
-	}
-	if screen := data["screen_time"]; screen != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryScreenTime, screen))
-	}
-	if meal := data["meal_regularity"]; meal != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryMealRegularity, meal))
-	}
-	if caffeine := data["caffeine"]; caffeine != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryCaffeine, caffeine))
-	}
-	if illness := data["illness_freq"]; illness != "" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryIllnessFreq, illness))
-	}
-	if pain := data["pain_areas"]; pain != "" && strings.ToLower(pain) != "нет" {
-		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryPainAreas, pain))
+	if habits := data["habits"]; habits != "" && strings.ToLower(habits) != "нет" {
+		parts = append(parts, fmt.Sprintf(locales.MsgUserSummaryHabits, habits))
 	}
 
 	return strings.Join(parts, "\n")

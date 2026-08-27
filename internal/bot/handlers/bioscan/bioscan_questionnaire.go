@@ -20,30 +20,16 @@ type bioscanQuestion struct {
 	next   states.State
 }
 
-// bioscanQuestionnaire - последовательность вопросов, идущих ПОСЛЕ цели и ДО
-// загрузки 4 фотографий. Это отдельный от анализа блок: здесь спрашиваем про
-// образ жизни, тренировки, травмы и здоровье - те сферы, которые нужны для
-// детального отчёта Body Intelligence (программа тренировок под травмы и опыт,
-// разбор осанки с учётом жалоб, рекомендации под питание и сон).
+// bioscanQuestionnaire - последовательность вопросов опросника Bioscan PRO,
+// идущих ПОСЛЕ цели и ДО загрузки 4 фотографий. Опросник сокращён до 7
+// ёмких вопросов: имя, возраст, пол, рост+вес, цель, уровень тренированности
+// и стаж тренировок. Уровень тренированности и цель выбираются inline-кнопками,
+// стаж - свободным текстом. Этот срез содержит только вопросы ПОСЛЕ цели
+// (пол/цель уже обработаны в bioscan_question.go), то есть здесь осталось
+// два вопроса: уровень (кнопки) и стаж (текст), после чего - загрузка фото.
 var bioscanQuestionnaire = []bioscanQuestion{
-	{states.StateWaitingBioscanTrainingExp, "bioscan_training_exp", locales.MsgBioscanQTrainingExp, states.StateWaitingBioscanTrainingFreq},
-	{states.StateWaitingBioscanTrainingFreq, "bioscan_training_freq", locales.MsgBioscanQTrainingFreq, states.StateWaitingBioscanTrainingType},
-	{states.StateWaitingBioscanTrainingType, "bioscan_training_type", locales.MsgBioscanQTrainingType, states.StateWaitingBioscanInjuries},
-	{states.StateWaitingBioscanInjuries, "bioscan_injuries", locales.MsgBioscanQInjuries, states.StateWaitingBioscanPostureIssues},
-	{states.StateWaitingBioscanPostureIssues, "bioscan_posture_issues", locales.MsgBioscanQPostureIssues, states.StateWaitingBioscanImproveZones},
-	{states.StateWaitingBioscanImproveZones, "bioscan_improve_zones", locales.MsgBioscanQImproveZones, states.StateWaitingBioscanMobility},
-	{states.StateWaitingBioscanMobility, "bioscan_mobility", locales.MsgBioscanQMobility, states.StateWaitingBioscanRecovery},
-	{states.StateWaitingBioscanRecovery, "bioscan_recovery", locales.MsgBioscanQRecovery, states.StateWaitingBioscanSleep},
-	{states.StateWaitingBioscanSleep, "bioscan_sleep", locales.MsgBioscanQSleep, states.StateWaitingBioscanStress},
-	{states.StateWaitingBioscanStress, "bioscan_stress", locales.MsgBioscanQStress, states.StateWaitingBioscanNutrition},
-	{states.StateWaitingBioscanNutrition, "bioscan_nutrition", locales.MsgBioscanQNutrition, states.StateWaitingBioscanProtein},
-	{states.StateWaitingBioscanProtein, "bioscan_protein", locales.MsgBioscanQProtein, states.StateWaitingBioscanWater},
-	{states.StateWaitingBioscanWater, "bioscan_water", locales.MsgBioscanQWater, states.StateWaitingBioscanSmoking},
-	{states.StateWaitingBioscanSmoking, "bioscan_smoking", locales.MsgBioscanQSmoking, states.StateWaitingBioscanAlcohol},
-	{states.StateWaitingBioscanAlcohol, "bioscan_alcohol", locales.MsgBioscanQAlcohol, states.StateWaitingBioscanSedentary},
-	{states.StateWaitingBioscanSedentary, "bioscan_sedentary", locales.MsgBioscanQSedentary, states.StateWaitingBioscanBodyFatGoal},
-	{states.StateWaitingBioscanBodyFatGoal, "bioscan_body_fat_goal", locales.MsgBioscanQBodyFatGoal, states.StateWaitingBioscanDietRestrictions},
-	{states.StateWaitingBioscanDietRestrictions, "bioscan_diet_restrictions", locales.MsgBioscanQDietRestrictions, states.StateWaitingBioscanPhoto1},
+	{states.StateWaitingBioscanTrainingLevel, "bioscan_training_level", locales.MsgBioscanQTrainingLevel, states.StateWaitingBioscanTrainingExp},
+	{states.StateWaitingBioscanTrainingExp, "bioscan_training_exp", locales.MsgBioscanQTrainingExp, states.StateWaitingBioscanPhoto1},
 }
 
 // HandleBioscanQuestionnaireState - обрабатывает текущий вопрос опросника

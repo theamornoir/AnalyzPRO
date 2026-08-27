@@ -9,8 +9,9 @@ type HealthAssessment struct {
 	HealthIndex int `json:"health_index"`
 	// Summary - общий развёрнутый разбор образа жизни.
 	Summary string `json:"summary"`
-	// Lifestyle - разбор по сферам образа жизни (сон, питание, движение,
-	// стресс, энергия). Каждый элемент содержит оценку 0-100 и комментарий.
+	// Lifestyle - разбор по 5 сферам образа жизни (сон, питание, физическая
+	// активность, стресс, вредные привычки). Каждый элемент содержит оценку
+	// 0-100 и комментарий.
 	Lifestyle map[string]LifestyleDim `json:"lifestyle"`
 	// RiskZones - зоны риска (красные флаги / что требует внимания).
 	RiskZones []RiskZone `json:"risk_zones"`
@@ -31,10 +32,10 @@ type RiskZone struct {
 	Description string `json:"description"`
 }
 
-// HealthPlan - персональный план улучшения на 3 месяца.
+// HealthPlan - персональный план улучшения на 3 месяца по 4 сферам.
 type HealthPlan struct {
 	Sleep     string `json:"sleep"`
 	Nutrition string `json:"nutrition"`
-	Movement  string `json:"movement"`
+	Activity  string `json:"activity"`
 	Stress    string `json:"stress"`
 }

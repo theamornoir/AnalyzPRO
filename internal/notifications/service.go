@@ -370,6 +370,45 @@ var refFields = []string{"normal", "ref_range", "reference", "ref_interval", "no
 // unitFields - возможные имена поля единицы измерения в JSON показателя.
 var unitFields = []string{"unit", "units"}
 
+// recommendationByIndicator - статическая карта рекомендаций по показателю
+// (ключ - нормализованное нижним регистром имя показателя). Используется
+// немедленным уведомлением об отклонениях после загрузки анализа
+// (CheckAndNotifyAfterUpload), чтобы дать пользователю короткую практическую
+// подсказку по каждому вышедшему за норму показателю. Для показателей,
+// которых нет в карте, применяется рекомендация по умолчанию.
+var recommendationByIndicator = map[string]string{
+	"глюкоза":          "Снизьте долю быстрых углеводов и сладкого, добавьте прогулку после еды.",
+	"гемоглобин":       "Проверьте питание на железо и витамин B12, при слабости - к врачу.",
+	"холестерин":       "Ограничьте насыщенные жиры, больше овощей и клетчатки в рационе.",
+	"холестерин общий": "Ограничьте насыщенные жиры, больше овощей и клетчатки в рационе.",
+	"лпнп":             "Меньше жирного и жареного, добавьте Омега-3 и овощи.",
+	"лпвп":             "Добавьте аэробные нагрузки и полезные жиры (орехи, рыба).",
+	"триглицериды":     "Сократите сахар и алкоголь, контролируйте вес тела.",
+	"лейкоциты":        "Возможен воспалительный процесс - следите за самочувствием.",
+	"соэ":              "Неспецифичный маркер воспаления - оценивайте с другими показателями.",
+	"ттг":              "Показатель щитовидной железы - обсудите с эндокринологом.",
+	"креатинин":        "Следите за водным режимом и нагрузкой на почки.",
+	"мочевина":         "Контролируйте водный режим и работу почек.",
+	"алт":              "Снизьте нагрузку на печень: меньше жирного и алкоголя.",
+	"аст":              "Снизьте нагрузку на печень и сердце: меньше алкоголя и жирного.",
+	"билирубин":        "Проверьте работу печени и желчного пузыря.",
+	"железо":           "Скорректируйте питание с железосодержащими продуктами при низком уровне.",
+	"витамин d":        "Больше солнечных прогулок и витамина D в рационе.",
+	"кальций":          "Проверьте питание и уровень витамина D для усвоения.",
+	"натрий":           "Контролируйте солёную пищу и водный режим.",
+	"калий":            "Следите за рационом (овощи, фрукты) и водным балансом.",
+}
+
+// recommendationForIndicator возвращает рекомендацию по имени показателя
+// (нормализует ключ в нижний регистр). Если показателя нет в карте -
+// возвращает рекомендацию по умолчанию.
+func recommendationForIndicator(name string) string {
+	if r, ok := recommendationByIndicator[strings.ToLower(strings.TrimSpace(name))]; ok {
+		return r
+	}
+	return "Обсудите этот показатель с врачом для уточнения причин."
+}
+
 // parseIndicators извлекает из JSON-результата анализа плоский список
 // показателей. Поддерживаются несколько форматов (пробуем по очереди,
 // см. требования):
@@ -393,6 +432,9 @@ func parseIndicators(jsonStr string) []indicator {
 	}
 
 	var out []indicator
+	if out = parseFormatSections(root); len(out) > 0 {
+		return dedupeIndicators(out)
+	}
 	if out = parseFormatCategories(root); len(out) > 0 {
 		return dedupeIndicators(out)
 	}
@@ -404,6 +446,27 @@ func parseIndicators(jsonStr string) []indicator {
 	}
 	log.Printf("[NOTIF] неизвестный формат анализа, пропускаем (начало: %q)", truncate(s, 80))
 	return nil
+}
+
+// parseFormatSections - Формат 0 (sections): верхнеуровневый массив
+// sections[], где каждый раздел содержит indicators[] (это основной формат
+// JSON, который возвращает ИИ для ОБЫЧНОГО анализа). Каждый indicator
+// имеет name/value/normal/unit/status. Возвращает все показатели из всех
+// секций (без дедупликации - её делает parseIndicators).
+func parseFormatSections(root map[string]interface{}) []indicator {
+	var out []indicator
+	if secs, ok := root["sections"].([]interface{}); ok {
+		for _, sec := range secs {
+			secMap, ok := sec.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if inds, ok := secMap["indicators"].([]interface{}); ok {
+				out = append(out, extractIndicatorsFromList(inds)...)
+			}
+		}
+	}
+	return out
 }
 
 // parseFormatCategories - Формат 1: вложенные показатели анализа.
@@ -887,6 +950,66 @@ func formatDeviations(inds []indicator) string {
 		bld.WriteString(formatDeviationLine(ind.Name, ind.Value, ind.Normal, ind.Unit))
 	}
 	return fmt.Sprintf(locales.MsgNotifAnalyticsDeviationList, bld.String())
+}
+
+// formatOutOfRangeItem формирует ОДНУ строку немедленного уведомления об
+// отклонении (после загрузки анализа): название, значение (с единицей),
+// референсный интервал (с единицей) и короткую рекомендацию по показателю.
+func formatOutOfRangeItem(ind indicator) string {
+	value := ind.Value
+	normal := ind.Normal
+	if ind.Unit != "" {
+		if value != "" {
+			value += " " + ind.Unit
+		}
+		if normal != "" {
+			normal += " " + ind.Unit
+		}
+	}
+	return fmt.Sprintf(locales.MsgNotifOutOfRangeItem, ind.Name, value, normal, recommendationForIndicator(ind.Name))
+}
+
+// formatOutOfRange объединяет отклонения в ОДНО уведомление, отправляемое
+// сразу после загрузки анализа: шапка MsgNotifOutOfRange + список строк
+// (formatOutOfRangeItem) + подвал MsgNotifFooter.
+func formatOutOfRange(inds []indicator) string {
+	var bld strings.Builder
+	for i, ind := range inds {
+		if i > 0 {
+			bld.WriteString("\n")
+		}
+		bld.WriteString(formatOutOfRangeItem(ind))
+	}
+	return fmt.Sprintf(locales.MsgNotifOutOfRange, bld.String()) + "\n\n" + locales.MsgNotifFooter
+}
+
+// CheckAndNotifyAfterUpload проверяет только что сохранённый анализ на
+// отклонения от нормы и НЕМЕДЛЕННО шлёт по ним уведомление - для ВСЕХ
+// пользователей (и Free, и Premium), сразу после загрузки обычного анализа.
+// Отличается от фонового runAnalyticsChecks тем, что не зависит от
+// Premium-статуса и не подавляется на 14 дней - это прямая обратная связь
+// по только что загруженному результату. analysisJSON - структурированный
+// JSON отчёта (форматы sections/categories/indicators/results), тот же, что
+// сохраняется в «Мой профиль». Возвращает nil, если отклонений нет, анализ
+// пустой или отправка не удалась (ошибка не фатальна для вызывающего кода).
+func (s *Service) CheckAndNotifyAfterUpload(ctx context.Context, telegramID int64, analysisJSON string) error {
+	inds := parseIndicators(analysisJSON)
+	var toNotify []indicator
+	for _, ind := range inds {
+		if isOutOfRange(ind) {
+			toNotify = append(toNotify, ind)
+		}
+	}
+	if len(toNotify) == 0 {
+		return nil
+	}
+	sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	text := formatOutOfRange(toNotify)
+	if s.sendNotification(sendCtx, telegramID, text) {
+		return nil
+	}
+	return fmt.Errorf("notification not sent for user %d", telegramID)
 }
 
 // SendSubscriptionTest отправляет ТЕСТОВОЕ уведомление об окончании

@@ -653,3 +653,88 @@ func TestAnalyticsMockPreview(t *testing.T) {
 		t.Fatal("mock-предпросмотр не должен писать подавление в БД")
 	}
 }
+
+// parseFormatSections: основной формат обычного анализа (sections[] с
+// indicators[]). Проверяем, что показатели из всех секций собираются.
+func TestParseFormatSections(t *testing.T) {
+	jsonData := `{
+		"sections": [
+			{"title":"Кровь","indicators":[
+				{"name":"Глюкоза","value":"6.8","normal":"3.3-5.5","status":"critical","unit":"ммоль/л"}
+			]},
+			{"title":"Биохимия","indicators":[
+				{"name":"Холестерин общий","value":"6.5","normal":"до 5.0","status":"warning"}
+			]}
+		]
+	}`
+	inds := parseIndicators(jsonData)
+	if len(inds) != 2 {
+		t.Fatalf("ожидали 2 показателя из sections, получили %d: %v", len(inds), inds)
+	}
+	byName := map[string]indicator{}
+	for _, i := range inds {
+		byName[i.Name] = i
+	}
+	g, ok := byName["Глюкоза"]
+	if !ok {
+		t.Fatal("показатель Глюкоза не найден в sections")
+	}
+	if g.Value != "6.8" || g.Normal != "3.3-5.5" || g.Unit != "ммоль/л" || !isOutOfRange(g) {
+		t.Fatalf("Глюкоза распознана неверно: %+v", g)
+	}
+}
+
+// CheckAndNotifyAfterUpload: для ВСЕХ пользователей (в т.ч. Free, без
+// Premium) при наличии отклонений сразу шлёт уведомление, содержащее
+// показатель, его значение/норму, рекомендацию и подвал-дисклеймер.
+// При отсутствии отклонений - не шлёт ничего.
+func TestCheckAndNotifyAfterUpload(t *testing.T) {
+	svc := NewService(nil, nil, nil, nil, true)
+	ctx := context.Background()
+
+	const analysisJSON = `{
+		"sections": [
+			{"title":"Кровь","indicators":[
+				{"name":"Глюкоза","value":"6.8","normal":"3.3-5.5","status":"critical","unit":"ммоль/л"},
+				{"name":"Гемоглобин","value":"145","normal":"120-160","status":"normal"}
+			]}
+		]
+	}`
+
+	var sent []string
+	svc.sendFn = func(_ context.Context, _ int64, text string) bool {
+		sent = append(sent, text)
+		return true
+	}
+
+	// Free-пользователь (без Premium) тоже получает уведомление.
+	if err := svc.CheckAndNotifyAfterUpload(ctx, 990, analysisJSON); err != nil {
+		t.Fatalf("CheckAndNotifyAfterUpload: %v", err)
+	}
+	if len(sent) != 1 {
+		t.Fatalf("ожидали 1 уведомление, получили %d: %v", len(sent), sent)
+	}
+	msg := sent[0]
+	if !strings.Contains(msg, "Глюкоза") {
+		t.Fatalf("уведомление должно содержать показатель Глюкоза: %q", msg)
+	}
+	if !strings.Contains(msg, "6.8") || !strings.Contains(msg, "3.3-5.5") {
+		t.Fatalf("уведомление должно содержать значение и норму: %q", msg)
+	}
+	if !strings.Contains(msg, "💡") {
+		t.Fatalf("уведомление должно содержать рекомендацию (💡): %q", msg)
+	}
+	if !strings.Contains(msg, locales.MsgNotifFooter) {
+		t.Fatalf("уведомление должно содержать подвал-дисклеймер: %q", msg)
+	}
+
+	// Анализ в норме -> ничего не шлём.
+	sent = nil
+	normalJSON := `{"sections":[{"title":"Кровь","indicators":[{"name":"Гемоглобин","value":"145","normal":"120-160","status":"normal"}]}]}`
+	if err := svc.CheckAndNotifyAfterUpload(ctx, 990, normalJSON); err != nil {
+		t.Fatalf("CheckAndNotifyAfterUpload (норма): %v", err)
+	}
+	if len(sent) != 0 {
+		t.Fatalf("при норме не должно быть отправок, получили %v", sent)
+	}
+}

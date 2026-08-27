@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	tgbot "github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
@@ -23,69 +24,30 @@ func NewUserDataCollector(stateManager states.StateManager) *UserDataCollector {
 	}
 }
 
-// stepOrder - порядок вопросов 20-вопросного опросника анализа. Используется
-// для прогресс-бара «Вопрос N из M» и навигации «Назад» между вопросами.
+// stepOrder - порядок вопросов опросника «Общая оценка здоровья». Сокращён
+// до 7 ёмких вопросов (имя, пол, возраст, рост+вес, цель, образ жизни,
+// вредные привычки). Пол/цель/привычки - варианты ответов (inline-кнопки),
+// остальные - короткий текст. Используется для прогресс-бара «Вопрос N из M»
+// и навигации «Назад» между вопросами.
 var stepOrder = []states.State{
 	states.StateWaitingName,
 	states.StateWaitingGender,
 	states.StateWaitingAge,
-	states.StateWaitingHeight,
-	states.StateWaitingWeight,
-	states.StateWaitingSleep,
-	states.StateWaitingStress,
-	states.StateWaitingNutritionVeg,
-	states.StateWaitingNutritionProcessed,
-	states.StateWaitingWater,
-	states.StateWaitingActivity,
-	states.StateWaitingChronicDiseases,
-	states.StateWaitingAllergies,
-	states.StateWaitingMedications,
-	states.StateWaitingSmoking,
-	states.StateWaitingAlcohol,
-	states.StateWaitingFamilyHistory,
-	states.StateWaitingDigestion,
-	states.StateWaitingSportType,
+	states.StateWaitingHeightWeight,
 	states.StateWaitingGoal,
-	states.StateWaitingEnergy,
-	states.StateWaitingMood,
-	states.StateWaitingWorkRegimen,
-	states.StateWaitingScreenTime,
-	states.StateWaitingMealRegularity,
-	states.StateWaitingCaffeine,
-	states.StateWaitingIllnessFreq,
-	states.StateWaitingPainAreas,
+	states.StateWaitingLifestyle,
+	states.StateWaitingHabits,
 }
 
 // stepPrompt - текст вопроса для каждого состояния опросника.
 var stepPrompt = map[states.State]string{
-	states.StateWaitingName:               locales.MsgExtendedAnalysisIntro,
-	states.StateWaitingGender:             locales.MsgUserGender,
-	states.StateWaitingAge:                locales.MsgUserAge,
-	states.StateWaitingHeight:             locales.MsgUserHeight,
-	states.StateWaitingWeight:             locales.MsgUserWeight,
-	states.StateWaitingSleep:              locales.MsgUserSleep,
-	states.StateWaitingStress:             locales.MsgUserStress,
-	states.StateWaitingNutritionVeg:       locales.MsgUserNutritionVeg,
-	states.StateWaitingNutritionProcessed: locales.MsgUserNutritionProcessed,
-	states.StateWaitingWater:              locales.MsgUserWater,
-	states.StateWaitingActivity:           locales.MsgUserActivity,
-	states.StateWaitingChronicDiseases:    locales.MsgUserChronicDiseases,
-	states.StateWaitingAllergies:          locales.MsgUserAllergies,
-	states.StateWaitingMedications:        locales.MsgUserMedications,
-	states.StateWaitingSmoking:            locales.MsgUserSmoking,
-	states.StateWaitingAlcohol:            locales.MsgUserAlcohol,
-	states.StateWaitingFamilyHistory:      locales.MsgUserFamilyHistory,
-	states.StateWaitingDigestion:          locales.MsgUserDigestion,
-	states.StateWaitingSportType:          locales.MsgUserSportType,
-	states.StateWaitingGoal:               locales.MsgUserGoal,
-	states.StateWaitingEnergy:             locales.MsgUserEnergy,
-	states.StateWaitingMood:               locales.MsgUserMood,
-	states.StateWaitingWorkRegimen:        locales.MsgUserWorkRegimen,
-	states.StateWaitingScreenTime:         locales.MsgUserScreenTime,
-	states.StateWaitingMealRegularity:     locales.MsgUserMealRegularity,
-	states.StateWaitingCaffeine:           locales.MsgUserCaffeine,
-	states.StateWaitingIllnessFreq:        locales.MsgUserIllnessFreq,
-	states.StateWaitingPainAreas:          locales.MsgUserPainAreas,
+	states.StateWaitingName:         locales.MsgExtendedAnalysisIntro,
+	states.StateWaitingGender:       locales.MsgUserGender,
+	states.StateWaitingAge:          locales.MsgUserAge,
+	states.StateWaitingHeightWeight: locales.MsgUserHeightWeight,
+	states.StateWaitingGoal:         locales.MsgUserGoal,
+	states.StateWaitingLifestyle:    locales.MsgUserLifestyle,
+	states.StateWaitingHabits:       locales.MsgUserHabits,
 }
 
 // StepCount - общее число вопросов опросника.
@@ -132,4 +94,29 @@ func (c *UserDataCollector) SendStep(ctx context.Context, b *tgbot.Bot, chatID i
 		ReplyMarkup: keyboards.BackCancelQuestionInline(),
 		ParseMode:   "Markdown",
 	})
+}
+
+// SendChoiceStep - отправляет вопрос опросника с прогресс-баром
+// «Вопрос N из M» и inline-клавиатурой вариантов ответа (кнопки). Используется
+// для вопросов, где ответ выбирается из готовых вариантов (пол, цель, привычки).
+func (c *UserDataCollector) SendChoiceStep(ctx context.Context, b *tgbot.Bot, chatID int64, state states.State, text string, kb models.InlineKeyboardMarkup) {
+	idx := StepIndex(state)
+	if idx < 0 {
+		idx = 0
+	}
+	header := fmt.Sprintf("📋 Вопрос %d из %d\n\n", idx+1, len(stepOrder))
+	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        header + text,
+		ReplyMarkup: kb,
+		ParseMode:   "Markdown",
+	})
+}
+
+// SendGoalQuestion - повторно отправляет вопрос о цели (inline-кнопки).
+// Используется, когда демографические данные уже известны из постоянного
+// профиля и нужно пропустить вопросы имя/возраст/пол/рост/вес, перейдя
+// сразу к уникальным вопросам опросника «Общая оценка здоровья».
+func (c *UserDataCollector) SendGoalQuestion(ctx context.Context, b *tgbot.Bot, chatID int64) {
+	c.SendChoiceStep(ctx, b, chatID, states.StateWaitingGoal, locales.MsgUserGoal, questionnaireGoalKeyboard())
 }

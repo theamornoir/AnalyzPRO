@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tgbot "github.com/go-telegram/bot"
+	tgmodels "github.com/go-telegram/bot/models"
 
 	apmodels "github.com/theamornoir/analyzpro/internal/bot/handlers/helpers"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/userdata"
@@ -70,9 +71,23 @@ func (r *router) handleHealthAssessment(ctx context.Context, b *tgbot.Bot, chatI
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        locales.MsgHealthAssessmentDone,
-		ReplyMarkup: keyboards.MainMenuInline(),
+		ReplyMarkup: reportFeedbackKeyboard(),
 		ParseMode:   "Markdown",
 	})
+}
+
+// reportFeedbackKeyboard - inline-клавиатура обратной связи под результатами
+// отчётов (Общая оценка здоровья, базовый Bioscan и т.п.). Позволяет
+// пользователю быстро оценить результат или оставить комментарий.
+func reportFeedbackKeyboard() tgmodels.InlineKeyboardMarkup {
+	return tgmodels.InlineKeyboardMarkup{
+		InlineKeyboard: [][]tgmodels.InlineKeyboardButton{
+			{
+				{Text: locales.BtnFeedbackLike, CallbackData: "report_feedback_like"},
+				{Text: locales.BtnFeedbackDislike, CallbackData: "report_feedback_dislike"},
+			},
+		},
+	}
 }
 
 // saveHealthAssessmentResult - сохраняет отчёт «Общая оценка здоровья» в

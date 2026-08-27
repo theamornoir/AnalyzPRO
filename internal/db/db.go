@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/lib/pq" // регистрирует драйвер "postgres"
+	_ "github.com/lib/pq"  // регистрирует драйвер "postgres"
 	_ "modernc.org/sqlite" // регистрирует драйвер "sqlite"
 
 	"github.com/theamornoir/analyzpro/internal/config"
@@ -179,6 +179,21 @@ func Migrate(conn *sql.DB, driver ...string) error {
 		`CREATE INDEX IF NOT EXISTS idx_diagnoses_user_type ON diagnoses(user_id, type)`,
 		`CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_users_premium_expires_at ON users(premium_expires_at)`,
+		// Постоянный профиль пользователя (имя/возраст/пол/рост/вес/цель).
+		// Заполняется и обновляется после каждого опросника (Оценка здоровья,
+		// Bioscan PRO), чтобы бот не переспрашивал уже известные данные.
+		`CREATE TABLE IF NOT EXISTS user_profiles (
+			id ` + mkPK() + `,
+			telegram_id BIGINT NOT NULL UNIQUE,
+			name TEXT NOT NULL DEFAULT '',
+			age INTEGER NOT NULL DEFAULT 0,
+			gender TEXT NOT NULL DEFAULT '',
+			height INTEGER NOT NULL DEFAULT 0,
+			weight INTEGER NOT NULL DEFAULT 0,
+			goal TEXT NOT NULL DEFAULT '',
+			updated_at ` + mkTS() + ` NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_profiles_telegram ON user_profiles(telegram_id)`,
 		`CREATE TABLE IF NOT EXISTS cycles (
 			id ` + mkPK() + `,
 			user_id INTEGER NOT NULL,

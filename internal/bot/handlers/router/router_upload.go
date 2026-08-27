@@ -29,6 +29,7 @@ func (r *router) handleUpload(ctx context.Context, b *tgbot.Bot, chatID int64, t
 			r.appStorage,
 			r.monitorRepo,
 			r.webAppURL,
+			r.getNotificationsSvc(),
 		)(ctx, b, update)
 		return true
 	}
@@ -67,6 +68,7 @@ func (r *router) handleUpload(ctx context.Context, b *tgbot.Bot, chatID int64, t
 			r.appStorage,
 			r.monitorRepo,
 			r.webAppURL,
+			r.getNotificationsSvc(),
 		)(ctx, b, update)
 		return true
 	}

@@ -74,6 +74,13 @@ const (
 	// «Мой профиль» прямо из чата (появляется после выдачи отчёта, чтобы
 	// пользователь мог сразу открыть сохранённый результат).
 	BtnOpenHealthSummary = "📊 Открыть Мой профиль"
+
+	// BtnProfileUse / BtnProfileChange - inline-кнопки экрана «Данные уже
+	// известны?» перед запуском опросника. «Использовать» подставляет
+	// сохранённый профиль (пропускает вопросы имя/возраст/пол/рост/вес),
+	// «Изменить» запускает опросник заново.
+	BtnProfileUse    = "✅ Использовать"
+	BtnProfileChange = "✏️ Изменить"
 )
 
 // UserAgreementText - текст пользовательского соглашения (версия 2.0).
@@ -131,4 +138,43 @@ const (
 	BtnBioscanBasicGoalKeep   = "⚖️ Поддержание формы"
 	BtnBioscanBasicGoalEndure = "🏃 Выносливость"
 	BtnBioscanBasicGoalFlex   = "🧘 Гибкость"
+)
+
+// BtnBioscanProGoal* - inline-кнопки выбора цели в опроснике Bioscan PRO.
+const (
+	BtnBioscanProGoalMass = "💪 Набор массы"
+	BtnBioscanProGoalCut  = "🔥 Снижение веса"
+	BtnBioscanProGoalKeep = "⚖️ Поддержание формы"
+)
+
+// BtnBioscanProLevel* - inline-кнопки выбора уровня тренированности в
+// опроснике Bioscan PRO.
+const (
+	BtnBioscanProLevelNovice  = "🌱 Новичок"
+	BtnBioscanProLevelAmateur = "💪 Любитель"
+	BtnBioscanProLevelPro     = "🔥 Профи"
+)
+
+// BtnHealthGender* - inline-кнопки выбора пола в опроснике «Общая оценка
+// здоровья».
+const (
+	BtnHealthGenderMale   = "👨 Мужской"
+	BtnHealthGenderFemale = "👩 Женский"
+)
+
+// BtnHealthGoal* - inline-кнопки выбора цели в опроснике «Общая оценка
+// здоровья».
+const (
+	BtnHealthGoalLose = "🔻 Похудеть"
+	BtnHealthGoalGain = "🔺 Набрать"
+	BtnHealthGoalKeep = "⚖️ Поддержать"
+)
+
+// BtnHabits* - inline-кнопки выбора вредных привычек в опроснике
+// «Общая оценка здоровья».
+const (
+	BtnHabitsNone    = "✅ Нет"
+	BtnHabitsSmoke   = "🚬 Курю"
+	BtnHabitsAlcohol = "🍺 Алкоголь"
+	BtnHabitsBoth    = "🚬🍺 И то и другое"
 )

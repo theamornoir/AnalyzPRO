@@ -10,6 +10,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
+	"github.com/theamornoir/analyzpro/internal/notifications"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 	"github.com/theamornoir/analyzpro/internal/service"
@@ -20,6 +21,9 @@ import (
 // saver сохраняет готовый результат в историю пользователя (для Мониторинга).
 // appStorage персистит результат анализа как Diagnosis (Storage).
 // webAppURL используется для кнопки «Открыть Мой профиль» после отчёта.
+// notifSvc - сервис уведомлений (опционально): если не nil, после загрузки
+// обычного анализа шлёт немедленное уведомление об отклонениях всем
+// пользователям (CheckAndNotifyAfterUpload).
 func UploadHandler(
 	stateManager states.StateManager,
 	analysisService service.AnalysisService,
@@ -30,6 +34,7 @@ func UploadHandler(
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
 	webAppURL string,
+	notifSvc *notifications.Service,
 ) func(context.Context, *tgbot.Bot, *models.Update) {
 
 	return func(
@@ -51,7 +56,7 @@ func UploadHandler(
 
 		if state == states.StateWaitingUploadConfirm {
 			log.Printf(locales.LogUploadWaitingConfirm)
-			handleUploadConfirm(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, update.Message, appStorage, saver, webAppURL)
+			handleUploadConfirm(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, update.Message, appStorage, saver, webAppURL, notifSvc)
 			return
 		}
 

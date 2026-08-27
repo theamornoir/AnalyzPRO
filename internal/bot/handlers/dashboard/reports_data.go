@@ -397,15 +397,13 @@ func parseHealthAssessmentBlock(jsonStr string, out *ReportBlock) {
 	if len(doc.Lifestyle) > 0 && out.Indicators == nil {
 		out.Indicators = []IndicatorView{}
 	}
-	order := []string{"sleep", "nutrition", "movement", "activity", "stress", "energy", "wellbeing"}
+	order := []string{"sleep", "nutrition", "activity", "stress", "habits"}
 	labels := map[string]string{
 		"sleep":     "Сон",
 		"nutrition": "Питание",
-		"movement":  "Движение",
-		"activity":  "Активность",
+		"activity":  "Физическая активность",
 		"stress":    "Стресс",
-		"energy":    "Энергия",
-		"wellbeing": "Самочувствие",
+		"habits":    "Вредные привычки",
 	}
 	seen := map[string]bool{}
 	addInd := func(key string, dim struct {

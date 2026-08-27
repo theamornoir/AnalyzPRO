@@ -28,6 +28,15 @@ type UserRepository interface {
 	// UpdateUserLastActivity - обновляет дату последнего взаимодействия
 	// пользователя с ботом (нужно системе напоминаний об неактивности).
 	UpdateUserLastActivity(ctx context.Context, userID uint, t time.Time) error
+
+	// GetProfile - возвращает постоянный профиль пользователя (имя, возраст,
+	// пол, рост, вес, цель) по Telegram chat ID. Если профиль ещё не
+	// заполнен - возвращает (nil, nil). userID здесь - Telegram chat ID
+	// (int64), как во всём боте.
+	GetProfile(ctx context.Context, telegramID int64) (*sm.Profile, error)
+	// UpsertProfile - создаёт или обновляет постоянный профиль пользователя.
+	// Идемпотентно по telegram_id (INSERT ... ON CONFLICT DO UPDATE).
+	UpsertProfile(ctx context.Context, profile *sm.Profile) error
 	// IsPromoCodeUsed - проверяет, активировал ли пользователь промокод.
 	// userID здесь - Telegram chat ID (int64), как во всём боте.
 	IsPromoCodeUsed(ctx context.Context, userID int64, code string) bool

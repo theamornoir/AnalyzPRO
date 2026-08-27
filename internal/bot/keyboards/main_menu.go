@@ -353,3 +353,18 @@ func FeedbackMenu() models.ReplyKeyboardMarkup {
 func UserAgreementText() string {
 	return locales.UserAgreementText
 }
+
+// ProfileConfirmMenu - inline-клавиатура экрана «Данные уже известны?»:
+// «Использовать» подставляет сохранённый профиль (пропускает вопросы
+// имя/возраст/пол/рост/вес), «Изменить» запускает опросник заново.
+// Callback-данные profile_use / profile_change.
+func ProfileConfirmMenu() models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{Text: locales.BtnProfileUse, CallbackData: "profile_use"},
+				{Text: locales.BtnProfileChange, CallbackData: "profile_change"},
+			},
+		},
+	}
+}

@@ -214,6 +214,67 @@ func (r *Repo) MarkPromoCodeUsed(ctx context.Context, userID int64, code string)
 	return nil
 }
 
+// GetProfile возвращает постоянный профиль пользователя (имя/возраст/пол/
+// рост/вес/цель) по Telegram chat ID. Если профиль ещё не заполнен -
+// возвращает (nil, nil) (не ошибку), чтобы вызывающий мог запустить
+// опросник с нуля.
+func (r *Repo) GetProfile(ctx context.Context, telegramID int64) (*sm.Profile, error) {
+	const q = `SELECT telegram_id, name, age, gender, height, weight, goal, updated_at
+		FROM user_profiles WHERE telegram_id = ?`
+	var p sm.Profile
+	var age, height, weight sql.NullInt64
+	var name, gender, goal sql.NullString
+	var updatedAt sql.NullTime
+	if err := r.db.QueryRowContext(ctx, r.bq(q), telegramID).Scan(
+		&p.TelegramID, &name, &age, &gender, &height, &weight, &goal, &updatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("чтение профиля: %w", err)
+	}
+	p.Name = name.String
+	p.Gender = gender.String
+	p.Goal = goal.String
+	if age.Valid {
+		p.Age = int(age.Int64)
+	}
+	if height.Valid {
+		p.Height = int(height.Int64)
+	}
+	if weight.Valid {
+		p.Weight = int(weight.Int64)
+	}
+	if updatedAt.Valid {
+		p.UpdatedAt = updatedAt.Time
+	}
+	return &p, nil
+}
+
+// UpsertProfile создаёт или обновляет постоянный профиль пользователя.
+// Идемпотентно по telegram_id (ON CONFLICT DO UPDATE).
+func (r *Repo) UpsertProfile(ctx context.Context, profile *sm.Profile) error {
+	if profile == nil {
+		return fmt.Errorf("profile is nil")
+	}
+	if profile.UpdatedAt.IsZero() {
+		profile.UpdatedAt = time.Now()
+	}
+	const q = `INSERT INTO user_profiles (telegram_id, name, age, gender, height, weight, goal, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(telegram_id) DO UPDATE SET
+			name=excluded.name, age=excluded.age, gender=excluded.gender,
+			height=excluded.height, weight=excluded.weight, goal=excluded.goal,
+			updated_at=excluded.updated_at`
+	if _, err := r.db.ExecContext(ctx, r.bq(q),
+		profile.TelegramID, profile.Name, profile.Age, profile.Gender,
+		profile.Height, profile.Weight, profile.Goal, nullTime(profile.UpdatedAt),
+	); err != nil {
+		return fmt.Errorf("сохранение профиля: %w", err)
+	}
+	return nil
+}
+
 // DeleteAccount полностью удаляет пользователя и все связанные данные
 // (анализы, курсы, предпочтения) по Telegram ID. Дочерние таблицы
 // (diagnoses/cycles/preferences) ключуются внутренним users.id, поэтому

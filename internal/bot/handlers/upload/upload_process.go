@@ -16,6 +16,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
+	"github.com/theamornoir/analyzpro/internal/notifications"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 	"github.com/theamornoir/analyzpro/internal/service"
@@ -140,6 +141,7 @@ func processSingleFile(
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
 	webAppURL string,
+	notifSvc *notifications.Service,
 ) {
 	fileData, err := file.readData()
 	if err != nil {
@@ -206,6 +208,15 @@ func processSingleFile(
 	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, result, analysisJSON)
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
 
+	// Немедленное уведомление об отклонениях по только что сохранённому
+	// анализу - для ВСЕХ пользователей (и Free, и Premium). notifSvc может
+	// быть nil (в тестах/старых путях) - тогда вызов безопасно игнорируется.
+	if notifSvc != nil {
+		if err := notifSvc.CheckAndNotifyAfterUpload(ctx, chatID, analysisJSON); err != nil {
+			log.Printf("[UPLOAD] не удалось отправить уведомление об отклонениях chatID=%d: %v", chatID, err)
+		}
+	}
+
 	// Сообщаем, что результат сохранён в «Мой профиль», и даём
 	// кнопку для мгновенного открытия.
 	helpers.SendSavedToSummary(ctx, b, chatID, webAppURL)
@@ -232,6 +243,7 @@ func processMultipleFiles(
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
 	webAppURL string,
+	notifSvc *notifications.Service,
 ) {
 	// Собираем байты и MIME-типы всех файлов для единого запроса.
 	var filesData [][]byte
@@ -308,6 +320,15 @@ func processMultipleFiles(
 	// показателями обычного анализа.
 	savePlainResult(ctx, saver, chatID, "analysis", locales.MsgUploadDefaultTitleAnalysis, finalResult, analysisJSON)
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
+
+	// Немедленное уведомление об отклонениях по только что сохранённому
+	// анализу - для ВСЕХ пользователей (и Free, и Premium). notifSvc может
+	// быть nil (в тестах/старых путях) - тогда вызов безопасно игнорируется.
+	if notifSvc != nil {
+		if err := notifSvc.CheckAndNotifyAfterUpload(ctx, chatID, analysisJSON); err != nil {
+			log.Printf("[UPLOAD] не удалось отправить уведомление об отклонениях chatID=%d: %v", chatID, err)
+		}
+	}
 
 	// Сообщаем, что результат сохранён в «Мой профиль», и даём
 	// кнопку для мгновенного открытия.

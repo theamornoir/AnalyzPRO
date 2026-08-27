@@ -12,6 +12,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
+	"github.com/theamornoir/analyzpro/internal/notifications"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
 	"github.com/theamornoir/analyzpro/internal/service"
@@ -33,6 +34,7 @@ func StartAnalysis(
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
 	webAppURL string,
+	notifSvc *notifications.Service,
 ) {
 	// Защита от устаревших/повторных нажатий inline-кнопки «Обработать»:
 	// кнопка действует только если пользователь всё ещё на шаге
@@ -48,13 +50,16 @@ func StartAnalysis(
 		})
 		return
 	}
-	startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, appStorage, saver, webAppURL)
+	startAnalysis(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, uploadDir, stickerID, chatID, appStorage, saver, webAppURL, notifSvc)
 }
 
 // startAnalysis - запускает анализ всех накопленных файлов.
 // saver сохраняет результат в историю (для Мониторинга).
 // appStorage персистит результат как Diagnosis.
 // webAppURL используется для кнопки «Открыть Мой профиль» после отчёта.
+// notifSvc - сервис уведомлений (опционально): если не nil, после сохранения
+// обычного анализа шлёт немедленное уведомление об отклонениях всем
+// пользователям (CheckAndNotifyAfterUpload).
 func startAnalysis(
 	ctx context.Context,
 	b *tgbot.Bot,
@@ -68,6 +73,7 @@ func startAnalysis(
 	appStorage *storage.Storage,
 	saver monitoring.Repository,
 	webAppURL string,
+	notifSvc *notifications.Service,
 ) {
 	filesJSON := stateManager.GetUserData(chatID, "uploaded_files")
 	if filesJSON == "" {
@@ -110,9 +116,9 @@ func startAnalysis(
 
 	if len(uploadedFiles) == 1 {
 		file := uploadedFiles[0]
-		processSingleFile(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, file, isExtended, contextInfo, appStorage, saver, webAppURL)
+		processSingleFile(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, file, isExtended, contextInfo, appStorage, saver, webAppURL, notifSvc)
 	} else {
-		processMultipleFiles(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, uploadedFiles, isExtended, contextInfo, appStorage, saver, webAppURL)
+		processMultipleFiles(ctx, b, stateManager, analysisService, reportRenderer, pdfConverter, chatID, loadingMsg, textMsg, uploadedFiles, isExtended, contextInfo, appStorage, saver, webAppURL, notifSvc)
 	}
 }
 

@@ -12,7 +12,9 @@ import (
 	"github.com/theamornoir/analyzpro/internal/locales"
 )
 
-// handleQuestionnaireStates - обработка состояний сбора данных. Возвращает true, если обработано.
+// handleQuestionnaireStates - обработка состояний сбора данных («Общая оценка
+// здоровья»). Возвращает true, если обработано. Опросник сокращён до 7
+// вопросов: имя, пол, возраст, рост+вес, цель, образ жизни, вредные привычки.
 func (r *router) handleQuestionnaireStates(ctx context.Context, b *tgbot.Bot, chatID int64, text string) bool {
 	collector := userdata.NewUserDataCollector(r.stateManager)
 	state := r.stateManager.GetState(chatID)
@@ -33,84 +35,9 @@ func (r *router) handleQuestionnaireStates(ctx context.Context, b *tgbot.Bot, ch
 		collector.HandleAge(ctx, b, chatID, text)
 		return true
 
-	case states.StateWaitingHeight:
-		log.Printf(locales.LogProcessingHeight, chatID)
-		collector.HandleHeight(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingWeight:
-		log.Printf(locales.LogProcessingWeight, chatID)
-		collector.HandleWeight(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingSleep:
-		log.Printf(locales.LogProcessingSleep, chatID)
-		collector.HandleSleep(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingStress:
-		log.Printf(locales.LogProcessingStress, chatID)
-		collector.HandleStress(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingNutritionVeg:
-		log.Printf(locales.LogProcessingNutritionVeg, chatID)
-		collector.HandleNutritionVeg(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingNutritionProcessed:
-		log.Printf(locales.LogProcessingNutritionProcessed, chatID)
-		collector.HandleNutritionProcessed(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingWater:
-		log.Printf(locales.LogProcessingWater, chatID)
-		collector.HandleWater(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingActivity:
-		log.Printf(locales.LogProcessingActivity, chatID)
-		collector.HandleActivity(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingChronicDiseases:
-		log.Printf(locales.LogProcessingChronicDiseases, chatID)
-		collector.HandleChronicDiseases(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingAllergies:
-		log.Printf(locales.LogProcessingAllergies, chatID)
-		collector.HandleAllergies(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingMedications:
-		log.Printf(locales.LogProcessingMedications, chatID)
-		collector.HandleMedications(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingSmoking:
-		log.Printf(locales.LogProcessingSmoking, chatID)
-		collector.HandleSmoking(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingAlcohol:
-		log.Printf(locales.LogProcessingAlcohol, chatID)
-		collector.HandleAlcohol(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingFamilyHistory:
-		log.Printf(locales.LogProcessingFamilyHistory, chatID)
-		collector.HandleFamilyHistory(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingDigestion:
-		log.Printf(locales.LogProcessingDigestion, chatID)
-		collector.HandleDigestion(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingSportType:
-		log.Printf(locales.LogProcessingSportType, chatID)
-		collector.HandleSportType(ctx, b, chatID, text)
+	case states.StateWaitingHeightWeight:
+		log.Printf(locales.LogProcessingHeightWeight, chatID)
+		collector.HandleHeightWeight(ctx, b, chatID, text)
 		return true
 
 	case states.StateWaitingGoal:
@@ -118,44 +45,14 @@ func (r *router) handleQuestionnaireStates(ctx context.Context, b *tgbot.Bot, ch
 		collector.HandleGoal(ctx, b, chatID, text)
 		return true
 
-	case states.StateWaitingEnergy:
-		log.Printf("[QUESTIONNAIRE] вопрос: энергия для chatID=%d", chatID)
-		collector.HandleEnergy(ctx, b, chatID, text)
+	case states.StateWaitingLifestyle:
+		log.Printf(locales.LogProcessingLifestyle, chatID)
+		collector.HandleLifestyle(ctx, b, chatID, text)
 		return true
 
-	case states.StateWaitingMood:
-		log.Printf("[QUESTIONNAIRE] вопрос: настроение для chatID=%d", chatID)
-		collector.HandleMood(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingWorkRegimen:
-		log.Printf("[QUESTIONNAIRE] вопрос: режим дня для chatID=%d", chatID)
-		collector.HandleWorkRegimen(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingScreenTime:
-		log.Printf("[QUESTIONNAIRE] вопрос: экранное время для chatID=%d", chatID)
-		collector.HandleScreenTime(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingMealRegularity:
-		log.Printf("[QUESTIONNAIRE] вопрос: регулярность питания для chatID=%d", chatID)
-		collector.HandleMealRegularity(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingCaffeine:
-		log.Printf("[QUESTIONNAIRE] вопрос: кофеин для chatID=%d", chatID)
-		collector.HandleCaffeine(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingIllnessFreq:
-		log.Printf("[QUESTIONNAIRE] вопрос: частота болезней для chatID=%d", chatID)
-		collector.HandleIllnessFreq(ctx, b, chatID, text)
-		return true
-
-	case states.StateWaitingPainAreas:
-		log.Printf("[QUESTIONNAIRE] вопрос: боли/дискомфорт для chatID=%d", chatID)
-		collector.HandlePainAreas(ctx, b, chatID, text)
+	case states.StateWaitingHabits:
+		log.Printf(locales.LogProcessingHabits, chatID)
+		collector.HandleHabits(ctx, b, chatID, text)
 		return true
 	}
 
@@ -167,9 +64,10 @@ func isBioscanState(state states.State) bool {
 	switch state {
 	case states.StateWaitingBioscanName,
 		states.StateWaitingBioscanAge,
-		states.StateWaitingBioscanHeight,
-		states.StateWaitingBioscanWeight,
+		states.StateWaitingBioscanHeightWeight,
+		states.StateWaitingBioscanGender,
 		states.StateWaitingBioscanGoal,
+		states.StateWaitingBioscanTrainingLevel,
 		states.StateWaitingBioscanTrainingExp,
 		states.StateWaitingBioscanTrainingFreq,
 		states.StateWaitingBioscanTrainingType,
@@ -199,43 +97,23 @@ func isBioscanState(state states.State) bool {
 	return false
 }
 
-// isQuestionnaireState - проверяет, является ли состояние шагом опросника.
+// isQuestionnaireState - проверяет, является ли состояние шагом опросника
+// «Общая оценка здоровья».
 func isQuestionnaireState(state states.State) bool {
 	switch state {
 	case states.StateWaitingName,
 		states.StateWaitingGender,
 		states.StateWaitingAge,
-		states.StateWaitingHeight,
-		states.StateWaitingWeight,
-		states.StateWaitingSleep,
-		states.StateWaitingStress,
-		states.StateWaitingNutritionVeg,
-		states.StateWaitingNutritionProcessed,
-		states.StateWaitingWater,
-		states.StateWaitingActivity,
-		states.StateWaitingChronicDiseases,
-		states.StateWaitingAllergies,
-		states.StateWaitingMedications,
-		states.StateWaitingSmoking,
-		states.StateWaitingAlcohol,
-		states.StateWaitingFamilyHistory,
-		states.StateWaitingDigestion,
-		states.StateWaitingSportType,
+		states.StateWaitingHeightWeight,
 		states.StateWaitingGoal,
-		states.StateWaitingEnergy,
-		states.StateWaitingMood,
-		states.StateWaitingWorkRegimen,
-		states.StateWaitingScreenTime,
-		states.StateWaitingMealRegularity,
-		states.StateWaitingCaffeine,
-		states.StateWaitingIllnessFreq,
-		states.StateWaitingPainAreas:
+		states.StateWaitingLifestyle,
+		states.StateWaitingHabits:
 		return true
 	}
 	return false
 }
 
-// backQuestionnaire - шаг «Назад» внутри 20-вопросного опросника анализа:
+// backQuestionnaire - шаг «Назад» внутри опросника «Общая оценка здоровья»:
 // возврат к предыдущему вопросу без сброса уже собранных данных. Если вопрос
 // первый - выход из опросника в хаб «Анализы».
 func (r *router) backQuestionnaire(ctx context.Context, b *tgbot.Bot, chatID int64, state states.State) {

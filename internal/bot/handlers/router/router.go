@@ -15,6 +15,7 @@ import (
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/menu"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/onboarding"
 	"github.com/theamornoir/analyzpro/internal/bot/handlers/upload"
+	"github.com/theamornoir/analyzpro/internal/bot/handlers/userdata"
 	"github.com/theamornoir/analyzpro/internal/bot/keyboards"
 	"github.com/theamornoir/analyzpro/internal/bot/states"
 	"github.com/theamornoir/analyzpro/internal/locales"
@@ -302,8 +303,10 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 	if r.handleQuestionnaireStates(ctx, b, chatID, text) {
 		// Если последний вопрос завершил сбор и перевёл состояние в
 		// терминальное StateWaitingHealthAssessment («Общая оценка
-		// здоровья») - сразу генерируем отчёт по тексту опросника.
+		// здоровья») - сохраняем профиль и сразу генерируем отчёт по
+		// тексту опросника.
 		if r.stateManager.GetState(chatID) == states.StateWaitingHealthAssessment {
+			r.saveProfile(ctx, chatID, "")
 			r.handleHealthAssessment(ctx, b, chatID)
 		}
 		return
@@ -399,7 +402,13 @@ func isNavDelete(callbackData string) bool {
 		callbackData == "bioscan_basic_goal_keep",
 		callbackData == "bioscan_basic_goal_endure",
 		callbackData == "bioscan_basic_goal_flex",
-		callbackData == "delete_account_confirm":
+		strings.HasPrefix(callbackData, "question_gender_"),
+		strings.HasPrefix(callbackData, "question_goal_"),
+		strings.HasPrefix(callbackData, "question_habits_"),
+		strings.HasPrefix(callbackData, "bioscan_pro_"),
+		callbackData == "delete_account_confirm",
+		callbackData == "profile_use",
+		callbackData == "profile_change":
 		return true
 	}
 	return false
@@ -453,6 +462,11 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	// брать chatID оттуда нельзя (nil-pointer panic). В приватном чате
 	// ChatID пользователя совпадает с ID отправителя.
 	chatID := update.CallbackQuery.From.ID
+
+	// Коллектор опросника «Общая оценка здоровья»: используется для
+	// обработки inline-нажатий выбора пола/цели/привычек (callback_data вида
+	// question_gender_* / question_goal_* / question_habits_*).
+	collector := userdata.NewUserDataCollector(r.stateManager)
 
 	// Глобальное правило «кнопка/выбор удаляется после ответа»: после того
 	// как бот ответил на inline-нажатие, исходное сообщение с inline-
@@ -635,6 +649,35 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	case "section_feedback_start":
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_feedback_start")
 		r.handleFeedbackStart(ctx, b, chatID)
+	// Обратная связь под отчётом (Общая оценка здоровья, базовый Bioscan и
+	// т.п.): «👍 Понравилось» - благодарим, «👎 Есть вопросы» - переводим в
+	// режим ввода отзыва, чтобы следующее сообщение ушло разработчику.
+	case "report_feedback_like":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "report_feedback_like")
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgFeedbackLikeThanks,
+			ReplyMarkup: keyboards.MainMenuInline(),
+		})
+		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
+		return
+	case "report_feedback_dislike":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "report_feedback_dislike")
+		// Переводим в режим ввода отзыва: следующее сообщение пользователя
+		// (текст/фото/файл) перешлётся разработчику через handleFeedbackMessage.
+		r.stateManager.SetState(chatID, states.StateWaitingFeedback)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgFeedbackDislikePrompt,
+			ReplyMarkup: keyboards.BackCancelInline(),
+		})
+		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
+		return
+
 	case "section_about":
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "section_about")
 		// Экран «О сервисе» редактирует навигационное сообщение «на месте»
@@ -650,6 +693,18 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	case "delete_account_cancel":
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "delete_account_cancel")
 		r.handleDeleteAccountCancel(ctx, b, chatID)
+
+	// Экран «Данные уже известны?»: «Использовать» подставляет сохранённый
+	// профиль (пропускает вопросы имя/возраст/пол/рост/вес) и переходит к
+	// уникальным вопросам опросника; «Изменить» запускает опросник заново.
+	// Сообщение с кнопками удаляется общим правилом (profile_use /
+	// profile_change входят в isNavDelete).
+	case "profile_use":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "profile_use")
+		r.handleProfileUse(ctx, b, chatID)
+	case "profile_change":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "profile_change")
+		r.handleProfileChange(ctx, b, chatID)
 
 	case "cancel_flow":
 		// «Отмена» с экрана под-действия (intro-экран флоу): сбрасываем
@@ -710,10 +765,67 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_basic_goal")
 		bioscan.HandleBioscanBasicGoal(ctx, b, r.stateManager, chatID, locales.BtnBioscanBasicGoalFlex)
 
+	// Опросник «Общая оценка здоровья»: выбор пола/цели/привычек через
+	// inline-кнопки. Переводим callback-данные в текст и зовём обработчики
+	// (по структуре они идентичны свободному вводу того же значения).
+	case "question_gender_m":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_gender")
+		collector.HandleGender(ctx, b, chatID, "Мужской")
+	case "question_gender_f":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_gender")
+		collector.HandleGender(ctx, b, chatID, "Женский")
+	case "question_goal_lose":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_goal")
+		collector.HandleGoal(ctx, b, chatID, "Похудеть")
+	case "question_goal_gain":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_goal")
+		collector.HandleGoal(ctx, b, chatID, "Набрать")
+	case "question_goal_keep":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_goal")
+		collector.HandleGoal(ctx, b, chatID, "Поддержать форму")
+	case "question_habits_none":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_habits")
+		collector.HandleHabits(ctx, b, chatID, "Нет")
+	case "question_habits_smoke":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_habits")
+		collector.HandleHabits(ctx, b, chatID, "Курю")
+	case "question_habits_alcohol":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_habits")
+		collector.HandleHabits(ctx, b, chatID, "Алкоголь")
+	case "question_habits_both":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_habits")
+		collector.HandleHabits(ctx, b, chatID, "Курю и алкоголь")
+
+	// Bioscan PRO: выбор пола/цели/уровня тренированности через inline-кнопки.
+	case "bioscan_pro_gender_m":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_pro_gender")
+		bioscan.HandleBioscanGender(ctx, b, r.stateManager, chatID, "Мужской")
+	case "bioscan_pro_gender_f":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_pro_gender")
+		bioscan.HandleBioscanGender(ctx, b, r.stateManager, chatID, "Женский")
+	case "bioscan_pro_goal_mass":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_pro_goal")
+		bioscan.HandleBioscanGoal(ctx, b, r.stateManager, chatID, locales.BtnBioscanProGoalMass)
+	case "bioscan_pro_goal_cut":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_pro_goal")
+		bioscan.HandleBioscanGoal(ctx, b, r.stateManager, chatID, locales.BtnBioscanProGoalCut)
+	case "bioscan_pro_goal_keep":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_pro_goal")
+		bioscan.HandleBioscanGoal(ctx, b, r.stateManager, chatID, locales.BtnBioscanProGoalKeep)
+	case "bioscan_pro_level_novice":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_pro_level")
+		bioscan.HandleBioscanTrainingLevel(ctx, b, r.stateManager, chatID, locales.BtnBioscanProLevelNovice)
+	case "bioscan_pro_level_amateur":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_pro_level")
+		bioscan.HandleBioscanTrainingLevel(ctx, b, r.stateManager, chatID, locales.BtnBioscanProLevelAmateur)
+	case "bioscan_pro_level_pro":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "bioscan_pro_level")
+		bioscan.HandleBioscanTrainingLevel(ctx, b, r.stateManager, chatID, locales.BtnBioscanProLevelPro)
+
 	// Подтверждение загрузки файлов (inline-кнопки «Обработать/Отмена»).
 	case "upload_process":
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "upload_process")
-		upload.StartAnalysis(ctx, b, r.stateManager, r.analysisService, r.reportRenderer, r.pdfConverter, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo, r.webAppURL)
+		upload.StartAnalysis(ctx, b, r.stateManager, r.analysisService, r.reportRenderer, r.pdfConverter, r.uploadDir, r.stickerID, chatID, r.appStorage, r.monitorRepo, r.webAppURL, r.getNotificationsSvc())
 	case "upload_cancel":
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "upload_cancel")
 		upload.CancelUpload(ctx, b, r.stateManager, chatID)

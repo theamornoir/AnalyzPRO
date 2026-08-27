@@ -20,11 +20,16 @@ const (
 	// «extended» (теперь - Общая оценка здоровья).
 	StateWaitingHealthAssessment State = "waiting_health_assessment"
 
-	StateWaitingName               State = "waiting_name"
-	StateWaitingGender             State = "waiting_gender"
-	StateWaitingAge                State = "waiting_age"
-	StateWaitingHeight             State = "waiting_height"
-	StateWaitingWeight             State = "waiting_weight"
+	StateWaitingName   State = "waiting_name"
+	StateWaitingGender State = "waiting_gender"
+	StateWaitingAge    State = "waiting_age"
+	StateWaitingHeight State = "waiting_height"
+	StateWaitingWeight State = "waiting_weight"
+	// StateWaitingHeightWeight - объединённый шаг опросника «Общая оценка
+	// здоровья»: рост и вес вводятся одним сообщением (например «180 70»).
+	StateWaitingHeightWeight       State = "waiting_height_weight"
+	StateWaitingLifestyle          State = "waiting_lifestyle"           // Образ жизни: сон/стресс/питание/активность (1 вопрос)
+	StateWaitingHabits             State = "waiting_habits"              // Вредные привычки (кнопки)
 	StateWaitingSleep              State = "waiting_sleep"               // Образ жизни: сон
 	StateWaitingStress             State = "waiting_stress"              // Образ жизни: стресс
 	StateWaitingNutritionVeg       State = "waiting_nutrition_veg"       // Овощи/фрукты
@@ -53,11 +58,16 @@ const (
 	StateWaitingIllnessFreq    State = "waiting_illness_freq"    // Частота болезней / восстановление
 	StateWaitingPainAreas      State = "waiting_pain_areas"      // Боли / дискомфорт
 
-	StateWaitingBioscanName   State = "waiting_bioscan_name"
-	StateWaitingBioscanAge    State = "waiting_bioscan_age"
-	StateWaitingBioscanHeight State = "waiting_bioscan_height"
-	StateWaitingBioscanWeight State = "waiting_bioscan_weight"
-	StateWaitingBioscanGoal   State = "waiting_bioscan_goal"
+	StateWaitingBioscanName State = "waiting_bioscan_name"
+	StateWaitingBioscanAge  State = "waiting_bioscan_age"
+	// StateWaitingBioscanHeightWeight - объединённый шаг Bioscan PRO:
+	// рост и вес вводятся одним сообщением (например «180 70»).
+	StateWaitingBioscanHeightWeight State = "waiting_bioscan_height_weight"
+	StateWaitingBioscanGender       State = "waiting_bioscan_gender" // кнопки
+	StateWaitingBioscanGoal         State = "waiting_bioscan_goal"   // кнопки
+	// StateWaitingBioscanTrainingLevel - уровень тренированности (кнопки):
+	// новичок / любитель / профи. Идёт ПОСЛЕ цели и ДО стажа тренировок.
+	StateWaitingBioscanTrainingLevel State = "waiting_bioscan_training_level"
 
 	// Состояния опросника расширенного Bioscan PRO (отдельный от анализа
 	// блок вопросов про образ жизни, спорт, травмы и здоровье). Они идут
@@ -101,6 +111,15 @@ const (
 	// запускается мини-опросник. OCR достаёт текст с экранов весов, а
 	// опросник даёт модели реальные замеры для отчёта.
 	StateWaitingBioscanBasicPhoto State = "waiting_bioscan_basic_photo"
+
+	// StateWaitingProfileConfirm - экран «Данные уже известны?» перед
+	// запуском опросника (Оценка здоровья / Bioscan PRO). Если у пользователя
+	// уже есть постоянный профиль, бот предлагает «Использовать» известные
+	// данные (пропускает вопросы имя/возраст/пол/рост/вес) или «Изменить»
+	// (запускает опросник заново). Выбор обрабатывается по inline-кнопкам
+	// profile_use / profile_change. Текущий поток хранится в user-data
+	// («profile_flow» = "health" | "bioscan_pro").
+	StateWaitingProfileConfirm State = "waiting_profile_confirm"
 
 	StateWaitingUploadConfirm State = "waiting_upload_confirm"
 

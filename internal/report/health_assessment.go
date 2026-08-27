@@ -66,17 +66,16 @@ func RenderHealthAssessmentText(ha models.HealthAssessment) string {
 		b.WriteString("\n\n")
 	}
 
-	// Разбор по сферам (сон, питание, движение, стресс, энергия).
+	// Разбор по 5 сферам (сон, питание, физическая активность, стресс,
+	// вредные привычки).
 	b.WriteString("🌿 Оценка по сферам\n")
-	order := []string{"sleep", "nutrition", "movement", "activity", "stress", "energy", "wellbeing"}
+	order := []string{"sleep", "nutrition", "activity", "stress", "habits"}
 	labels := map[string]string{
 		"sleep":     "Сон",
 		"nutrition": "Питание",
-		"movement":  "Движение",
-		"activity":  "Активность",
+		"activity":  "Физическая активность",
 		"stress":    "Стресс",
-		"energy":    "Энергия",
-		"wellbeing": "Самочувствие",
+		"habits":    "Вредные привычки",
 	}
 	seen := map[string]bool{}
 	for _, key := range order {
@@ -139,8 +138,8 @@ func RenderHealthAssessmentText(ha models.HealthAssessment) string {
 	if strings.TrimSpace(plan.Nutrition) != "" {
 		b.WriteString("\n🥗 Питание\n" + trimSpaces(plan.Nutrition) + "\n")
 	}
-	if strings.TrimSpace(plan.Movement) != "" {
-		b.WriteString("\n🏃 Движение\n" + trimSpaces(plan.Movement) + "\n")
+	if strings.TrimSpace(plan.Activity) != "" {
+		b.WriteString("\n🏃 Физическая активность\n" + trimSpaces(plan.Activity) + "\n")
 	}
 	if strings.TrimSpace(plan.Stress) != "" {
 		b.WriteString("\n🧘 Стресс\n" + trimSpaces(plan.Stress) + "\n")

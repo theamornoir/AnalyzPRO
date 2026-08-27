@@ -12,7 +12,8 @@ import (
 // MockUserRepository - мок-реализация UserRepository.
 type MockUserRepository struct {
 	mu        sync.RWMutex
-	users     map[int64]*sm.User // key: TelegramID
+	users     map[int64]*sm.User    // key: TelegramID
+	profiles  map[int64]*sm.Profile // key: TelegramID
 	usedPromo map[int64]map[string]bool
 	nextID    uint
 }
@@ -21,6 +22,7 @@ type MockUserRepository struct {
 func NewMockUserRepository() *MockUserRepository {
 	return &MockUserRepository{
 		users:     make(map[int64]*sm.User),
+		profiles:  make(map[int64]*sm.Profile),
 		usedPromo: make(map[int64]map[string]bool),
 		nextID:    1,
 	}
@@ -299,4 +301,31 @@ func (m *MockUserRepository) UpdateUserPremiumStatusByTelegramID(ctx context.Con
 		return nil
 	}
 	return fmt.Errorf("user with telegram_id %d not found", telegramID)
+}
+
+// GetProfile возвращает постоянный профиль пользователя по Telegram ID.
+// Если профиль не заполнен - (nil, nil).
+func (m *MockUserRepository) GetProfile(ctx context.Context, telegramID int64) (*sm.Profile, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if p, ok := m.profiles[telegramID]; ok {
+		cp := *p
+		return &cp, nil
+	}
+	return nil, nil
+}
+
+// UpsertProfile создаёт или обновляет постоянный профиль пользователя.
+func (m *MockUserRepository) UpsertProfile(ctx context.Context, profile *sm.Profile) error {
+	if profile == nil {
+		return fmt.Errorf("profile is nil")
+	}
+	if profile.UpdatedAt.IsZero() {
+		profile.UpdatedAt = time.Now()
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := *profile
+	m.profiles[profile.TelegramID] = &cp
+	return nil
 }

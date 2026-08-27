@@ -34,6 +34,7 @@ type fileData struct {
 	Cycles      []sm.Cycle                `json:"cycles"`
 	Preferences map[uint]*sm.Preference   `json:"preferences"`     // key: user_id
 	UsedPromo   map[int64]map[string]bool `json:"used_promocodes"` // key: user_id -> code -> true
+	Profiles    map[int64]*sm.Profile     `json:"profiles"`        // key: telegram_id
 	NextUserID  uint                      `json:"next_user_id"`
 	NextDiagID  uint                      `json:"next_diag_id"`
 	NextCycleID uint                      `json:"next_cycle_id"`
@@ -48,6 +49,7 @@ func New(path string) *Store {
 			Diagnoses:   nil,
 			Cycles:      nil,
 			Preferences: map[uint]*sm.Preference{},
+			Profiles:    map[int64]*sm.Profile{},
 		},
 	}
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
@@ -69,6 +71,9 @@ func (s *Store) load() {
 	}
 	if s.data.Preferences == nil {
 		s.data.Preferences = map[uint]*sm.Preference{}
+	}
+	if s.data.Profiles == nil {
+		s.data.Profiles = map[int64]*sm.Profile{}
 	}
 }
 
@@ -429,4 +434,35 @@ func (s *Store) UpdateUserPremiumStatusByTelegramID(ctx context.Context, telegra
 		return nil
 	}
 	return fmt.Errorf("user with telegram_id %d not found", telegramID)
+}
+
+// GetProfile возвращает постоянный профиль пользователя по Telegram ID.
+// Если профиль не заполнен - (nil, nil).
+func (s *Store) GetProfile(ctx context.Context, telegramID int64) (*sm.Profile, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	p, ok := s.data.Profiles[telegramID]
+	if !ok || p == nil {
+		return nil, nil
+	}
+	cp := *p
+	return &cp, nil
+}
+
+// UpsertProfile создаёт или обновляет постоянный профиль пользователя.
+func (s *Store) UpsertProfile(ctx context.Context, profile *sm.Profile) error {
+	if profile == nil {
+		return fmt.Errorf("profile is nil")
+	}
+	if profile.UpdatedAt.IsZero() {
+		profile.UpdatedAt = time.Now()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cp := *profile
+	s.data.Profiles[profile.TelegramID] = &cp
+	s.save()
+	return nil
 }

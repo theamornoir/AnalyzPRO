@@ -51,3 +51,18 @@ type Preference struct {
 	Units                string `json:"units"`
 	NotificationsEnabled bool   `json:"notifications_enabled"`
 }
+
+// Profile - постоянный профиль пользователя (имя, возраст, пол, рост, вес,
+// цель). Заполняется/обновляется после каждого опросника (Оценка здоровья,
+// Bioscan PRO), чтобы бот не переспрашивал уже известные данные при
+// повторном запуске опросника.
+type Profile struct {
+	TelegramID int64     `json:"telegram_id"`
+	Name       string    `json:"name"`
+	Age        int       `json:"age"`
+	Gender     string    `json:"gender"`
+	Height     int       `json:"height"`
+	Weight     int       `json:"weight"`
+	Goal       string    `json:"goal"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}

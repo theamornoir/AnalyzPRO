@@ -410,6 +410,11 @@ func (r *router) handleExtendedAnalysis(ctx context.Context, b *tgbot.Bot, chatI
 	r.setCurrentSection(chatID, "analysis")
 
 	r.deleteHubBlock(ctx, b, chatID)
+	// Если профиль уже известен - не переспрашиваем демографию, предлагаем
+	// «Использовать»/«Изменить». Иначе - запускаем опросник с первого вопроса.
+	if r.tryProfileConfirm(ctx, b, chatID, "health") {
+		return true
+	}
 	userdata.NewUserDataCollector(r.stateManager).SendStep(ctx, b, chatID, states.StateWaitingName, locales.MsgExtendedAnalysisIntro)
 	return true
 }
@@ -438,6 +443,12 @@ func (r *router) handleBioscanBasicStart(ctx context.Context, b *tgbot.Bot, chat
 
 	r.setCurrentSection(chatID, "analysis")
 	r.deleteHubBlock(ctx, b, chatID)
+	// Если профиль уже известен - не переспрашиваем демографию, предлагаем
+	// «Использовать»/«Изменить» (фото пересобирается заново при «Использовать»).
+	// Иначе - запускаем базовый Bioscan с приёма фото.
+	if r.tryProfileConfirm(ctx, b, chatID, "bioscan_basic") {
+		return true
+	}
 	bioscan.StartBioscanBasicFlow(ctx, b, r.stateManager, chatID)
 	return true
 }
@@ -483,6 +494,12 @@ func (r *router) handleBioscanExtendedStart(ctx context.Context, b *tgbot.Bot, c
 	r.stateManager.SetState(chatID, states.StateWaitingBioscanName)
 	log.Printf(locales.LogRouterForceBioscan, chatID)
 
+	// Если профиль уже известен - не переспрашиваем демографию, предлагаем
+	// «Использовать»/«Изменить». Иначе - показываем интро и запускаем
+	// опросник с первого вопроса.
+	if r.tryProfileConfirm(ctx, b, chatID, "bioscan_pro") {
+		return true
+	}
 	r.editNavMessage(ctx, b, chatID, locales.MsgBioscanIntro, keyboards.BackInline())
 	return true
 }

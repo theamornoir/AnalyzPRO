@@ -15,10 +15,10 @@ func TestBuildHealthAssessmentHTML(t *testing.T) {
 		"lifestyle": {
 			"sleep": {"score": 68, "comment": "Спите 6 часов."},
 			"nutrition": {"score": 74, "comment": "Ешьте больше овощей."},
-			"movement": {"score": 70, "comment": "Гуляйте чаще."}
+			"activity": {"score": 70, "comment": "Гуляйте чаще."}
 		},
 		"risk_zones": [{"name": "Сон", "level": "средний", "description": "Недосып."}],
-		"plan": {"sleep": "Ложитесь раньше.", "nutrition": "Больше белка.", "movement": "10k шагов.", "stress": "Дыхание."}
+		"plan": {"sleep": "Ложитесь раньше.", "nutrition": "Больше белка.", "activity": "10k шагов.", "stress": "Дыхание."}
 	}`
 	entry := &monitoring.HistoryEntry{Type: "health_assessment", Title: "Общая оценка здоровья", Date: time.Now(), JsonData: jsonData}
 	html := buildHealthAssessmentHTML(entry)
