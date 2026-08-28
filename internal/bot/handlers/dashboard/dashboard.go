@@ -22,6 +22,8 @@ import (
 	"github.com/theamornoir/analyzpro/internal/payment"
 	"github.com/theamornoir/analyzpro/internal/report"
 	"github.com/theamornoir/analyzpro/internal/report/pdfservice"
+	"github.com/theamornoir/analyzpro/internal/storage/interfaces"
+	sm "github.com/theamornoir/analyzpro/internal/storage/models"
 )
 
 // MetricsResponse - ответ API для дашборда «Мой профиль».
@@ -95,9 +97,19 @@ type MetricItem struct {
 // Премиум-гейт реализован на уровне API /api/metrics через проверку
 // подлинности Telegram initData + статуса Premium пользователя.
 type Handler struct {
-	pay            *payment.PaymentService
-	botToken       string
-	repo           monitoring.Repository
+	pay      *payment.PaymentService
+	botToken string
+	repo     monitoring.Repository
+	// users - репозиторий постоянного профиля пользователя (таблица
+	// user_profiles). Нужен, чтобы POST /api/profile из Mini App дублировал
+	// профиль в user_profiles: именно оттуда бот (потоки Bioscan PRO /
+	// Оценка здоровья / базовый Bioscan) подтягивает уже известные данные,
+	// чтобы не переспрашивать имя/возраст/пол/рост/вес. Без этого две
+	// системы хранения рассинхронизированы: Mini App пишет в monitoring_history
+	// (questionnaire), а бот читает из user_profiles. Может быть nil (в
+	// тестах) - тогда дублирование профиля пропускается, дашборд всё равно
+	// наполняется через questionnaire-запись.
+	users          interfaces.UserRepository
 	reportRenderer *report.Renderer
 	pdfConverter   pdfservice.Converter
 	// appEnv - текущее окружение (development/production). Используется,
@@ -114,8 +126,8 @@ type Handler struct {
 // NewHandler создаёт обработчик дашборда. reportRenderer/pdfConverter нужны,
 // чтобы по запросу отдавать сохранённые отчёты как PDF (/api/reports/file).
 // notifSvc (может быть nil в тестах) нужен для эндпоинта /api/notifications.
-func NewHandler(pay *payment.PaymentService, botToken string, repo monitoring.Repository, reportRenderer *report.Renderer, pdfConverter pdfservice.Converter, appEnv string, notifSvc *notifications.Service) *Handler {
-	return &Handler{pay: pay, botToken: botToken, repo: repo, reportRenderer: reportRenderer, pdfConverter: pdfConverter, appEnv: appEnv, notifSvc: notifSvc}
+func NewHandler(pay *payment.PaymentService, botToken string, repo monitoring.Repository, reportRenderer *report.Renderer, pdfConverter pdfservice.Converter, appEnv string, notifSvc *notifications.Service, users interfaces.UserRepository) *Handler {
+	return &Handler{pay: pay, botToken: botToken, repo: repo, reportRenderer: reportRenderer, pdfConverter: pdfConverter, appEnv: appEnv, notifSvc: notifSvc, users: users}
 }
 
 // demoMode возвращает true, только если запрошен демо-режим (?demo=1) И
@@ -267,6 +279,8 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+	log.Printf("[PROFILE-METRICS] user=%s /api/metrics отдан: isPremium=%v ProfileMissing=%v NoData=%v",
+		MaskID(telegramID), isPremium, metrics.ProfileMissing, metrics.NoData)
 	log.Printf(locales.LogDashboardMetrics, MaskID(telegramID), metrics.NoData)
 }
 
@@ -350,11 +364,13 @@ func stripRichReports(g ReportsGroup) ReportsGroup {
 }
 
 // ReportFile - обработчик GET /api/reports/file. Отдаёт сохранённый отчёт
-// (расширенный анализ или Bioscan PRO) как PDF-файл для просмотра/скачивания
-// прямо из «Мой профиль». По id записи из истории берёт сохранённый
-// ReportHTML либо перерендеривает HTML из JsonData и конвертирует в PDF через
-// pdfservice (html2pdf.app). При недоступности PDF-конвертера - отдаёт сам
-// HTML (отчёт не теряется).
+// (расширенный анализ, Bioscan PRO или Общая оценка здоровья) как PDF-файл
+// для просмотра/скачивания прямо из «Мой профиль». По id записи из истории
+// берёт сохранённый ReportHTML либо перерендеривает HTML из JsonData и
+// конвертирует в PDF через pdfservice (html2pdf.app). Для «Общей оценки
+// здоровья» строит собственный стилизованный PDF локально через gofpdf
+// (см. report.RenderHealthAssessmentPDF), независимо от html2pdf.app. При
+// недоступности PDF-конвертера - отдаёт сам HTML (отчёт не теряется).
 //
 // Доступ - по подписи initData (проверка подлинности Telegram) + проверке
 // владения записью. ПРЕМИУМ-ГЕЙТ НЕ ПРИМЕНЯЕТСЯ: пользователь открывает
@@ -491,6 +507,27 @@ func (h *Handler) ReportFile(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename+".html"))
 		w.Write([]byte(html))
 		return
+	}
+
+	// «Общая оценка здоровья»: строим собственный стилизованный PDF (в
+	// мятной палитре Prisma, как Bioscan PRO) локально через gofpdf. Он НЕ
+	// зависит от внешнего html2pdf.app и всегда возвращается красивым и с
+	// графиками (столбчатые диаграммы сфер образа жизни). При сбое
+	// генерации - откат к универсальной конвертации HTML→PDF ниже.
+	if entry.Type == "health_assessment" {
+		if ha, perr := report.ParseHealthAssessmentJSON(entry.JsonData); perr == nil {
+			pdfBytes, gerr := report.RenderHealthAssessmentPDF(ha)
+			if gerr == nil && len(pdfBytes) > 0 {
+				log.Printf("[DASHBOARD] PDF-отчёт «Общая оценка здоровья» id=%d отдан (user=%s): %d байт", entryID, MaskID(telegramID), len(pdfBytes))
+				w.Header().Set("Content-Type", "application/pdf")
+				w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename+".pdf"))
+				w.Write(pdfBytes)
+				return
+			}
+			log.Printf("[DASHBOARD] локальная генерация PDF оценки здоровья id=%d не удалась (%v) - откат к html2pdf", entryID, gerr)
+		} else {
+			log.Printf("[DASHBOARD] не удалось разобрать JSON оценки здоровья id=%d (%v) - откат к html2pdf", entryID, perr)
+		}
 	}
 
 	// Конвертация в PDF. При ошибке (нет ключа html2pdf.app / сервис
@@ -1014,6 +1051,9 @@ func (h *Handler) SaveProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	payloadBytes, _ := json.Marshal(payload)
 
+	log.Printf("[PROFILE-SAVE] user=%s POST /api/profile: name=%q age=%d gender=%q height=%d weight=%d goal=%q (запись типа questionnaire)",
+		MaskID(telegramID), name, req.Age, gender, req.Height, req.Weight, strings.TrimSpace(req.Goal))
+
 	entry := &monitoring.HistoryEntry{
 		TelegramID: telegramID,
 		Type:       "questionnaire",
@@ -1022,11 +1062,40 @@ func (h *Handler) SaveProfile(w http.ResponseWriter, r *http.Request) {
 		JsonData:   string(payloadBytes),
 	}
 	if err := h.repo.SaveResult(r.Context(), entry); err != nil {
+		log.Printf("[PROFILE-SAVE] user=%s не удалось сохранить анкету (questionnaire) в историю: %v", MaskID(telegramID), err)
 		log.Printf("[DASHBOARD] не удалось сохранить профиль user=%s: %v", MaskID(telegramID), err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal"})
 		return
 	}
+	log.Printf("[PROFILE-SAVE] user=%s анкета (questionnaire) записана в историю (bridge -> дашборд)", MaskID(telegramID))
+
+	// Мост в постоянный профиль бота: дублируем анкету в таблицу
+	// user_profiles, откуда бот (потоки Bioscan PRO / Оценка здоровья /
+	// базовый Bioscan) подтягивает уже известные данные и НЕ переспрашивает
+	// имя/возраст/пол/рост/вес. Без этого две системы хранения
+	// рассинхронизированы: Mini App пишет в monitoring_history
+	// (questionnaire), а бот читает из user_profiles. Если users==nil
+	// (тесты) - дублирование пропускаем, дашборд уже наполнен выше.
+	if h.users != nil {
+		userProfile := &sm.Profile{
+			TelegramID: telegramID,
+			Name:       name,
+			Age:        req.Age,
+			Gender:     gender,
+			Height:     req.Height,
+			Weight:     req.Weight,
+			Goal:       strings.TrimSpace(req.Goal),
+		}
+		if uerr := h.users.UpsertProfile(r.Context(), userProfile); uerr != nil {
+			// Не фатально: questionnaire-запись уже сохранена, дашборд
+			// наполнен. Логируем и отвечаем успехом.
+			log.Printf("[PROFILE-SAVE] user=%s не удалось продублировать профиль в user_profiles: %v", MaskID(telegramID), uerr)
+			log.Printf("[DASHBOARD] не удалось продублировать профиль в user_profiles user=%s: %v", MaskID(telegramID), uerr)
+		}
+	}
+
+	log.Printf("[PROFILE-SAVE] user=%s профиль продублирован в user_profiles (bridge -> бот)", MaskID(telegramID))
 	log.Printf("[DASHBOARD] профиль сохранён user=%s name=%q", MaskID(telegramID), "***")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -1052,6 +1121,7 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64, isPremium 
 	resp := MetricsResponse{Recommendations: []string{}}
 
 	entries, _, err := h.repo.ListHistory(ctx, telegramID, "", 1, 0)
+	log.Printf("[PROFILE-METRICS] user=%s buildMetrics: всего записей истории=%d err=%v", MaskID(telegramID), len(entries), err)
 	if err != nil || len(entries) == 0 {
 		resp.NoData = true
 		resp.ProfileMissing = true
@@ -1060,6 +1130,7 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64, isPremium 
 		resp.Recommendations = []string{
 			"Загрузите первый анализ или пройдите биоскан, чтобы увидеть свой профиль.",
 		}
+		log.Printf("[PROFILE-METRICS] user=%s нет истории -> NoData=true ProfileMissing=true (форма заполнения будет показана)", MaskID(telegramID))
 		return resp
 	}
 
@@ -1069,6 +1140,7 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64, isPremium 
 	// биосканов/оценок здоровья). Так Premium-пользователь с загруженными
 	// анализами, но без анкеты, увидит форму заполнения профиля.
 	profEntries, _, _ := h.repo.ListHistory(ctx, telegramID, "questionnaire", 1, 1)
+	log.Printf("[PROFILE-METRICS] user=%s записей-анкет (questionnaire)=%d", MaskID(telegramID), len(profEntries))
 	resp.ProfileMissing = len(profEntries) == 0
 	// Профиль (анкета) - единственный источник пола/роста/веса; имя/возраст
 	// тоже берём из него (приоритет у последнего анализа, см. ниже). Эти
@@ -1085,6 +1157,18 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64, isPremium 
 		if resp.UserAge == 0 {
 			resp.UserAge = pr.Age
 		}
+		log.Printf("[PROFILE-METRICS] user=%s прочитана анкета: name=%q age=%d gender=%q height=%d weight=%d",
+			MaskID(telegramID), pr.Name, pr.Age, pr.Gender, pr.Height, pr.Weight)
+		// Имя - обязательное поле профиля. Если его нет (например, после
+		// базового Bioscan, который не спрашивает имя и пишет анкету без
+		// имени), профиль считаем НЕ заполненным: форма «Мой профиль»
+		// остаётся видимой, чтобы пользователь мог добавить имя, а не
+		// прячется навсегда. Иначе карточка заполнения исчезала, хотя
+		// данные всё равно приходилось вводить заново в опросниках.
+		if strings.TrimSpace(pr.Name) == "" {
+			resp.ProfileMissing = true
+			log.Printf("[PROFILE-METRICS] user=%s анкета БЕЗ имени -> ProfileMissing=true (форма остаётся, нужно дополнить имя)", MaskID(telegramID))
+		}
 	}
 
 	// Дата «Последний анализ» и показатели крови/питания/активности берём
@@ -1098,8 +1182,16 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64, isPremium 
 	if len(analysisEntries) > 0 {
 		resp.AnalysisDate = analysisEntries[0].Date.Format("2006-01-02")
 		report = parseReport(analysisEntries[0].JsonData)
-		resp.UserName = report.Name
-		resp.UserAge = report.Age
+		// Имя/возраст: НЕ затираем уже заполненные из анкеты (questionnaire)
+		// значения. У анализа поле имени обычно пустое, поэтому
+		// безусловная перезапись превращала "Влад" из анкеты в "" и прятала
+		// карточку профиля. Заполняем из анализа только если ещё пусто.
+		if resp.UserName == "" {
+			resp.UserName = report.Name
+		}
+		if resp.UserAge == 0 {
+			resp.UserAge = report.Age
+		}
 
 		// Показатели крови - из последнего анализа.
 		resp.Blood.Hemoglobin = intOrZero(report.findIndicator("гемоглобин", "hemoglobin"))
@@ -1175,6 +1267,11 @@ func (h *Handler) buildMetrics(ctx context.Context, telegramID int64, isPremium 
 		values = append(values, healthIndex(i+1, parseReport(e.JsonData)))
 	}
 	resp.Trend = TrendData{Labels: labels, Values: values}
+
+	// Итоговое решение для карточки профиля: ProfileMissing=true -> фронт
+	// показывает форму заполнения; ProfileMissing=false -> карточку профиля.
+	log.Printf("[PROFILE-METRICS] user=%s ИТОГ: ProfileMissing=%v NoData=%v userName=%q age=%d gender=%q height=%d weight=%d measurements=%d",
+		MaskID(telegramID), resp.ProfileMissing, resp.NoData, resp.UserName, resp.UserAge, resp.UserGender, resp.UserHeight, resp.UserWeight, len(measurements))
 
 	return resp
 }

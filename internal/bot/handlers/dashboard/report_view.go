@@ -7,7 +7,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/theamornoir/analyzpro/internal/models"
 	"github.com/theamornoir/analyzpro/internal/monitoring"
+	"github.com/theamornoir/analyzpro/internal/report"
 )
 
 // isRichHTML - признак «богатого» print-ready отчёта (досье расширенного
@@ -129,158 +131,19 @@ td.val{font-weight:700;white-space:normal;overflow-wrap:anywhere;color:#e8eef2}
 .st{font-weight:600}
 `
 
-// buildHealthAssessmentHTML строит чистый HTML-отчёт «Общая оценка
-// здоровья» из структурированного JsonData (без медицинских файлов).
+// buildHealthAssessmentHTML строит красивый дашборд «Общая оценка
+// здоровья» из структурированного JsonData (без медицинских файлов),
+// опираясь на ответ ИИ по опроснику: общий индекс, 5 сфер образа жизни,
+// зоны риска и план на 3 месяца. Радар и кольцевые индикаторы заполняются
+// реальными данными; оформление - стеклянный фиолетовый неон.
 func buildHealthAssessmentHTML(entry *monitoring.HistoryEntry) string {
-	var ha struct {
-		Title       string `json:"title"`
-		HealthIndex int    `json:"health_index"`
-		Summary     string `json:"summary"`
-		Lifestyle   map[string]struct {
-			Score   int    `json:"score"`
-			Comment string `json:"comment"`
-		} `json:"lifestyle"`
-		RiskZones []struct {
-			Name        string `json:"name"`
-			Level       string `json:"level"`
-			Description string `json:"description"`
-		} `json:"risk_zones"`
-		Plan struct {
-			Sleep     string `json:"sleep"`
-			Nutrition string `json:"nutrition"`
-			Activity  string `json:"activity"`
-			Stress    string `json:"stress"`
-		} `json:"plan"`
+	var ha models.HealthAssessment
+	if err := json.Unmarshal([]byte(entry.JsonData), &ha); err != nil {
+		// Если JsonData не парсится - возвращаем аккуратный HTML из
+		// сохранённого текста (без падения рендера).
+		return buildNoteHTML("Общая оценка здоровья", entry.JsonData)
 	}
-	_ = json.Unmarshal([]byte(entry.JsonData), &ha)
-
-	title := strings.TrimSpace(ha.Title)
-	if title == "" {
-		title = "Общая оценка здоровья"
-	}
-	date := entry.Date.Format("2006-01-02")
-	idx := ha.HealthIndex
-	if idx < 0 {
-		idx = 0
-	}
-	if idx > 100 {
-		idx = 100
-	}
-	idxColor := "#4f8a6d"
-	if idx < 60 {
-		idxColor = "#e8744a"
-	}
-	if idx < 40 {
-		idxColor = "#e5484d"
-	}
-
-	var b strings.Builder
-	b.WriteString("<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>" + esc(title) + "</title><style>" + reportViewCSS + "</style></head><body>")
-	b.WriteString("<h1>" + esc(title) + "</h1>")
-	b.WriteString("<div class=\"sub\">Prisma · Общая оценка здоровья · " + esc(date) + "</div>")
-	b.WriteString("<div class=\"score\" style=\"color:" + idxColor + "\">" + fmt.Sprintf("%d", idx) + "<small>из 100</small></div>")
-
-	if s := strings.TrimSpace(ha.Summary); s != "" {
-		b.WriteString("<div class=\"note\">" + esc(s) + "</div>")
-	}
-
-	// Сферы образа жизни.
-	if len(ha.Lifestyle) > 0 {
-		b.WriteString("<div class=\"card\"><h2>Оценка по сферам</h2>")
-		order := []string{"sleep", "nutrition", "activity", "stress", "habits"}
-		labels := map[string]string{
-			"sleep": "Сон", "nutrition": "Питание", "activity": "Физическая активность",
-			"stress": "Стресс", "habits": "Вредные привычки",
-		}
-		seen := map[string]bool{}
-		add := func(key string, dim struct {
-			Score   int    `json:"score"`
-			Comment string `json:"comment"`
-		}) {
-			if seen[key] {
-				return
-			}
-			seen[key] = true
-			label := labels[key]
-			if label == "" {
-				label = key
-			}
-			sc := dim.Score
-			if sc < 0 {
-				sc = 0
-			}
-			if sc > 100 {
-				sc = 100
-			}
-			col := statusColorHEX("normal")
-			if sc >= 80 {
-				col = statusColorHEX("good")
-			} else if sc < 60 {
-				col = statusColorHEX("warning")
-			}
-			comment := strings.TrimSpace(dim.Comment)
-			b.WriteString("<div class=\"row\"><div class=\"top\"><span class=\"name\">" + esc(label) + "</span><span class=\"sc\" style=\"color:" + col + "\">" + fmt.Sprintf("%d", sc) + "/100</span></div>")
-			b.WriteString("<div class=\"bar\"><span style=\"width:" + fmt.Sprintf("%d", sc) + "%;background:" + col + "\"></span></div>")
-			if comment != "" {
-				b.WriteString("<div class=\"sub\" style=\"margin:6px 0 0\">" + esc(comment) + "</div>")
-			}
-			b.WriteString("</div>")
-		}
-		for _, k := range order {
-			if dim, ok := ha.Lifestyle[k]; ok {
-				add(k, dim)
-			}
-		}
-		for k, dim := range ha.Lifestyle {
-			add(k, dim)
-		}
-		b.WriteString("</div>")
-	}
-
-	// Зоны риска.
-	if len(ha.RiskZones) > 0 {
-		b.WriteString("<div class=\"card\"><h2>Зоны риска</h2><table><thead><tr><th>Зона</th><th>Уровень</th><th>Описание</th></tr></thead><tbody>")
-		for _, z := range ha.RiskZones {
-			lvl := strings.TrimSpace(z.Level)
-			col := statusColorHEX("warning")
-			if strings.EqualFold(lvl, "critical") || strings.EqualFold(lvl, "высокий") {
-				col = statusColorHEX("critical")
-			} else if strings.EqualFold(lvl, "good") || strings.EqualFold(lvl, "низкий") {
-				col = statusColorHEX("normal")
-			}
-			b.WriteString("<tr><td>" + esc(z.Name) + "</td><td class=\"st\" style=\"color:" + col + "\">" + esc(lvl) + "</td><td>" + esc(z.Description) + "</td></tr>")
-		}
-		b.WriteString("</tbody></table></div>")
-	}
-
-	// План на 3 месяца.
-	planItems := []struct {
-		Label, Text string
-	}{
-		{"Сон", ha.Plan.Sleep},
-		{"Питание", ha.Plan.Nutrition},
-		{"Физическая активность", ha.Plan.Activity},
-		{"Стресс", ha.Plan.Stress},
-	}
-	hasPlan := false
-	for _, p := range planItems {
-		if strings.TrimSpace(p.Text) != "" {
-			hasPlan = true
-			break
-		}
-	}
-	if hasPlan {
-		b.WriteString("<div class=\"card\"><h2>План улучшения на 3 месяца</h2><ul class=\"plan\">")
-		for _, p := range planItems {
-			if strings.TrimSpace(p.Text) != "" {
-				b.WriteString("<li><b>" + esc(p.Label) + ":</b> " + esc(p.Text) + "</li>")
-			}
-		}
-		b.WriteString("</ul></div>")
-	}
-
-	b.WriteString("</body></html>")
-	return b.String()
+	return report.RenderHealthAssessmentHTML(ha, entry.Date, false)
 }
 
 // buildAnalysisStructuredHTML строит чистый HTML обычного анализа из
@@ -404,6 +267,25 @@ func buildBioscanStructuredHTML(entry *monitoring.HistoryEntry) string {
 	if err := json.Unmarshal([]byte(entry.JsonData), &doc); err != nil {
 		return ""
 	}
+	// Удаляем зоны, которые модель сама пометила как неопределённые или
+	// отсутствующие (например, «Не определено» / «Данные отсутствуют» по
+	// правилам промпта для невидимых/сомнительных зон). Так в отчёте не
+	// показываются выдуманные или не видимые на фото зоны тела.
+	cleanZones := make([]struct {
+		Name    string `json:"name"`
+		Score   int    `json:"score"`
+		Status  string `json:"status"`
+		Comment string `json:"comment"`
+	}, 0, len(doc.Zones))
+	for _, z := range doc.Zones {
+		s := strings.ToLower(strings.TrimSpace(z.Status))
+		if s == "не определено" || s == "данные отсутствуют" {
+			continue
+		}
+		cleanZones = append(cleanZones, z)
+	}
+	doc.Zones = cleanZones
+
 	hasBody := doc.Posture.PostureScore > 0 || doc.Posture.Symmetry > 0 || doc.Posture.Mobility > 0
 	hasZones := len(doc.Zones) > 0
 	hasComp := len(doc.Composition) > 0

@@ -262,6 +262,13 @@ func Migrate(conn *sql.DB, driver ...string) error {
 			UNIQUE(telegram_id, indicator)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_notif_supp_user ON notification_suppressions(telegram_id)`,
+		`CREATE TABLE IF NOT EXISTS blocked_users (
+			id ` + mkPK() + `,
+			telegram_id BIGINT NOT NULL UNIQUE,
+			reason TEXT NOT NULL DEFAULT '',
+			blocked_at ` + mkTS() + ` NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_blocked_users ON blocked_users(telegram_id)`,
 	}
 
 	for _, stmt := range schema {

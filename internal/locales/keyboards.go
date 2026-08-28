@@ -162,14 +162,6 @@ const (
 	BtnHealthGenderFemale = "👩 Женский"
 )
 
-// BtnHealthGoal* - inline-кнопки выбора цели в опроснике «Общая оценка
-// здоровья».
-const (
-	BtnHealthGoalLose = "🔻 Похудеть"
-	BtnHealthGoalGain = "🔺 Набрать"
-	BtnHealthGoalKeep = "⚖️ Поддержать"
-)
-
 // BtnHabits* - inline-кнопки выбора вредных привычек в опроснике
 // «Общая оценка здоровья».
 const (

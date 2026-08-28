@@ -26,14 +26,17 @@ func (c *UserDataCollector) finishCollection(ctx context.Context, b *tgbot.Bot, 
 
 	// «Общая оценка здоровья» (бывший расширенный анализ): самодостаточный
 	// блок БЕЗ загрузки файлов. Все ответы уже собраны - переводим в
-	// терминальное состояние, маршрутизатор сгенерирует отчёт ИИ по тексту
-	// опросника. Шаг загрузки PDF/фото здесь не нужен.
+	// состояние подтверждения и показываем экран с собранными данными и
+	// кнопкой «Подтвердить и отправить». ИИ НЕ вызывается, пока
+	// пользователь не нажмёт кнопку (callback health_assessment_confirm) -
+	// см. роутер. Шаг загрузки PDF/фото здесь не нужен.
 	if c.stateManager.GetUserData(chatID, "analysis_subtype") == "extended" {
-		c.stateManager.SetState(chatID, states.StateWaitingHealthAssessment)
+		c.stateManager.SetState(chatID, states.StateWaitingHealthAssessmentConfirm)
 		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
-			ChatID:    chatID,
-			Text:      fmt.Sprintf(locales.MsgHealthAssessmentCollecting, name, summary),
-			ParseMode: "Markdown",
+			ChatID:      chatID,
+			Text:        fmt.Sprintf(locales.MsgHealthAssessmentConfirm, name, summary),
+			ReplyMarkup: keyboards.HealthAssessmentConfirmMenu(),
+			ParseMode:   "Markdown",
 		})
 		return
 	}

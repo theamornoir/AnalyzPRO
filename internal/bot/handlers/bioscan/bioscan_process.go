@@ -126,9 +126,6 @@ func ProcessBioscanWithPhotos(
 		return
 	}
 
-	helpers.DeleteMessage(ctx, b, chatID, loadingMsg.ID)
-	helpers.DeleteMessage(ctx, b, chatID, textMsg.ID)
-
 	if len(htmlReport) > 0 {
 		// Конвертируем премиальный HTML-отчёт Body Intelligence в PDF и
 		// отправляем как PDF. При сбое конвертации - откат к HTML.
@@ -166,6 +163,11 @@ func ProcessBioscanWithPhotos(
 			log.Printf(locales.LogBioscanSendDocError, err)
 		}
 	}
+
+	// Гасим индикатор загрузки ТОЛЬКО после попытки отправки отчёта:
+	// конвертация HTML->PDF занимает ещё несколько секунд, и раньше
+	// анимация исчезала, а файл всё ещё «грузился».
+	helpers.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
 
 	// Авто-сохранение результата биоскана в историю (для Мониторинга и
 	// графиков дашборда «Мой профиль»).

@@ -23,21 +23,22 @@ import (
 // All mutations go through a single mutex; the on-disk write uses an atomic
 // temp-file + rename so a crash never leaves a half-written JSON file.
 type Store struct {
-	mu   sync.Mutex // guards data and serializes file writes
+	mu   sync.RWMutex // guards data and serializes file writes (RLock for reads)
 	path string
 	data *fileData
 }
 
 type fileData struct {
-	Users       map[int64]*sm.User        `json:"users"` // key: telegram_id
-	Diagnoses   []sm.Diagnosis            `json:"diagnoses"`
-	Cycles      []sm.Cycle                `json:"cycles"`
-	Preferences map[uint]*sm.Preference   `json:"preferences"`     // key: user_id
-	UsedPromo   map[int64]map[string]bool `json:"used_promocodes"` // key: user_id -> code -> true
-	Profiles    map[int64]*sm.Profile     `json:"profiles"`        // key: telegram_id
-	NextUserID  uint                      `json:"next_user_id"`
-	NextDiagID  uint                      `json:"next_diag_id"`
-	NextCycleID uint                      `json:"next_cycle_id"`
+	Users        map[int64]*sm.User        `json:"users"` // key: telegram_id
+	Diagnoses    []sm.Diagnosis            `json:"diagnoses"`
+	Cycles       []sm.Cycle                `json:"cycles"`
+	Preferences  map[uint]*sm.Preference   `json:"preferences"`     // key: user_id
+	UsedPromo    map[int64]map[string]bool `json:"used_promocodes"` // key: user_id -> code -> true
+	Profiles     map[int64]*sm.Profile     `json:"profiles"`        // key: telegram_id
+	BlockedUsers map[int64]string          `json:"blocked_users"`   // key: telegram_id -> reason
+	NextUserID   uint                      `json:"next_user_id"`
+	NextDiagID   uint                      `json:"next_diag_id"`
+	NextCycleID  uint                      `json:"next_cycle_id"`
 }
 
 // New открывает (или создаёт) JSON-файл хранилища и загружает данные.
@@ -45,11 +46,12 @@ func New(path string) *Store {
 	s := &Store{
 		path: path,
 		data: &fileData{
-			Users:       map[int64]*sm.User{},
-			Diagnoses:   nil,
-			Cycles:      nil,
-			Preferences: map[uint]*sm.Preference{},
-			Profiles:    map[int64]*sm.Profile{},
+			Users:        map[int64]*sm.User{},
+			Diagnoses:    nil,
+			Cycles:       nil,
+			Preferences:  map[uint]*sm.Preference{},
+			Profiles:     map[int64]*sm.Profile{},
+			BlockedUsers: map[int64]string{},
 		},
 	}
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
@@ -74,6 +76,9 @@ func (s *Store) load() {
 	}
 	if s.data.Profiles == nil {
 		s.data.Profiles = map[int64]*sm.Profile{}
+	}
+	if s.data.BlockedUsers == nil {
+		s.data.BlockedUsers = map[int64]string{}
 	}
 }
 
@@ -434,6 +439,49 @@ func (s *Store) UpdateUserPremiumStatusByTelegramID(ctx context.Context, telegra
 		return nil
 	}
 	return fmt.Errorf("user with telegram_id %d not found", telegramID)
+}
+
+// BlockUser блокирует пользователя (по Telegram chat ID).
+func (s *Store) BlockUser(ctx context.Context, telegramID int64, reason string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.data.BlockedUsers == nil {
+		s.data.BlockedUsers = map[int64]string{}
+	}
+	s.data.BlockedUsers[telegramID] = reason
+	s.save()
+	return nil
+}
+
+// UnblockUser снимает блокировку пользователя.
+func (s *Store) UnblockUser(ctx context.Context, telegramID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.data.BlockedUsers, telegramID)
+	s.save()
+	return nil
+}
+
+// IsBlocked возвращает true, если пользователь заблокирован.
+func (s *Store) IsBlocked(ctx context.Context, telegramID int64) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.data.BlockedUsers[telegramID]
+	return ok
+}
+
+// ListBlocked возвращает список заблокированных Telegram chat ID.
+func (s *Store) ListBlocked(ctx context.Context) ([]int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	out := make([]int64, 0, len(s.data.BlockedUsers))
+	for id := range s.data.BlockedUsers {
+		out = append(out, id)
+	}
+	return out, nil
 }
 
 // GetProfile возвращает постоянный профиль пользователя по Telegram ID.

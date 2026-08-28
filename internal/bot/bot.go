@@ -7,7 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	tgbot "github.com/go-telegram/bot"
@@ -73,6 +75,14 @@ type Bot struct {
 	// из username бота (GetMe), либо задаётся вручную через
 	// env WEBAPP_PREMIUM_LINK.
 	premiumLink string
+	// blockedMu защищает in-memory кэш заблокированных пользователей.
+	blockedMu sync.RWMutex
+	// blockedUsers - быстрый in-memory кэш заблокированных Telegram chat ID
+	// (читается на КАЖДОМ входящем апдейте, поэтому без обращения к БД).
+	blockedUsers map[int64]bool
+	// blockedNotified - чаты, которым уже отправлено уведомление о блоке
+	// (чтобы не спамить одного и того же заблокированного пользователя).
+	blockedNotified map[int64]bool
 }
 
 func New(
@@ -148,6 +158,10 @@ func New(
 		appEnv:            appEnv,
 		promoCodes:        promoCodes,
 		promoCodesMonthly: promoCodesMonthly,
+		// In-memory кэш заблокированных пользователей (заполняется из БД
+		// при старте в loadBlockedUsers).
+		blockedUsers:    make(map[int64]bool),
+		blockedNotified: make(map[int64]bool),
 		// Per-user rate-limit: до 20 событий (сообщений/фото/документов/
 		// callback) в окно 10 секунд на один chatID. Админ исключён в
 		// обёртке. Значение подобрано так, чтобы легитимный пользователь
@@ -239,7 +253,7 @@ func (b *Bot) Start(ctx context.Context) {
 			// сессии → initData оказался бы пустым/чужим.
 			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 		})
-		dashHandler := dashboard.NewHandler(b.paymentService, b.botToken, b.monitorRepo, b.reportRenderer, b.pdfConverter, b.appEnv, b.notificationsService)
+		dashHandler := dashboard.NewHandler(b.paymentService, b.botToken, b.monitorRepo, b.reportRenderer, b.pdfConverter, b.appEnv, b.notificationsService, b.appStorage.Users)
 		mux.HandleFunc("/dashboard/", dashHandler.ServeWebApp)
 		mux.HandleFunc("/api/metrics", dashHandler.Metrics)
 		mux.HandleFunc("/api/profile", dashHandler.SaveProfile)
@@ -302,6 +316,10 @@ func (b *Bot) Start(ctx context.Context) {
 	// Запускаем в горутине - сетевой вызов не должен блокировать старт.
 	go b.setupCommands(ctx)
 
+	// Загружаем список заблокированных пользователей в in-memory кэш
+	// (чтобы блок работал сразу при старте, до первого обращения к БД).
+	go b.loadBlockedUsers(ctx)
+
 	// Периодическая очистка устаревших записей rate-limiter'а, чтобы
 	// карта в памяти не росла бесконечно (окно лимитера - 10с).
 	go func() {
@@ -321,39 +339,65 @@ func (b *Bot) Start(ctx context.Context) {
 }
 
 // setupCommands регистрирует список команд бота через setMyCommands, чтобы
-// они были видны в меню «/» Telegram. В частности, это делает админ-команду
-// сброса /resetme (и алиас /reset_premium) ОБНАРУЖИМОЙ - иначе она не
-// показывается как «кнопка»/подсказка, и при тестировании онбординга
-// кажется, что её нет. Сами команды видны всем пользователям, но /resetme и
-// /reset_premium реально срабатывают только для ADMIN_CHAT_ID (для прочих
-// вызов в ResetHandler молча игнорируется).
+// они были видны в меню «/» Telegram. Команды делятся на две группы по
+// scope:
+//   - ПУБЛИЧНЫЕ (BotCommandScopeDefault) - видны ВСЕМ пользователям:
+//     /start, /notifications.
+//   - АДМИН-КОМАНДЫ (BotCommandScopeChat{ChatID: adminChatID}) - видны
+//     ТОЛЬКО администратору: /resetme, /reset_premium, /announce, /ban,
+//     /unban, /blocklist и dev-тесты. Для прочих пользователей они НЕ
+//     показываются в меню «/» (и при прямом вводе обрабатываются как
+//     недоступные через requireAdmin).
+//
+// Благодаря per-chat scope админ видит ВСЕ команды, а обычный пользователь -
+// только публичные.
 func (b *Bot) setupCommands(ctx context.Context) {
-	commands := []models.BotCommand{
+	// Публичные команды - дефолтный scope, видны всем.
+	publicCommands := []models.BotCommand{
 		{Command: "start", Description: "Запустить бота / открыть главное меню"},
-		{Command: "resetme", Description: "Сбросить Premium и онбординг (тест, только для админа)"},
-		{Command: "reset_premium", Description: "Алиас /resetme - сброс статуса (тест)"},
-		{Command: "announce", Description: "Анонс новой фичи всем пользователям (только для админа)"},
 		{Command: "notifications", Description: "Управление уведомлениями об анализах: on / off / status"},
 	}
-	// Dev-команды тестовой отправки уведомлений показываем в списке
-	// команд ТОЛЬКО в development, чтобы не светить их в проде.
-	if b.appEnv == "development" {
-		commands = append(commands,
-			models.BotCommand{Command: "test_sub_7d", Description: "Тест уведомления о подписке: за 7 дней (dev)"},
-			models.BotCommand{Command: "test_sub_3d", Description: "Тест уведомления о подписке: за 3 дня (dev)"},
-			models.BotCommand{Command: "test_sub_1d", Description: "Тест уведомления о подписке: за 1 день (dev)"},
-			models.BotCommand{Command: "test_sub_today", Description: "Тест уведомления о подписке: в день окончания (dev)"},
-			models.BotCommand{Command: "test_analytics_check", Description: "Тест проверки анализов (без отправки, dev)"},
-			models.BotCommand{Command: "test_analytics_send", Description: "Тест отправки уведомлений по анализам (dev)"},
-		)
-	}
 	if _, err := b.client.SetMyCommands(ctx, &tgbot.SetMyCommandsParams{
-		Commands: commands,
+		Commands: publicCommands,
+		Scope:    &models.BotCommandScopeDefault{},
 	}); err != nil {
-		log.Printf("⚠️ Не удалось зарегистрировать команды бота: %v", err)
-		return
+		log.Printf("⚠️ Не удалось зарегистрировать публичные команды: %v", err)
 	}
-	log.Printf("🔘 Команды бота зарегистрированы (включая /resetme для тестов).")
+
+	// Админ-команды - scope по chat_id администратора. Обычным
+	// пользователям НЕ показываются.
+	if b.adminChatID != 0 {
+		adminCommands := []models.BotCommand{
+			{Command: "start", Description: "Запустить бота / открыть главное меню"},
+			{Command: "notifications", Description: "Управление уведомлениями об анализах: on / off / status"},
+			{Command: "resetme", Description: "Сбросить Premium и онбординг (тест, только админ)"},
+			{Command: "reset_premium", Description: "Алиас /resetme - сброс статуса (тест, только админ)"},
+			{Command: "announce", Description: "Анонс новой фичи всем пользователям (только админ)"},
+			{Command: "ban", Description: "Заблокировать пользователя: /ban <chat_id> [причина]"},
+			{Command: "unban", Description: "Разблокировать пользователя: /unban <chat_id>"},
+			{Command: "blocklist", Description: "Список заблокированных пользователей (только админ)"},
+		}
+		// Dev-команды тестовой отправки уведомлений - ТОЛЬКО админу, и
+		// только в development, чтобы не светить их в проде.
+		if b.appEnv == "development" {
+			adminCommands = append(adminCommands,
+				models.BotCommand{Command: "test_sub_7d", Description: "Тест уведомления о подписке: за 7 дней (dev)"},
+				models.BotCommand{Command: "test_sub_3d", Description: "Тест уведомления о подписке: за 3 дня (dev)"},
+				models.BotCommand{Command: "test_sub_1d", Description: "Тест уведомления о подписке: за 1 день (dev)"},
+				models.BotCommand{Command: "test_sub_today", Description: "Тест уведомления о подписке: в день окончания (dev)"},
+				models.BotCommand{Command: "test_analytics_check", Description: "Тест проверки анализов (без отправки, dev)"},
+				models.BotCommand{Command: "test_analytics_send", Description: "Тест отправки уведомлений по анализам (dev)"},
+			)
+		}
+		if _, err := b.client.SetMyCommands(ctx, &tgbot.SetMyCommandsParams{
+			Commands: adminCommands,
+			Scope:    &models.BotCommandScopeChat{ChatID: b.adminChatID},
+		}); err != nil {
+			log.Printf("⚠️ Не удалось зарегистрировать админ-команды: %v", err)
+		}
+	}
+
+	log.Printf("🔘 Команды бота зарегистрированы (публичные - всем, админ-команды - только админу).")
 }
 
 // SetupMenuButton сбрасывает кнопку меню (слева в чате бота) в дефолтное
@@ -634,6 +678,139 @@ func (b *Bot) rateLimited(handler func(context.Context, *tgbot.Bot, *models.Upda
 	}
 }
 
+// loadBlockedUsers загружает список заблокированных пользователей из
+// хранилища в in-memory кэш при старте бота (чтобы проверка блока на каждом
+// апдейте не била в БД).
+func (b *Bot) loadBlockedUsers(ctx context.Context) {
+	if b.appStorage == nil {
+		return
+	}
+	ids, err := b.appStorage.Users.ListBlocked(ctx)
+	if err != nil {
+		log.Printf("⚠️ [BLOCK] не удалось загрузить заблокированных: %v", err)
+		return
+	}
+	b.blockedMu.Lock()
+	defer b.blockedMu.Unlock()
+	for _, id := range ids {
+		b.blockedUsers[id] = true
+	}
+	log.Printf("🔒 [BLOCK] загружено заблокированных пользователей: %d", len(ids))
+}
+
+// isBlocked возвращает true, если пользователь заблокирован (проверка по
+// быстрому in-memory кэшу).
+func (b *Bot) isBlocked(chatID int64) bool {
+	b.blockedMu.RLock()
+	defer b.blockedMu.RUnlock()
+	return b.blockedUsers[chatID]
+}
+
+// markBlockedNotified отмечает, что заблокированному чату уже прислано
+// уведомление о блоке, и возвращает true только при ПЕРВОЙ отметке (чтобы
+// не спамить одного и того же пользователя).
+func (b *Bot) markBlockedNotified(chatID int64) bool {
+	b.blockedMu.Lock()
+	defer b.blockedMu.Unlock()
+	if b.blockedNotified[chatID] {
+		return false
+	}
+	b.blockedNotified[chatID] = true
+	return true
+}
+
+// blockUser блокирует пользователя: пишет в хранилище и обновляет кэш.
+func (b *Bot) blockUser(ctx context.Context, chatID int64, reason string) error {
+	if b.appStorage == nil {
+		return fmt.Errorf("storage not available")
+	}
+	if err := b.appStorage.Users.BlockUser(ctx, chatID, reason); err != nil {
+		return err
+	}
+	b.blockedMu.Lock()
+	b.blockedUsers[chatID] = true
+	delete(b.blockedNotified, chatID)
+	b.blockedMu.Unlock()
+	return nil
+}
+
+// unblockUser снимает блокировку пользователя: чистит хранилище и кэш.
+func (b *Bot) unblockUser(ctx context.Context, chatID int64) error {
+	if b.appStorage == nil {
+		return fmt.Errorf("storage not available")
+	}
+	if err := b.appStorage.Users.UnblockUser(ctx, chatID); err != nil {
+		return err
+	}
+	b.blockedMu.Lock()
+	delete(b.blockedUsers, chatID)
+	delete(b.blockedNotified, chatID)
+	b.blockedMu.Unlock()
+	return nil
+}
+
+// guardBlocked оборачивает обработчик апдейта проверкой блока: если
+// пользователь заблокирован (и это не админ), ему один раз присылается
+// уведомление о блоке, а само событие игнорируется. Админ никогда не
+// блокируется.
+func (b *Bot) guardBlocked(handler func(context.Context, *tgbot.Bot, *models.Update)) func(context.Context, *tgbot.Bot, *models.Update) {
+	return func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+		chatID := updateChatID(update)
+		// Админ никогда не заблокирован; chatID==0 (нет отправителя) - не трогаем.
+		if chatID != 0 && chatID != b.adminChatID && b.isBlocked(chatID) {
+			b.notifyBlocked(ctx, tb, update, chatID)
+			return
+		}
+		handler(ctx, tb, update)
+	}
+}
+
+// notifyBlocked присылает заблокированному пользователю уведомление о блоке
+// (один раз). Для callback-запросов отвечает на кнопку (ShowAlert), чтобы не
+// «висел» спиннер.
+func (b *Bot) notifyBlocked(ctx context.Context, tb *tgbot.Bot, update *models.Update, chatID int64) {
+	if !b.markBlockedNotified(chatID) {
+		return
+	}
+	if update.CallbackQuery != nil {
+		_, _ = tb.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+			Text:            locales.MsgBlockedNotice,
+			ShowAlert:       true,
+		})
+		return
+	}
+	_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: chatID,
+		Text:   locales.MsgBlockedNotice,
+	})
+}
+
+// requireAdmin оборачивает обработчик проверкой, что вызвавший - администратор
+// (b.adminChatID). Если нет - присылается нейтральное уведомление, а команда
+// игнорируется (команда для посторонних недоступна).
+func (b *Bot) requireAdmin(handler func(context.Context, *tgbot.Bot, *models.Update)) func(context.Context, *tgbot.Bot, *models.Update) {
+	return func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+		chatID := updateChatID(update)
+		if chatID != b.adminChatID {
+			if update.Message != nil {
+				_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+					ChatID: chatID,
+					Text:   locales.MsgAdminOnly,
+				})
+			} else if update.CallbackQuery != nil {
+				_, _ = tb.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+					CallbackQueryID: update.CallbackQuery.ID,
+					Text:            locales.MsgAdminOnly,
+					ShowAlert:       true,
+				})
+			}
+			return
+		}
+		handler(ctx, tb, update)
+	}
+}
+
 func (b *Bot) registerHandlers() {
 
 	router := router.MessageRouter(
@@ -659,7 +836,7 @@ func (b *Bot) registerHandlers() {
 		tgbot.HandlerTypeMessageText,
 		"/start",
 		tgbot.MatchTypeExact,
-		menu.StartHandler(b.stateManager, b.agreementStorage, b.appStorage),
+		b.guardBlocked(menu.StartHandler(b.stateManager, b.agreementStorage, b.appStorage)),
 	)
 
 	// Примечание: кнопка меню 💎 Premium НЕ регистрируется здесь как
@@ -680,18 +857,19 @@ func (b *Bot) registerHandlers() {
 		b.agreementStorage,
 		b.paymentService,
 		b.appStorage,
+		b.monitorRepo,
 	)
 	b.client.RegisterHandler(
 		tgbot.HandlerTypeMessageText,
 		"/resetme",
 		tgbot.MatchTypeExact,
-		resetHandler,
+		b.guardBlocked(b.requireAdmin(resetHandler)),
 	)
 	b.client.RegisterHandler(
 		tgbot.HandlerTypeMessageText,
 		"/reset_premium",
 		tgbot.MatchTypeExact,
-		resetHandler,
+		b.guardBlocked(b.requireAdmin(resetHandler)),
 	)
 
 	// Промокоды: /promo <code> активирует Premium на 365 дней (одноразово
@@ -700,9 +878,9 @@ func (b *Bot) registerHandlers() {
 		tgbot.HandlerTypeMessageText,
 		"/promo",
 		tgbot.MatchTypePrefix,
-		func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+		b.guardBlocked(func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
 			b.handlePromo(ctx, tb, update)
-		},
+		}),
 	)
 
 	// Управление уведомлениями об отклонениях в анализах для
@@ -712,23 +890,20 @@ func (b *Bot) registerHandlers() {
 		tgbot.HandlerTypeMessageText,
 		"/notifications",
 		tgbot.MatchTypePrefix,
-		func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+		b.guardBlocked(func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
 			b.handleNotificationsCommand(ctx, tb, update)
-		},
+		}),
 	)
 
 	// Админ-команда анонса новой фичи: /announce <текст> рассылает
 	// одноразовое уведомление всем пользователям, не отключившим
-	// уведомления. Работает только для ADMIN_CHAT_ID.
+	// уведомления. Работает только для ADMIN_CHAT_ID (requireAdmin).
 	b.client.RegisterHandler(
 		tgbot.HandlerTypeMessageText,
 		"/announce",
 		tgbot.MatchTypePrefix,
-		func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+		b.guardBlocked(b.requireAdmin(func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
 			if update.Message == nil {
-				return
-			}
-			if update.Message.Chat.ID != b.adminChatID {
 				return
 			}
 			text := strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/announce"))
@@ -748,7 +923,34 @@ func (b *Bot) registerHandlers() {
 				ChatID: update.Message.Chat.ID,
 				Text:   reply,
 			})
-		},
+		})),
+	)
+
+	// Админ-команды блокировки/разблокировки пользователей. Только для
+	// ADMIN_CHAT_ID (requireAdmin) и недоступны прочим (scope + гард).
+	b.client.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		"/ban",
+		tgbot.MatchTypePrefix,
+		b.guardBlocked(b.requireAdmin(func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+			b.handleBan(ctx, tb, update)
+		})),
+	)
+	b.client.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		"/unban",
+		tgbot.MatchTypePrefix,
+		b.guardBlocked(b.requireAdmin(func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+			b.handleUnban(ctx, tb, update)
+		})),
+	)
+	b.client.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		"/blocklist",
+		tgbot.MatchTypeExact,
+		b.guardBlocked(b.requireAdmin(func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+			b.handleBlockList(ctx, tb, update)
+		})),
 	)
 
 	// Dev-команды тестовой отправки уведомлений о подписке и аналитике.
@@ -770,9 +972,9 @@ func (b *Bot) registerHandlers() {
 				tgbot.HandlerTypeMessageText,
 				cmd,
 				tgbot.MatchTypeExact,
-				func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+				b.guardBlocked(b.requireAdmin(func(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
 					b.handleDevTestCommand(ctx, tb, update, k)
-				},
+				})),
 			)
 		}
 	}
@@ -782,7 +984,7 @@ func (b *Bot) registerHandlers() {
 		tgbot.HandlerTypeMessageText,
 		"",
 		tgbot.MatchTypePrefix,
-		b.rateLimited(router),
+		b.guardBlocked(b.rateLimited(router)),
 	)
 
 	// Документы (с per-user rate-limit'ом: защита от массовой загрузки
@@ -792,7 +994,7 @@ func (b *Bot) registerHandlers() {
 			return update.Message != nil &&
 				update.Message.Document != nil
 		},
-		b.rateLimited(router),
+		b.guardBlocked(b.rateLimited(router)),
 	)
 
 	// Фото (с per-user rate-limit'ом).
@@ -801,7 +1003,7 @@ func (b *Bot) registerHandlers() {
 			return update.Message != nil &&
 				update.Message.Photo != nil
 		},
-		b.rateLimited(router),
+		b.guardBlocked(b.rateLimited(router)),
 	)
 
 	// Callback-запросы (inline-кнопки: выбор тарифа premium_<id>,
@@ -813,6 +1015,138 @@ func (b *Bot) registerHandlers() {
 		tgbot.HandlerTypeCallbackQueryData,
 		"",
 		tgbot.MatchTypePrefix,
-		b.rateLimited(router),
+		b.guardBlocked(b.rateLimited(router)),
 	)
+}
+
+// handleBan обрабатывает команду /ban <chat_id> [причина]: блокирует
+// пользователя по Telegram chat ID. Только для админа (requireAdmin).
+// Блокировка пишется в хранилище и кэш - после этого пользователь не может
+// пользоваться ботом (см. guardBlocked).
+func (b *Bot) handleBan(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+	if update.Message == nil {
+		return
+	}
+	chatID := update.Message.Chat.ID
+	args := strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/ban"))
+	fields := strings.Fields(args)
+	if len(fields) == 0 {
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgBanUsage,
+		})
+		return
+	}
+	target, err := strconv.ParseInt(fields[0], 10, 64)
+	if err != nil || target == 0 {
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgBanInvalid,
+		})
+		return
+	}
+	if target == b.adminChatID {
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgBanSelf,
+		})
+		return
+	}
+	reason := strings.Join(fields[1:], " ")
+	if err := b.blockUser(ctx, target, reason); err != nil {
+		log.Printf("⚠️ [BLOCK] не удалось заблокировать chatID=%d: %v", target, err)
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgBanError,
+		})
+		return
+	}
+	reply := fmt.Sprintf(locales.MsgBanned, target)
+	if reason != "" {
+		reply += "\n📝 Причина: " + reason
+	}
+	_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: chatID,
+		Text:   reply,
+	})
+}
+
+// handleUnban обрабатывает команду /unban <chat_id>: снимает блокировку
+// пользователя. Только для админа (requireAdmin).
+func (b *Bot) handleUnban(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+	if update.Message == nil {
+		return
+	}
+	chatID := update.Message.Chat.ID
+	args := strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/unban"))
+	fields := strings.Fields(args)
+	if len(fields) == 0 {
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgUnbanUsage,
+		})
+		return
+	}
+	target, err := strconv.ParseInt(fields[0], 10, 64)
+	if err != nil || target == 0 {
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgUnbanInvalid,
+		})
+		return
+	}
+	if err := b.unblockUser(ctx, target); err != nil {
+		log.Printf("⚠️ [BLOCK] не удалось разблокировать chatID=%d: %v", target, err)
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgUnbanError,
+		})
+		return
+	}
+	_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: chatID,
+		Text:   fmt.Sprintf(locales.MsgUnbanned, target),
+	})
+}
+
+// handleBlockList обрабатывает команду /blocklist: показывает админу
+// список заблокированных пользователей. Только для админа (requireAdmin).
+func (b *Bot) handleBlockList(ctx context.Context, tb *tgbot.Bot, update *models.Update) {
+	if update.Message == nil {
+		return
+	}
+	chatID := update.Message.Chat.ID
+	if b.appStorage == nil {
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgBanError,
+		})
+		return
+	}
+	ids, err := b.appStorage.Users.ListBlocked(ctx)
+	if err != nil {
+		log.Printf("⚠️ [BLOCK] не удалось получить список заблокированных: %v", err)
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgBanError,
+		})
+		return
+	}
+	if len(ids) == 0 {
+		_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   locales.MsgBlockListEmpty,
+		})
+		return
+	}
+	var sb strings.Builder
+	sb.WriteString(locales.MsgBlockListHeader)
+	sb.WriteString("\n")
+	for _, id := range ids {
+		sb.WriteString(fmt.Sprintf("• %d\n", id))
+	}
+	_, _ = tb.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: chatID,
+		Text:   sb.String(),
+	})
 }

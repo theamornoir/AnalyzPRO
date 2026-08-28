@@ -16,9 +16,20 @@ const (
 	// StateWaitingHealthAssessment - терминальное состояние опросника
 	// «Общая оценка здоровья»: собраны все ответы, маршрутизатор должен
 	// сгенерировать отчёт ИИ на основе ТОЛЬКО текста опросника (без шага
-	// загрузки файлов). Именно сюда переводит finishCollection для потока
-	// «extended» (теперь - Общая оценка здоровья).
+	// загрузки файлов). Именно сюда переводит роутер в момент нажатия
+	// пользователем кнопки «Подтвердить и отправить» (callback
+	// health_assessment_confirm) - это происходит УЖЕ ПОСЛЕ подтверждения
+	// на экране StateWaitingHealthAssessmentConfirm.
 	StateWaitingHealthAssessment State = "waiting_health_assessment"
+
+	// StateWaitingHealthAssessmentConfirm - экран подтверждения перед
+	// генерацией отчёта «Общая оценка здоровья». После последнего вопроса
+	// опросника (вредные привычки) finishCollection переводит сюда и
+	// показывает собранные данные + inline-кнопку «Подтвердить и отправить».
+	// ИИ НЕ вызывается, пока пользователь не нажмёт кнопку (callback
+	// health_assessment_confirm), который уже переводит в
+	// StateWaitingHealthAssessment и запускает генерацию отчёта.
+	StateWaitingHealthAssessmentConfirm State = "waiting_health_assessment_confirm"
 
 	StateWaitingName   State = "waiting_name"
 	StateWaitingGender State = "waiting_gender"

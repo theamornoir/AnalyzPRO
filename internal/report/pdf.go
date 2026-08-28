@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"strconv"
+	"strings"
 
 	"github.com/jung-kurt/gofpdf"
 
@@ -96,10 +97,10 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 	if rep.Profile.Composition > 0 || rep.Profile.MuscleDevelopment > 0 ||
 		rep.Profile.Balance > 0 || rep.Profile.Potential > 0 {
 		w.heading(locales.RptMsgPdfProfileDev)
-		w.barRow(locales.RptMsgPdfCompositionLabel, rep.Profile.Composition)
-		w.barRow(locales.RptMsgPdfMuscleDevLabel, rep.Profile.MuscleDevelopment)
-		w.barRow(locales.RptMsgPdfBalanceLabel, rep.Profile.Balance)
-		w.barRow(locales.RptMsgPdfPotentialLabel, rep.Profile.Potential)
+		w.barRow(locales.RptMsgPdfCompositionLabel, int(rep.Profile.Composition))
+		w.barRow(locales.RptMsgPdfMuscleDevLabel, int(rep.Profile.MuscleDevelopment))
+		w.barRow(locales.RptMsgPdfBalanceLabel, int(rep.Profile.Balance))
+		w.barRow(locales.RptMsgPdfPotentialLabel, int(rep.Profile.Potential))
 		w.pdf.Ln(2)
 	}
 
@@ -113,7 +114,7 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 	if len(rep.Zones) > 0 {
 		w.heading(locales.RptMsgPdfZoneAssessment)
 		for _, z := range rep.Zones {
-			w.barRow(truncate(z.Name, 40), z.Score)
+			w.barRow(truncate(z.Name, 40), int(z.Score))
 			if z.Status != "" {
 				w.paragraph(locales.RptMsgPdfStatusLabel + z.Status)
 			}
@@ -252,6 +253,187 @@ func RenderBioscanPDF(rep models.Report) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// healthHeaderRGB - палитра отчёта «Общая оценка здоровья» (мятный/бирюзовый
+// Prisma). Визуально отличает его от синего Bioscan PRO, сохраняя единый
+// стиль (цветная шапка + заголовки + цветные столбиковые диаграммы).
+var healthHeaderRGB = [3]int{31, 166, 168} // #1FA6A8
+
+// riskLevelColor возвращает цвет для уровня зоны риска (по текстовой метке).
+func riskLevelColor(level string) [3]int {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "critical", "критично", "высокий", "высокий риск", "alert":
+		return [3]int{244, 67, 54} // красный
+	case "warning", "внимание", "средний", "warn", "умеренный":
+		return [3]int{255, 152, 0} // оранжевый
+	case "good", "ok", "низкий", "низкий риск":
+		return [3]int{76, 175, 80} // зелёный
+	default:
+		return [3]int{255, 152, 0} // оранжевый по умолчанию
+	}
+}
+
+// RenderHealthAssessmentPDF строит стилизованный PDF-отчёт «Общая оценка
+// здоровья» (кириллица через встроенный Arial), оформленный в собственной
+// (мятной) палитре Prisma и содержащий те же блоки, что Bioscan PRO:
+// общий индекс здоровья, разбор по 5 сферам образа жизни (столбчатые
+// диаграммы), зоны риска и персональный план на 3 месяца. Возвращает сырые
+// байты готового PDF-документа. Отчёт строится локально (gofpdf) и НЕ
+// зависит от внешнего сервиса html2pdf.app, поэтому всегда возвращается
+// красивым и с графиками.
+func RenderHealthAssessmentPDF(ha models.HealthAssessment) ([]byte, error) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.SetAutoPageBreak(true, pdfMargin)
+	pdf.AddUTF8FontFromBytes("Arial", "", arialFontBytes)
+	pdf.SetMargins(pdfMargin, pdfMargin, pdfMargin)
+	pdf.AddPage()
+
+	w := &pdfWriter{pdf: pdf}
+
+	// Шапка (цветная полоса + заголовок).
+	pdf.SetFillColor(healthHeaderRGB[0], healthHeaderRGB[1], healthHeaderRGB[2])
+	pdf.Rect(0, 0, pdfPageW, 22, "F")
+	pdf.SetXY(pdfMargin, 6)
+	pdf.SetFont("Arial", "", 16)
+	pdf.SetTextColor(255, 255, 255)
+	pdf.Cell(0, 8, "Общая оценка здоровья")
+
+	pdf.SetXY(pdfMargin, 15)
+	pdf.SetFont("Arial", "", 9)
+	pdf.SetTextColor(235, 248, 248)
+	pdf.Cell(0, 5, "Prisma · персональный отчёт по образу жизни")
+
+	pdf.SetY(28)
+
+	// Общий индекс здоровья (крупная цифра + словесный уровень).
+	idx := ha.HealthIndex
+	if idx < 0 {
+		idx = 0
+	}
+	if idx > 100 {
+		idx = 100
+	}
+	w.headingMint("Общий индекс здоровья")
+	col := scoreColor(idx)
+	pdf.SetFont("Arial", "", 30)
+	pdf.SetTextColor(col[0], col[1], col[2])
+	pdf.Cell(0, 12, strconv.Itoa(idx)+" / 100")
+	pdf.Ln(13)
+	pdf.SetFont("Arial", "", 11)
+	pdf.SetTextColor(col[0], col[1], col[2])
+	w.paragraph(levelLabel(idx))
+
+	// Разбор образа жизни.
+	if strings.TrimSpace(ha.Summary) != "" {
+		w.headingMint("Разбор образа жизни")
+		w.paragraph(ha.Summary)
+	}
+
+	// Оценка по 5 сферам образа жизни (столбчатые диаграммы).
+	if len(ha.Lifestyle) > 0 {
+		w.headingMint("Оценка по сферам")
+		order := []string{"sleep", "nutrition", "wellbeing", "stress", "habits"}
+		labels := map[string]string{
+			"sleep":     "Сон",
+			"nutrition": "Питание",
+			"wellbeing": "Общее самочувствие",
+			"stress":    "Стресс",
+			"habits":    "Вредные привычки",
+		}
+		seen := map[string]bool{}
+		add := func(key string, dim models.LifestyleDim) {
+			if seen[key] {
+				return
+			}
+			seen[key] = true
+			label := labels[key]
+			if label == "" {
+				label = key
+			}
+			w.barRow(label, dim.Score)
+			if strings.TrimSpace(dim.Comment) != "" {
+				w.paragraph(strings.TrimSpace(dim.Comment))
+			}
+		}
+		for _, k := range order {
+			if dim, ok := ha.Lifestyle[k]; ok {
+				add(k, dim)
+			}
+		}
+		for k, dim := range ha.Lifestyle {
+			add(k, dim)
+		}
+		w.pdf.Ln(2)
+	}
+
+	// Зоны риска.
+	if len(ha.RiskZones) > 0 {
+		w.headingMint("Зоны риска")
+		for _, z := range ha.RiskZones {
+			name := strings.TrimSpace(z.Name)
+			if name == "" {
+				name = "Внимание"
+			}
+			lvl := strings.TrimSpace(z.Level)
+			w.pdf.SetFont("Arial", "", 11)
+			w.pdf.SetTextColor(30, 30, 30)
+			w.pdf.MultiCell(pdfPageW-2*pdfMargin, 6, "• "+name, "", "L", false)
+			if lvl != "" {
+				lc := riskLevelColor(lvl)
+				w.pdf.SetFont("Arial", "", 9)
+				w.pdf.SetTextColor(lc[0], lc[1], lc[2])
+				w.pdf.MultiCell(pdfPageW-2*pdfMargin, 5, "  Уровень: "+lvl, "", "L", false)
+				w.pdf.SetTextColor(30, 30, 30)
+			}
+			if strings.TrimSpace(z.Description) != "" {
+				w.paragraph(strings.TrimSpace(z.Description))
+			}
+			w.pdf.Ln(1)
+		}
+	}
+
+	// Персональный план на 3 месяца.
+	planItems := []struct {
+		Label, Text string
+	}{
+		{"Сон", ha.Plan.Sleep},
+		{"Питание", ha.Plan.Nutrition},
+		{"Общее самочувствие", ha.Plan.Wellbeing},
+		{"Стресс", ha.Plan.Stress},
+	}
+	hasPlan := false
+	for _, p := range planItems {
+		if strings.TrimSpace(p.Text) != "" {
+			hasPlan = true
+			break
+		}
+	}
+	if hasPlan {
+		w.headingMint("Персональный план на 3 месяца")
+		for _, p := range planItems {
+			if strings.TrimSpace(p.Text) == "" {
+				continue
+			}
+			w.pdf.SetFont("Arial", "", 11)
+			w.pdf.SetTextColor(healthHeaderRGB[0], healthHeaderRGB[1], healthHeaderRGB[2])
+			w.pdf.MultiCell(pdfPageW-2*pdfMargin, 6, p.Label, "", "L", false)
+			w.pdf.SetTextColor(30, 30, 30)
+			w.paragraph(strings.TrimSpace(p.Text))
+		}
+	}
+
+	// Дисклеймер.
+	w.pdf.Ln(2)
+	w.pdf.SetFont("Arial", "", 8)
+	w.pdf.SetTextColor(120, 120, 120)
+	w.pdf.MultiCell(pdfPageW-2*pdfMargin, 4, disclaimText, "", "L", false)
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 // pdfWriter - обёртка над gofpdf с удобными помощниками вёрстки.
 type pdfWriter struct {
 	pdf *gofpdf.Fpdf
@@ -267,6 +449,16 @@ func (w *pdfWriter) heading(s string) {
 	w.ensureSpace(10)
 	w.pdf.SetFont("Arial", "", 13)
 	w.pdf.SetTextColor(33, 70, 110)
+	w.pdf.MultiCell(pdfPageW-2*pdfMargin, 7, s, "", "L", false)
+	w.pdf.Ln(1)
+}
+
+// headingMint - заголовок секции в мятной палитре отчёта «Общая оценка
+// здоровья» (визуально отличает его от синего Bioscan PRO).
+func (w *pdfWriter) headingMint(s string) {
+	w.ensureSpace(10)
+	w.pdf.SetFont("Arial", "", 13)
+	w.pdf.SetTextColor(healthHeaderRGB[0], healthHeaderRGB[1], healthHeaderRGB[2])
 	w.pdf.MultiCell(pdfPageW-2*pdfMargin, 7, s, "", "L", false)
 	w.pdf.Ln(1)
 }
@@ -295,7 +487,7 @@ func (w *pdfWriter) bullet(s string) {
 }
 
 // barRow рисует подпись и цветной столбик-диаграмму для оценки (0..100).
-func (w *pdfWriter) barRow(label string, score models.FlexInt) {
+func (w *pdfWriter) barRow(label string, score int) {
 	if score < 0 {
 		score = 0
 	}
@@ -319,13 +511,13 @@ func (w *pdfWriter) barRow(label string, score models.FlexInt) {
 	w.pdf.SetFillColor(c[0], c[1], c[2])
 	w.pdf.Rect(x0, y+1, barMax*float64(score)/100.0, 5, "F")
 	w.pdf.SetTextColor(0, 0, 0)
-	w.pdf.Text(x0+barMax+1, y+4, strconv.Itoa(int(score)))
+	w.pdf.Text(x0+barMax+1, y+4, strconv.Itoa(score))
 
 	w.pdf.SetXY(pdfMargin, y+8)
 }
 
 // scoreColor возвращает цвет столбика по величине оценки.
-func scoreColor(score models.FlexInt) [3]int {
+func scoreColor(score int) [3]int {
 	switch {
 	case score >= 80:
 		return [3]int{76, 175, 80} // зелёный

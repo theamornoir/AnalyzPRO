@@ -81,6 +81,13 @@ type IndicatorView struct {
 	Num    float64 `json:"num"`
 	RefMin float64 `json:"refMin"`
 	RefMax float64 `json:"refMax"`
+	// IsScore - признак, что показатель это ОЦЕНКА 0-100 (чем выше,
+	// тем лучше), а НЕ лабораторный показатель с референсным диапазоном.
+	// Фронт по нему рисует ГОРИЗОНТАЛЬНЫЙ заполненный бар (а не
+	// вертикальный индикатор с зонами «низ=норма/верх=критично», который
+	// для оценок инвертирован по смыслу). true для сфер образа жизни
+	// «Общей оценки здоровья».
+	IsScore bool `json:"isScore"`
 }
 
 // ZoneView - одна зона тела биоскана (для круговых диаграмм).
@@ -397,11 +404,11 @@ func parseHealthAssessmentBlock(jsonStr string, out *ReportBlock) {
 	if len(doc.Lifestyle) > 0 && out.Indicators == nil {
 		out.Indicators = []IndicatorView{}
 	}
-	order := []string{"sleep", "nutrition", "activity", "stress", "habits"}
+	order := []string{"sleep", "nutrition", "wellbeing", "stress", "habits"}
 	labels := map[string]string{
 		"sleep":     "Сон",
 		"nutrition": "Питание",
-		"activity":  "Физическая активность",
+		"wellbeing": "Общее самочувствие",
 		"stress":    "Стресс",
 		"habits":    "Вредные привычки",
 	}
@@ -425,10 +432,11 @@ func parseHealthAssessmentBlock(jsonStr string, out *ReportBlock) {
 			status = "warning"
 		}
 		out.Indicators = append(out.Indicators, IndicatorView{
-			Name:   label,
-			Value:  strconv.Itoa(dim.Score),
-			Status: status,
-			Num:    float64(dim.Score),
+			Name:    label,
+			Value:   strconv.Itoa(dim.Score),
+			Status:  status,
+			Num:     float64(dim.Score),
+			IsScore: true,
 		})
 		out.Scores[label] = dim.Score
 	}

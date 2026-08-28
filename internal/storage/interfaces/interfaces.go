@@ -48,6 +48,17 @@ type UserRepository interface {
 	// функцией «Удалить аккаунт» - необратимо. userID здесь - Telegram
 	// chat ID (int64), как во всём боте.
 	DeleteAccount(ctx context.Context, telegramID int64) error
+
+	// BlockUser блокирует пользователя по Telegram chat ID (идемпотентно:
+	// повторный вызов обновляет причину и время). Заблокированный
+	// пользователь не может пользоваться ботом.
+	BlockUser(ctx context.Context, telegramID int64, reason string) error
+	// UnblockUser снимает блокировку пользователя по Telegram chat ID.
+	UnblockUser(ctx context.Context, telegramID int64) error
+	// IsBlocked возвращает true, если пользователь заблокирован.
+	IsBlocked(ctx context.Context, telegramID int64) bool
+	// ListBlocked возвращает список заблокированных Telegram chat ID.
+	ListBlocked(ctx context.Context) ([]int64, error)
 }
 
 // DiagnosisRepository - репозиторий диагнозов.

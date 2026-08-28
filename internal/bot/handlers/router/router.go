@@ -301,14 +301,11 @@ func (r *router) handle(ctx context.Context, b *tgbot.Bot, update *models.Update
 
 	// Обработка состояний опросника
 	if r.handleQuestionnaireStates(ctx, b, chatID, text) {
-		// Если последний вопрос завершил сбор и перевёл состояние в
-		// терминальное StateWaitingHealthAssessment («Общая оценка
-		// здоровья») - сохраняем профиль и сразу генерируем отчёт по
-		// тексту опросника.
-		if r.stateManager.GetState(chatID) == states.StateWaitingHealthAssessment {
-			r.saveProfile(ctx, chatID, "")
-			r.handleHealthAssessment(ctx, b, chatID)
-		}
+		// «Общая оценка здоровья»: финиш опросника перевёл состояние в
+		// StateWaitingHealthAssessmentConfirm - экран подтверждения уже
+		// показан в FinishCollection. ИИ запускается ТОЛЬКО по кнопке
+		// «Подтвердить и отправить» (callback health_assessment_confirm),
+		// а не автоматически.
 		return
 	}
 
@@ -403,7 +400,6 @@ func isNavDelete(callbackData string) bool {
 		callbackData == "bioscan_basic_goal_endure",
 		callbackData == "bioscan_basic_goal_flex",
 		strings.HasPrefix(callbackData, "question_gender_"),
-		strings.HasPrefix(callbackData, "question_goal_"),
 		strings.HasPrefix(callbackData, "question_habits_"),
 		strings.HasPrefix(callbackData, "bioscan_pro_"),
 		callbackData == "delete_account_confirm",
@@ -465,7 +461,7 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 
 	// Коллектор опросника «Общая оценка здоровья»: используется для
 	// обработки inline-нажатий выбора пола/цели/привычек (callback_data вида
-	// question_gender_* / question_goal_* / question_habits_*).
+	// question_gender_* / question_habits_*).
 	collector := userdata.NewUserDataCollector(r.stateManager)
 
 	// Глобальное правило «кнопка/выбор удаляется после ответа»: после того
@@ -581,6 +577,35 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		return
 	}
 
+	// Опросник «Общая оценка здоровья»: последний вопрос - вредные привычки
+	// (question_habits_*) - отвечается ТОЛЬКО через inline-кнопку. После
+	// ответа FinishCollection переводит состояние в
+	// StateWaitingHealthAssessmentConfirm и показывает экран подтверждения с
+	// кнопкой «Подтвердить и отправить» (callback health_assessment_confirm).
+	// ИИ здесь НЕ запускаем - только после нажатия этой кнопки.
+	if strings.HasPrefix(callbackData, "question_habits_") {
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_habits")
+		var habit string
+		switch callbackData {
+		case "question_habits_none":
+			habit = "Нет"
+		case "question_habits_smoke":
+			habit = "Курю"
+		case "question_habits_alcohol":
+			habit = "Алкоголь"
+		case "question_habits_both":
+			habit = "Курю и алкоголь"
+		}
+		collector.HandleHabits(ctx, b, chatID, habit)
+		// Экран подтверждения («Подтвердить и отправить») уже показан в
+		// FinishCollection. ИИ запускается ТОЛЬКО по кнопке
+		// health_assessment_confirm, а не автоматически здесь.
+		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
+		return
+	}
+
 	// Под-действия из карточек разделов-хабов («Анализы», «Здоровье»,
 	// «Сервис»). Диспетчеризуем на существующие обработчики; сам
 	// callback-запрос отвечается в конце функции (спиннер кнопки).
@@ -676,6 +701,22 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
 			CallbackQueryID: update.CallbackQuery.ID,
 		})
+		return
+
+	// «Подтвердить и отправить» на экране подтверждения «Общей оценки
+	// здоровья»: ТОЛЬКО здесь запускается генерация отчёта ИИ (после того
+	// как пользователь проверил собранные данные и нажал кнопку). Сохраняем
+	// профиль и строим отчёт по тексту опросника (без шага загрузки файлов).
+	case "health_assessment_confirm":
+		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "health_assessment_confirm")
+		// Снимаем «крутилку» спиннера кнопки ДО длинной генерации отчёта.
+		_, _ = b.AnswerCallbackQuery(ctx, &tgbot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
+		// Переводим в терминальное состояние генерации и запускаем ИИ.
+		r.stateManager.SetState(chatID, states.StateWaitingHealthAssessment)
+		r.saveProfile(ctx, chatID, "")
+		r.handleHealthAssessment(ctx, b, chatID)
 		return
 
 	case "section_about":
@@ -774,27 +815,6 @@ func (r *router) handleCallback(ctx context.Context, b *tgbot.Bot, update *model
 	case "question_gender_f":
 		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_gender")
 		collector.HandleGender(ctx, b, chatID, "Женский")
-	case "question_goal_lose":
-		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_goal")
-		collector.HandleGoal(ctx, b, chatID, "Похудеть")
-	case "question_goal_gain":
-		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_goal")
-		collector.HandleGoal(ctx, b, chatID, "Набрать")
-	case "question_goal_keep":
-		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_goal")
-		collector.HandleGoal(ctx, b, chatID, "Поддержать форму")
-	case "question_habits_none":
-		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_habits")
-		collector.HandleHabits(ctx, b, chatID, "Нет")
-	case "question_habits_smoke":
-		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_habits")
-		collector.HandleHabits(ctx, b, chatID, "Курю")
-	case "question_habits_alcohol":
-		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_habits")
-		collector.HandleHabits(ctx, b, chatID, "Алкоголь")
-	case "question_habits_both":
-		log.Printf(locales.LogRouterCallbackDispatch, dashboard.MaskID(chatID), callbackData, "question_habits")
-		collector.HandleHabits(ctx, b, chatID, "Курю и алкоголь")
 
 	// Bioscan PRO: выбор пола/цели/уровня тренированности через inline-кнопки.
 	case "bioscan_pro_gender_m":

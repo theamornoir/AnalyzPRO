@@ -174,3 +174,45 @@ func TestPromoCodes(t *testing.T) {
 		t.Error("другой код не должен считаться использованным")
 	}
 }
+
+func TestBlockedUsers(t *testing.T) {
+	ctx := context.Background()
+	r := newTestStorage(t)
+
+	const target int64 = 999
+
+	// Изначально не заблокирован и список пуст.
+	if r.IsBlocked(ctx, target) {
+		t.Fatal("пользователь не должен быть заблокирован до блокировки")
+	}
+	if ids, err := r.ListBlocked(ctx); err != nil || len(ids) != 0 {
+		t.Fatalf("list blocked: %v (len=%d)", err, len(ids))
+	}
+
+	// Блокируем с причиной.
+	if err := r.BlockUser(ctx, target, "спам"); err != nil {
+		t.Fatalf("block: %v", err)
+	}
+	if !r.IsBlocked(ctx, target) {
+		t.Error("после блокировки IsBlocked должен быть true")
+	}
+	if ids, err := r.ListBlocked(ctx); err != nil || len(ids) != 1 || ids[0] != target {
+		t.Fatalf("list blocked после блокировки: %v ids=%v", err, ids)
+	}
+
+	// Повторная блокировка с другой причиной не должна падать.
+	if err := r.BlockUser(ctx, target, "нарушение"); err != nil {
+		t.Fatalf("повторная block: %v", err)
+	}
+
+	// Разблокируем.
+	if err := r.UnblockUser(ctx, target); err != nil {
+		t.Fatalf("unblock: %v", err)
+	}
+	if r.IsBlocked(ctx, target) {
+		t.Error("после разблокировки IsBlocked должен быть false")
+	}
+	if ids, err := r.ListBlocked(ctx); err != nil || len(ids) != 0 {
+		t.Fatalf("list blocked после разблокировки: %v (len=%d)", err, len(ids))
+	}
+}

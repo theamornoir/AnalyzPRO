@@ -15,6 +15,7 @@ type MockUserRepository struct {
 	users     map[int64]*sm.User    // key: TelegramID
 	profiles  map[int64]*sm.Profile // key: TelegramID
 	usedPromo map[int64]map[string]bool
+	blocked   map[int64]string // key: TelegramID -> reason
 	nextID    uint
 }
 
@@ -24,6 +25,7 @@ func NewMockUserRepository() *MockUserRepository {
 		users:     make(map[int64]*sm.User),
 		profiles:  make(map[int64]*sm.Profile),
 		usedPromo: make(map[int64]map[string]bool),
+		blocked:   make(map[int64]string),
 		nextID:    1,
 	}
 }
@@ -328,4 +330,39 @@ func (m *MockUserRepository) UpsertProfile(ctx context.Context, profile *sm.Prof
 	cp := *profile
 	m.profiles[profile.TelegramID] = &cp
 	return nil
+}
+
+// BlockUser блокирует пользователя (по Telegram chat ID).
+func (m *MockUserRepository) BlockUser(ctx context.Context, telegramID int64, reason string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.blocked[telegramID] = reason
+	return nil
+}
+
+// UnblockUser снимает блокировку пользователя.
+func (m *MockUserRepository) UnblockUser(ctx context.Context, telegramID int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.blocked, telegramID)
+	return nil
+}
+
+// IsBlocked возвращает true, если пользователь заблокирован.
+func (m *MockUserRepository) IsBlocked(ctx context.Context, telegramID int64) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.blocked[telegramID]
+	return ok
+}
+
+// ListBlocked возвращает список заблокированных Telegram chat ID.
+func (m *MockUserRepository) ListBlocked(ctx context.Context) ([]int64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]int64, 0, len(m.blocked))
+	for id := range m.blocked {
+		out = append(out, id)
+	}
+	return out, nil
 }

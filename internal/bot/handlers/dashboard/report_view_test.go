@@ -15,20 +15,26 @@ func TestBuildHealthAssessmentHTML(t *testing.T) {
 		"lifestyle": {
 			"sleep": {"score": 68, "comment": "Спите 6 часов."},
 			"nutrition": {"score": 74, "comment": "Ешьте больше овощей."},
-			"activity": {"score": 70, "comment": "Гуляйте чаще."}
+			"wellbeing": {"score": 55, "comment": "Энергия нестабильна."},
+			"stress": {"score": 40, "comment": "Частый стресс."},
+			"habits": {"score": 30, "comment": "Курение."}
 		},
 		"risk_zones": [{"name": "Сон", "level": "средний", "description": "Недосып."}],
-		"plan": {"sleep": "Ложитесь раньше.", "nutrition": "Больше белка.", "activity": "10k шагов.", "stress": "Дыхание."}
+		"plan": {"sleep": "Ложитесь раньше.", "nutrition": "Больше белка.", "wellbeing": "Прогулки.", "stress": "Дыхание."}
 	}`
 	entry := &monitoring.HistoryEntry{Type: "health_assessment", Title: "Общая оценка здоровья", Date: time.Now(), JsonData: jsonData}
 	html := buildHealthAssessmentHTML(entry)
-	for _, want := range []string{"Общая оценка здоровья", "72", "Сон", "Зоны риска", "План улучшения", "Ложитесь раньше."} {
+	for _, want := range []string{
+		"Health Dashboard", "72",
+		"Сон", "Питание", "Самочувствие", "Стресс", "Вредные привычки",
+		"Персональные рекомендации", "Ложитесь раньше.",
+	} {
 		if !strings.Contains(html, want) {
-			t.Errorf("health HTML missing %q", want)
+			t.Errorf("health dashboard HTML missing %q", want)
 		}
 	}
 	if !strings.Contains(html, "<!doctype html>") {
-		t.Errorf("health HTML missing doctype")
+		t.Errorf("health dashboard HTML missing doctype")
 	}
 }
 

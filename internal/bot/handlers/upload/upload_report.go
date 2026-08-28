@@ -112,11 +112,14 @@ func renderAndSendReport(
 		"analysis_type": aType,
 	})
 
-	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
-
 	// Расширенный анализ конвертируем в PDF и отправляем как PDF-документ.
 	// При сбое конвертации (нет ключа html2pdf.app / сервис недоступен) -
 	// откат к HTML, чтобы результат не потерялся.
+	// Индикатор загрузки (стикер + текст) гасим ТОЛЬКО после фактической
+	// отправки файла: конвертация HTML->PDF и сама загрузка в Telegram
+	// занимают несколько секунд, и раньше анимация исчезала, а файл всё ещё
+	// «грузился» (пустая пауза между исчезновением загрузки и приходом
+	// отчёта).
 	pdfBytes, convErr := pdfConverter.ConvertHTML(ctx, htmlResult)
 	if convErr != nil {
 		log.Printf("⚠️ [UPLOAD] не удалось конвертировать анализ в PDF (chatID=%d): %v - отправляю HTML", chatID, convErr)
@@ -129,20 +132,22 @@ func renderAndSendReport(
 			Caption:   locales.MsgUploadReportHTMLCaption,
 			ParseMode: "HTML",
 		})
-		sendAnalysisComplete(ctx, b, stateManager, chatID)
-		return
+	} else {
+		log.Printf("✅ [UPLOAD] PDF-отчёт (расширенный анализ) отправлен chatID=%d: %d байт", chatID, len(pdfBytes))
+		_, _ = b.SendDocument(ctx, &tgbot.SendDocumentParams{
+			ChatID: chatID,
+			Document: &models.InputFileUpload{
+				Filename: "Analysis_report.pdf",
+				Data:     bytes.NewReader(pdfBytes),
+			},
+			Caption:   locales.MsgUploadReportCaption,
+			ParseMode: "HTML",
+		})
 	}
 
-	log.Printf("✅ [UPLOAD] PDF-отчёт (расширенный анализ) отправлен chatID=%d: %d байт", chatID, len(pdfBytes))
-	_, _ = b.SendDocument(ctx, &tgbot.SendDocumentParams{
-		ChatID: chatID,
-		Document: &models.InputFileUpload{
-			Filename: "Analysis_report.pdf",
-			Data:     bytes.NewReader(pdfBytes),
-		},
-		Caption:   locales.MsgUploadReportCaption,
-		ParseMode: "HTML",
-	})
+	// Гасим индикатор загрузки ТОЛЬКО после того, как отчёт реально
+	// отправлен в чат (SendDocument завершил загрузку файла).
+	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
 
@@ -250,11 +255,14 @@ func renderAndSendDossier(
 		"analysis_type": aType,
 	})
 
-	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
-
 	// Отчёт-досье конвертируем в PDF и отправляем как PDF-документ.
 	// При сбое конвертации (нет Chrome / сервис недоступен) - откат к HTML,
 	// чтобы результат не потерялся.
+	// Индикатор загрузки (стикер + текст) гасим ТОЛЬКО после фактической
+	// отправки файла: конвертация HTML->PDF и сама загрузка в Telegram
+	// занимают несколько секунд, и раньше анимация исчезала, а файл всё ещё
+	// «грузился» (пустая пауза между исчезновением загрузки и приходом
+	// отчёта).
 	pdfBytes, convErr := pdfConverter.ConvertHTML(ctx, htmlResult)
 	if convErr != nil {
 		log.Printf("⚠️ [UPLOAD] не удалось конвертировать досье в PDF (chatID=%d): %v - отправляю HTML", chatID, convErr)
@@ -267,20 +275,22 @@ func renderAndSendDossier(
 			Caption:   locales.MsgUploadDossierCaption,
 			ParseMode: "HTML",
 		})
-		sendAnalysisComplete(ctx, b, stateManager, chatID)
-		return
+	} else {
+		log.Printf("✅ [UPLOAD] PDF-отчёт (досье/Биоскан PRO) отправлен chatID=%d: %d байт", chatID, len(pdfBytes))
+		_, _ = b.SendDocument(ctx, &tgbot.SendDocumentParams{
+			ChatID: chatID,
+			Document: &models.InputFileUpload{
+				Filename: "Health_profile.pdf",
+				Data:     bytes.NewReader(pdfBytes),
+			},
+			Caption:   locales.MsgUploadDossierCaption,
+			ParseMode: "HTML",
+		})
 	}
 
-	log.Printf("✅ [UPLOAD] PDF-отчёт (досье/Биоскан PRO) отправлен chatID=%d: %d байт", chatID, len(pdfBytes))
-	_, _ = b.SendDocument(ctx, &tgbot.SendDocumentParams{
-		ChatID: chatID,
-		Document: &models.InputFileUpload{
-			Filename: "Health_profile.pdf",
-			Data:     bytes.NewReader(pdfBytes),
-		},
-		Caption:   locales.MsgUploadDossierCaption,
-		ParseMode: "HTML",
-	})
+	// Гасим индикатор загрузки ТОЛЬКО после того, как отчёт реально
+	// отправлен в чат (SendDocument завершил загрузку файла).
+	deleteLoadingMessages(ctx, b, chatID, loadingMsg, textMsg)
 
 	sendAnalysisComplete(ctx, b, stateManager, chatID)
 

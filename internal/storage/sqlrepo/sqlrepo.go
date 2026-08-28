@@ -530,3 +530,55 @@ func (r *Repo) UpdateUserPremiumStatusByTelegramID(ctx context.Context, telegram
 	}
 	return nil
 }
+
+// ---------------------------------------------------------------
+// Блокировка пользователей
+// ---------------------------------------------------------------
+
+// BlockUser блокирует пользователя (по Telegram chat ID). Идемпотентно:
+// при повторном вызове обновляет причину и время блокировки.
+func (r *Repo) BlockUser(ctx context.Context, telegramID int64, reason string) error {
+	if _, err := r.db.ExecContext(ctx,
+		r.bq(`INSERT INTO blocked_users (telegram_id, reason, blocked_at) VALUES (?, ?, ?)
+		 ON CONFLICT(telegram_id) DO UPDATE SET reason=excluded.reason, blocked_at=excluded.blocked_at`),
+		telegramID, reason, time.Now()); err != nil {
+		return fmt.Errorf("блокировка пользователя: %w", err)
+	}
+	return nil
+}
+
+// UnblockUser снимает блокировку пользователя.
+func (r *Repo) UnblockUser(ctx context.Context, telegramID int64) error {
+	if _, err := r.db.ExecContext(ctx, r.bq(`DELETE FROM blocked_users WHERE telegram_id = ?`), telegramID); err != nil {
+		return fmt.Errorf("разблокировка пользователя: %w", err)
+	}
+	return nil
+}
+
+// IsBlocked возвращает true, если пользователь заблокирован.
+func (r *Repo) IsBlocked(ctx context.Context, telegramID int64) bool {
+	var dummy int
+	if err := r.db.QueryRowContext(ctx, r.bq(`SELECT 1 FROM blocked_users WHERE telegram_id = ? LIMIT 1`), telegramID).Scan(&dummy); err != nil {
+		return false
+	}
+	return true
+}
+
+// ListBlocked возвращает список заблокированных Telegram chat ID.
+func (r *Repo) ListBlocked(ctx context.Context) ([]int64, error) {
+	rows, err := r.db.QueryContext(ctx, r.bq(`SELECT telegram_id FROM blocked_users`))
+	if err != nil {
+		return nil, fmt.Errorf("чтение заблокированных: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("сканирование заблокированных: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}

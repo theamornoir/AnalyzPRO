@@ -65,7 +65,7 @@ func newHandler(t *testing.T) (*Handler, int64) {
 	repo := monitoring_sqlrepo.New(conn)
 
 	pay := payment.NewPaymentService(nil, payment.YooKassaConfig{})
-	h := NewHandler(pay, testBotToken, repo, nil, nil, "development", nil)
+	h := NewHandler(pay, testBotToken, repo, nil, nil, "development", nil, nil)
 	return h, int64(999)
 }
 
@@ -193,6 +193,55 @@ func TestMetricsProfileMissingWhenNoQuestionnaire(t *testing.T) {
 	}
 }
 
+// TestMetricsProfileMissingWhenQuestionnaireHasNoName проверяет регрессию:
+// после базового Bioscan бот пишет анкету (questionnaire) БЕЗ имени
+// (basic Bioscan не спрашивает имя). Раньше этого хватало, чтобы
+// ProfileMissing стал false и фронтенд НАВСЕГДА спрятал карточку заполнения
+// профиля - пользователь не мог дописать имя, хотя профиль неполный.
+// Теперь ProfileMissing=true, пока в анкете нет имени: карточка остаётся
+// видимой, пользователь дополняет профиль в Mini App.
+func TestMetricsProfileMissingWhenQuestionnaireHasNoName(t *testing.T) {
+	h, uid := newHandler(t)
+	// Имитируем анкету, которую пишет базовый Bioscan: есть пол/возраст/
+	// рост/вес, но ИМЕНИ нет.
+	ctx := context.Background()
+	if err := h.repo.SaveResult(ctx, &monitoring.HistoryEntry{
+		TelegramID: uid,
+		Type:       "questionnaire",
+		Title:      "Профиль пользователя",
+		Date:       time.Now(),
+		JsonData:   `{"profile":{"name":"","age":29,"gender":"Мужской","height":180,"weight":78},"recommendations":["Регулярно загружайте анализы"]}`,
+	}); err != nil {
+		t.Fatalf("seed questionnaire: %v", err)
+	}
+	h.pay.ActivatePremiumManually(uid, "premium_monthly")
+
+	initData := buildInitData(testBotToken, uid)
+	req := httptest.NewRequest(http.MethodGet, "/api/metrics?initData="+url.QueryEscape(initData), nil)
+	w := httptest.NewRecorder()
+	h.Metrics(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("ожидали 200, получили %d: %s", w.Code, w.Body.String())
+	}
+	var resp MetricsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("декод JSON: %v", err)
+	}
+	// Анкета есть, но без имени => профиль считаем незаполненным, форма
+	// заполнения в Mini App должна оставаться видимой.
+	if !resp.ProfileMissing {
+		t.Error("ProfileMissing=false при анкете без имени - карточка заполнения исчезнет, хотя профиль неполный")
+	}
+	// Поля из анкеты всё равно должны подтянуться в ответ (для карточки
+	// профиля, если имя появится), но имя - пустое.
+	if resp.UserAge != 29 {
+		t.Errorf("UserAge=%d, want 29", resp.UserAge)
+	}
+	if resp.UserName != "" {
+		t.Errorf("UserName=%q, want пусто (имя не указано)", resp.UserName)
+	}
+}
+
 func TestSaveProfileSeedsDashboard(t *testing.T) {
 	h, uid := newHandler(t)
 	h.pay.ActivatePremiumManually(uid, "premium_monthly")
@@ -264,6 +313,73 @@ func TestSaveProfileSeedsDashboard(t *testing.T) {
 	}
 }
 
+// TestSaveProfileWritesUserProfiles проверяет мост между Mini App и ботом:
+// профиль, сохранённый из «Мой профиль» через POST /api/profile, должен
+// попасть в постоянную таблицу user_profiles (через UpsertProfile), чтобы
+// бот при запуске Bioscan PRO / Оценки здоровья / базового Bioscan подтянул
+// уже известные данные и НЕ переспрашивал имя/возраст/пол/рост/вес. Регрессия
+// на баг: раньше профиль писался только в monitoring_history (questionnaire),
+// а бот читал из user_profiles (пустой) - пользователю снова задавали вопросы.
+func TestSaveProfileWritesUserProfiles(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.Migrate(conn); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	repo := monitoring_sqlrepo.New(conn)
+	store := storage.NewSQLStorage(conn)
+	pay := payment.NewPaymentService(nil, payment.YooKassaConfig{})
+	h := NewHandler(pay, testBotToken, repo, nil, nil, "development", nil, store.Users)
+
+	uid := int64(777)
+	initData := buildInitData(testBotToken, uid)
+
+	// До сохранения профиля GetProfile бота пуст (bot должен спросить).
+	if p, perr := store.Users.GetProfile(context.Background(), uid); perr != nil || p != nil {
+		t.Fatalf("до регистрации ожидали пустой профиль, получили p=%v err=%v", p, perr)
+	}
+
+	body := `{"name":"Анна","age":28,"gender":"Женский","height":168,"weight":60,"goal":"Энергия"}`
+	preq := httptest.NewRequest(http.MethodPost, "/api/profile?initData="+url.QueryEscape(initData), strings.NewReader(body))
+	preq.Header.Set("Content-Type", "application/json")
+	pr := httptest.NewRecorder()
+	h.SaveProfile(pr, preq)
+	if pr.Code != http.StatusOK {
+		t.Fatalf("SaveProfile вернул %d: %s", pr.Code, pr.Body.String())
+	}
+
+	// После регистрации GetProfile бота ВИДИТ данные - бот не переспросит.
+	p, perr := store.Users.GetProfile(context.Background(), uid)
+	if perr != nil {
+		t.Fatalf("GetProfile ошибка: %v", perr)
+	}
+	if p == nil {
+		t.Fatalf("GetProfile вернул nil - профиль не продублирован в user_profiles")
+	}
+	if p.Name != "Анна" {
+		t.Errorf("Name=%q, want Анна", p.Name)
+	}
+	if p.Age != 28 {
+		t.Errorf("Age=%d, want 28", p.Age)
+	}
+	if p.Gender != "Женский" {
+		t.Errorf("Gender=%q, want Женский", p.Gender)
+	}
+	if p.Height != 168 {
+		t.Errorf("Height=%d, want 168", p.Height)
+	}
+	if p.Weight != 60 {
+		t.Errorf("Weight=%d, want 60", p.Weight)
+	}
+	if p.Goal != "Энергия" {
+		t.Errorf("Goal=%q, want Энергия", p.Goal)
+	}
+}
+
 func TestSaveProfileValidation(t *testing.T) {
 	h, uid := newHandler(t)
 	initData := buildInitData(testBotToken, uid)
@@ -308,7 +424,7 @@ func TestNotificationsToggle(t *testing.T) {
 	pay := payment.NewPaymentService(nil, payment.YooKassaConfig{})
 	notifSvc := notifications.NewService(conn, store, pay, repo, false)
 
-	h := NewHandler(pay, testBotToken, repo, nil, nil, "development", notifSvc)
+	h := NewHandler(pay, testBotToken, repo, nil, nil, "development", notifSvc, store.Users)
 
 	// Реальный пользователь в БД (SetUserNotificationsEnabled требует запись).
 	ctx := context.Background()

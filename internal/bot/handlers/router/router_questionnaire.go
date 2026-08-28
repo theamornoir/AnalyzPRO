@@ -128,6 +128,18 @@ func (r *router) backQuestionnaire(ctx context.Context, b *tgbot.Bot, chatID int
 		r.showMainMenuMessage(ctx, b, chatID, locales.MsgBackToAnalysisType)
 		return
 	}
+	// Если предыдущий вопрос попадает в пропущенную демографию (имя/пол/
+	// возраст/рост+вес, подставленную из профиля), возвращаться в него
+	// бессмысленно - вместо этого снова показываем экран «Данные уже
+	// известны? Использовать / Изменить», откуда можно заново начать с цели
+	// либо перейти к полному опроснику.
+	if skip := userdata.SkippedSteps(r.stateManager, chatID); skip > 0 {
+		if idx := userdata.StepIndex(prev); idx >= 0 && idx < skip {
+			if r.tryProfileConfirm(ctx, b, chatID, "health") {
+				return
+			}
+		}
+	}
 	r.stateManager.SetState(chatID, prev)
 	collector := userdata.NewUserDataCollector(r.stateManager)
 	collector.SendStep(ctx, b, chatID, prev, userdata.PromptForState(prev))

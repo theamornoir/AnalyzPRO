@@ -3,6 +3,8 @@ package userdata
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -53,6 +55,30 @@ var stepPrompt = map[states.State]string{
 // StepCount - общее число вопросов опросника.
 func StepCount() int { return len(stepOrder) }
 
+// HealthSkipKey - ключ user-data, хранящий число ВЕДУЩИХ вопросов опросника
+// «Общая оценка здоровья», уже отвеченных через профиль (Mini App / сохранённый
+// профиль) и пропущенных при старте. Нужен прогресс-бару «Вопрос N из M»: если
+// демография (имя/пол/возраст/рост+вес) подставлена из профиля, опросник
+// начинается с цели (5-й вопрос из 7), и показ «Вопрос 5 из 7» обманчив - на
+// самом деле это 1-й из 3 оставшихся (цель/образ жизни/привычки). Смещение
+// вычитается из абсолютного индекса и из общего числа.
+const HealthSkipKey = "health_quest_skip"
+
+// SkippedSteps - число ведущих вопросов, уже отвеченных через профиль
+// (прочитано из user-data по HealthSkipKey). Возвращает 0, если ключ не
+// задан/невалиден.
+func SkippedSteps(sm states.StateManager, chatID int64) int {
+	v := strings.TrimSpace(sm.GetUserData(chatID, HealthSkipKey))
+	if v == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
 // StepIndex - индекс вопроса (0-based) по состоянию, либо -1.
 func StepIndex(s states.State) int {
 	for i, st := range stepOrder {
@@ -80,14 +106,32 @@ func PromptForState(s states.State) string {
 	return ""
 }
 
+// progressHeader - формирует прогресс-бар «Вопрос N из M» с учётом шагов,
+// уже отвеченных через профиль (HealthSkipKey). Если демография подставлена
+// из профиля, опросник начинается не с 1-го, а с первого НЕотвеченного вопроса,
+// поэтому считаем позицию ОТНОСИТЕЛЬНО оставшихся вопросов: цель, образ
+// жизни, привычки -> «Вопрос 1 из 3», «2 из 3», «3 из 3» (а не «5 из 7»).
+func (c *UserDataCollector) progressHeader(chatID int64, state states.State) string {
+	absIdx := StepIndex(state)
+	if absIdx < 0 {
+		absIdx = 0
+	}
+	skip := SkippedSteps(c.stateManager, chatID)
+	total := StepCount() - skip
+	if total < 1 {
+		total = 1
+	}
+	relIdx := absIdx - skip
+	if relIdx < 0 {
+		relIdx = 0
+	}
+	return fmt.Sprintf("📋 Вопрос %d из %d\n\n", relIdx+1, total)
+}
+
 // SendStep - отправляет вопрос опросника с прогресс-баром
 // «Вопрос N из M» и клавиатурой [Назад / ❌ Отмена].
 func (c *UserDataCollector) SendStep(ctx context.Context, b *tgbot.Bot, chatID int64, state states.State, text string) {
-	idx := StepIndex(state)
-	if idx < 0 {
-		idx = 0
-	}
-	header := fmt.Sprintf("📋 Вопрос %d из %d\n\n", idx+1, len(stepOrder))
+	header := c.progressHeader(chatID, state)
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        header + text,
@@ -100,11 +144,7 @@ func (c *UserDataCollector) SendStep(ctx context.Context, b *tgbot.Bot, chatID i
 // «Вопрос N из M» и inline-клавиатурой вариантов ответа (кнопки). Используется
 // для вопросов, где ответ выбирается из готовых вариантов (пол, цель, привычки).
 func (c *UserDataCollector) SendChoiceStep(ctx context.Context, b *tgbot.Bot, chatID int64, state states.State, text string, kb models.InlineKeyboardMarkup) {
-	idx := StepIndex(state)
-	if idx < 0 {
-		idx = 0
-	}
-	header := fmt.Sprintf("📋 Вопрос %d из %d\n\n", idx+1, len(stepOrder))
+	header := c.progressHeader(chatID, state)
 	_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        header + text,
@@ -113,10 +153,10 @@ func (c *UserDataCollector) SendChoiceStep(ctx context.Context, b *tgbot.Bot, ch
 	})
 }
 
-// SendGoalQuestion - повторно отправляет вопрос о цели (inline-кнопки).
+// SendGoalQuestion - повторно отправляет вопрос о цели (свободный текст).
 // Используется, когда демографические данные уже известны из постоянного
 // профиля и нужно пропустить вопросы имя/возраст/пол/рост/вес, перейдя
 // сразу к уникальным вопросам опросника «Общая оценка здоровья».
 func (c *UserDataCollector) SendGoalQuestion(ctx context.Context, b *tgbot.Bot, chatID int64) {
-	c.SendChoiceStep(ctx, b, chatID, states.StateWaitingGoal, locales.MsgUserGoal, questionnaireGoalKeyboard())
+	c.SendStep(ctx, b, chatID, states.StateWaitingGoal, locales.MsgUserGoal)
 }

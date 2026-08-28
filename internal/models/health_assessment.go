@@ -5,6 +5,11 @@ package models
 // жизни (без загрузки медицинских файлов). Формируется ИИ из текста
 // опросника и возвращается в виде JSON.
 type HealthAssessment struct {
+	// Name - имя пользователя для шапки отчёта. Заполняется бэкендом из
+	// профиля (user_profiles / собранные данные опросника). ИИ это поле НЕ
+	// генерирует и НЕ использует: в comment/summary/plan пишется обезличенно
+	// (например, «спит 8 часов», а не «Влад спит 8 часов»).
+	Name string `json:"name"`
 	// HealthIndex - общий индекс здоровья (0-100).
 	HealthIndex int `json:"health_index"`
 	// Summary - общий развёрнутый разбор образа жизни.
@@ -36,6 +41,8 @@ type RiskZone struct {
 type HealthPlan struct {
 	Sleep     string `json:"sleep"`
 	Nutrition string `json:"nutrition"`
-	Activity  string `json:"activity"`
+	// Wellbeing - шаги по улучшению общего самочувствия (без спорта и
+	// тренировок - они не входят в отчёт «Общая оценка здоровья»).
+	Wellbeing string `json:"wellbeing"`
 	Stress    string `json:"stress"`
 }

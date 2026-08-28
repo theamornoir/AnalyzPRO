@@ -679,6 +679,9 @@ function showTab(tab) {
     if (btn) btn.classList.add("active");
 
     if (tab === "analysis" && window.__reportsData) {
+        // showTab делает панель активной ВЫШЕ, поэтому renderReportGroup
+        // рисует radar уже в видимом контейнере (Chart.js не рисует в
+        // скрытом - иначе график «пустой»). Достраивать отдельно не нужно.
         renderReportGroup("analysis", window.__reportsData.analysis, window.__reportsData.premiumRequired);
     } else if (tab === "bioscan" && window.__reportsData) {
         renderReportGroup("bioscan", window.__reportsData.bioscan, window.__reportsData.premiumRequired);
@@ -977,6 +980,23 @@ function indicatorRowHTML(ind) {
     const status = ind.status || "normal";
     const statusClass = "ind-status-" + status;
     const color = statusColor(status);
+
+    // Оценка образа жизни 0-100 (выше = лучше, IsScore=true): рисуем
+    // ГОРИЗОНТАЛЬНЫЙ заполненный бар вместо вертикального индикатора с
+    // зонами нормы (для оценок референсный диапазон не имеет смысла).
+    // Бар заполняется на score% и окрашивается цветом статуса - сфера
+    // «оживает», и график перестаёт быть пустым (было: пустая колонка).
+    if (ind.isScore) {
+        const pct = Math.max(0, Math.min(100, Math.round(Number(ind.num) || 0)));
+        return '<div class="ind-row ind-row-score">' +
+            '<div class="ind-body ind-body-score">' +
+                '<div class="ind-name">' + name + '</div>' +
+                '<div class="ind-num ' + statusClass + '">' + value + '</div>' +
+            '</div>' +
+            '<div class="ind-score"><div class="ind-score-fill ' + statusClass + '" style="width:' + pct + '%;background:' + color + ';"></div></div>' +
+        '</div>';
+    }
+
     const sev = indicatorSeverity(ind);
 
     let viz;
@@ -1117,7 +1137,13 @@ function renderReportGroup(kind, group, premiumRequired) {
     const scores = latest.scores || {};
     const labels = Object.keys(scores);
     if (wrap) {
-        if (labels.length > 0 && visible.length >= 2) {
+        // Radar показываем, когда есть что рисовать. Для «Оценки здоровья»
+        // радар из 5 сфер образа жизни осмыслен и при ОДНОМ отчёте, поэтому
+        // для health не требуем 2+ замеров. Для анализа/биоскана оставляем
+        // правило «2+ отчёта», чтобы один radar не выглядел «мусором»
+        // (сравнивать не с чем).
+        const showRadar = labels.length > 0 && (kind === "health" || visible.length >= 2);
+        if (showRadar) {
             wrap.style.display = "block";
             drawReportRadar("chart" + cap(kind), labels, labels.map(function (k) { return scores[k]; }));
         } else {
@@ -1283,8 +1309,7 @@ function renderArchive(kind, reports, latestDate, premiumRequired) {
                 (isLatest ? ' <span class="archive-badge">текущий</span>' : '') + '</div>' +
                 '<div class="archive-date">' + escapeHtml(r.date || "") + '</div>' +
             '</div>' +
-            delBtn +
-            (isLatest ? '' : '<div class="archive-go">›</div>');
+            delBtn;
         if (r.id && r.id > 0) {
             div.style.cursor = "pointer";
             div.onclick = function (e) {

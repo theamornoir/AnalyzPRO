@@ -281,6 +281,21 @@ h1 { font-size: 22px; margin: 12px 0 2px; }
 .ind-status-normal, .ind-status-good { color: var(--ok); }
 .ind-status-warning { color: var(--warn); }
 .ind-status-critical { color: #E5484D; }
+/* Оценка-сфера (IsScore, 0-100): горизонтальный заполненный бар вместо
+   вертикального индикатора с зонами нормы (для оценок референс не нужен).
+   Цвет заливки задаётся инлайн в JS через statusColor по статусу. */
+.ind-row-score { gap: 14px; }
+.ind-body-score { flex: 0 0 auto; }
+.ind-score {
+    flex: 1 1 auto; min-width: 0;
+    height: 10px; border-radius: 6px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+}
+.ind-score-fill {
+    height: 100%; border-radius: 6px;
+    transition: width .4s ease;
+}
 .cmp { margin-top: 10px; padding: 10px 12px; background: rgba(31,166,168,0.08); border-radius: 10px; font-size: 13px; line-height: 1.5; }
 .cmp b { color: var(--accent); }
 .cmp .up { color: var(--ok); font-weight: 600; }
@@ -318,7 +333,6 @@ h1 { font-size: 22px; margin: 12px 0 2px; }
 .archive-name { font-size: 13px; font-weight: 600; }
 .archive-date { font-size: 11px; color: var(--muted); margin-top: 1px; }
 .archive-badge { font-size: 10px; color: var(--accent); font-weight: 600; }
-.archive-go { color: var(--muted); font-size: 18px; padding: 0 2px; }
 
 /* Кнопка удаления отчёта в строке архива: нейтральная, без агрессивного
    красного - чтобы не пугать, но быть заметной при нажатии. */

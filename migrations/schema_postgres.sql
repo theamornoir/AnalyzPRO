@@ -97,3 +97,11 @@ CREATE TABLE IF NOT EXISTS notification_suppressions (
     UNIQUE(telegram_id, indicator)
 );
 CREATE INDEX IF NOT EXISTS idx_notif_supp_user ON notification_suppressions(telegram_id);
+
+CREATE TABLE IF NOT EXISTS blocked_users (
+    id BIGSERIAL PRIMARY KEY,
+    telegram_id BIGINT NOT NULL UNIQUE,
+    reason TEXT NOT NULL DEFAULT '',
+    blocked_at TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_blocked_users ON blocked_users(telegram_id);

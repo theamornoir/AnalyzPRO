@@ -368,3 +368,16 @@ func ProfileConfirmMenu() models.InlineKeyboardMarkup {
 		},
 	}
 }
+
+// HealthAssessmentConfirmMenu - inline-кнопка «Подтвердить и отправить» на
+// экране подтверждения «Общей оценки здоровья». Только после её нажатия
+// (callback health_assessment_confirm) роутер запускает генерацию отчёта ИИ.
+func HealthAssessmentConfirmMenu() models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{Text: locales.BtnHealthAssessmentConfirm, CallbackData: "health_assessment_confirm"},
+			},
+		},
+	}
+}

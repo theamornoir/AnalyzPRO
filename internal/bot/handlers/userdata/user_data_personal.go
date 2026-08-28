@@ -70,14 +70,14 @@ func (c *UserDataCollector) HandleHeightWeight(ctx context.Context, b *tgbot.Bot
 	c.stateManager.SetUserData(chatID, "height", strconv.Itoa(height))
 	c.stateManager.SetUserData(chatID, "weight", strconv.Itoa(weight))
 	c.stateManager.SetState(chatID, states.StateWaitingGoal)
-	c.SendChoiceStep(ctx, b, chatID, states.StateWaitingGoal, locales.MsgUserGoal, questionnaireGoalKeyboard())
+	c.SendStep(ctx, b, chatID, states.StateWaitingGoal, locales.MsgUserGoal)
 }
 
-// HandleGoal - обрабатывает цель (текст или inline-кнопка). После цели -
+// HandleGoal - обрабатывает цель (свободный текст). После цели -
 // вопрос об образе жизни (сон/стресс/питание/активность, 1 вопрос).
 func (c *UserDataCollector) HandleGoal(ctx context.Context, b *tgbot.Bot, chatID int64, text string) {
-	goal := normalizeGoal(text)
-	if goal == "" {
+	goal := strings.TrimSpace(text)
+	if len(goal) < 2 || len(goal) > 300 {
 		c.SendStep(ctx, b, chatID, states.StateWaitingGoal, locales.MsgUserGoalInvalid)
 		return
 	}
@@ -130,24 +130,6 @@ func parseHeightWeight(text string) (int, int, bool) {
 	return height, weight, true
 }
 
-// normalizeGoal приводит текст/кнопку цели к чистому значению.
-func normalizeGoal(btn string) string {
-	switch strings.TrimSpace(btn) {
-	case "Похудеть", locales.BtnHealthGoalLose:
-		return "Похудеть"
-	case "Набрать", locales.BtnHealthGoalGain:
-		return "Набрать"
-	case "Поддержать форму", locales.BtnHealthGoalKeep:
-		return "Поддержать форму"
-	default:
-		g := strings.TrimSpace(btn)
-		if g == "" {
-			return ""
-		}
-		return g
-	}
-}
-
 // normalizeHabits приводит текст/кнопку вредных привычек к чистому значению.
 func normalizeHabits(btn string) string {
 	switch strings.TrimSpace(btn) {
@@ -174,20 +156,6 @@ func questionnaireGenderKeyboard() models.InlineKeyboardMarkup {
 		InlineKeyboard: [][]models.InlineKeyboardButton{
 			{{Text: locales.BtnHealthGenderMale, CallbackData: "question_gender_m"}},
 			{{Text: locales.BtnHealthGenderFemale, CallbackData: "question_gender_f"}},
-			{{Text: locales.BtnBack, CallbackData: "questionnaire_back"}},
-		},
-	}
-}
-
-// questionnaireGoalKeyboard - inline-кнопки выбора цели.
-func questionnaireGoalKeyboard() models.InlineKeyboardMarkup {
-	return models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{
-				{Text: locales.BtnHealthGoalLose, CallbackData: "question_goal_lose"},
-				{Text: locales.BtnHealthGoalGain, CallbackData: "question_goal_gain"},
-				{Text: locales.BtnHealthGoalKeep, CallbackData: "question_goal_keep"},
-			},
 			{{Text: locales.BtnBack, CallbackData: "questionnaire_back"}},
 		},
 	}
