@@ -65,6 +65,22 @@ func (r *router) handleHealthAssessment(ctx context.Context, b *tgbot.Bot, chatI
 	ha.Name = strings.TrimSpace(name)
 	report.SanitizeHealthAssessment(&ha, name)
 
+	// Проверяем содержательность отчёта: если ИИ вернул «пустой»/мусорный
+	// результат (нулевой индекс, нет развёрнутых разборов сфер), не шлём
+	// пользователю пугающий отчёт с карточками «Критично · 0». Вместо
+	// этого - дружелюбное сообщение с предложением пройти опросник ещё раз.
+	if verr := report.ValidateHealthAssessment(ha); verr != nil {
+		log.Printf("[HEALTH] отчёт оценки здоровья не прошёл валидацию качества chatID=%d: %v", chatID, verr)
+		apmodels.SafeDeleteLoadingMsgs(ctx, b, chatID, loadingMsg, textMsg)
+		r.stateManager.Reset(chatID)
+		_, _ = b.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:      chatID,
+			Text:        locales.MsgHealthAssessmentLowQuality,
+			ReplyMarkup: keyboards.MainMenuInline(),
+		})
+		return
+	}
+
 	// Отправляем отчёт «Общая оценка здоровья» в чат как PDF-файл (как
 	// Bioscan PRO): тот же красивый HTML-дашборд (фиолетовый неон с
 	// кольцевыми диаграммами) конвертируется в PDF через внешний сервис

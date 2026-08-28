@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -122,13 +123,13 @@ body {
    (иначе html2pdf рисует квадратные подложки позади фигур). */
 .chart-card { background:var(--bg-card); backdrop-filter:blur(20px); border:1px solid var(--border-color); border-radius:16px; padding:24px 28px 28px; margin-bottom:40px; }
 .chart-title { font-size:1.05em; font-weight:600; margin-bottom:14px; color:var(--text-primary); text-align:center; }
-.radar { display:block; margin:0 auto; width:100%; max-width:360px; height:auto; }
+.radar { display:block; margin:0 auto; width:100%; max-width:420px; height:auto; }
 .radar-grid { fill:none; stroke:rgba(179,136,255,0.16); stroke-width:1; }
 .radar-axis { stroke:rgba(179,136,255,0.22); stroke-width:1; }
 .radar-area { fill:rgba(179,136,255,0.16); stroke:#B388FF; stroke-width:2; stroke-linejoin:round; }
 .radar-dot { fill:#B388FF; }
-.radar-label { fill:var(--text-secondary); font-size:12px; font-family:'Inter','Segoe UI',sans-serif; }
-.radar-label-val { fill:#B388FF; font-weight:700; }
+.radar-label { fill:var(--text-secondary); font-size:13px; font-family:'Inter','Segoe UI',sans-serif; }
+.radar-label-val { fill:#B388FF; font-weight:700; font-size:13px; }
 /* METHODOLOGY (последний экран) - чистые карточки БЕЗ box-shadow/filter
    (конвертер HTML->PDF рисует их квадратами). */
 .tech-card { background:var(--bg-card); backdrop-filter:blur(20px); border:1px solid var(--border-color); border-radius:16px; padding:28px 32px 32px; margin-top:8px; }
@@ -239,19 +240,26 @@ type haRadarItem struct {
 // жизни. Только чистый SVG (кольца сетки, оси, область данных, точки, подписи) -
 // без box-shadow/filter/drop-shadow, чтобы конвертер HTML->PDF не рисовал
 // квадратных подложек позади фигур. Сам график строится инлайново из баллов.
+//
+// viewBox специально расширен (520x520, центр 260,260, радиус сетки 120),
+// чтобы длинные подписи сфер («Вредные привычки») НЕ обрезались по краям
+// SVG при рендере в браузере и в PDF (по умолчанию SVG клиппует всё вне
+// viewBox). Балл выносится на отдельную строку под названием сферы, чтобы
+// подпись читалась «Сон 58», а не склеивалась в «Сон58».
 func haRadarChartHTML(items []haRadarItem) string {
 	n := len(items)
 	if n == 0 {
 		return ""
 	}
-	cx, cy, R := 180.0, 180.0, 120.0
+	cx, cy, R := 260.0, 260.0, 120.0
+	labelR := R + 24.0
 	axis := func(i int, r float64) (float64, float64) {
 		ang := -math.Pi/2 + float64(i)*2*math.Pi/float64(n)
 		return cx + r*math.Cos(ang), cy + r*math.Sin(ang)
 	}
 	var b strings.Builder
 	b.WriteString("<div class=\"chart-card\"><div class=\"chart-title\">Профиль образа жизни</div>")
-	b.WriteString("<svg viewBox=\"0 0 360 360\" class=\"radar\">")
+	b.WriteString("<svg viewBox=\"0 0 520 520\" class=\"radar\">")
 	// Концентрические кольца сетки (25/50/75/100%).
 	for _, lvl := range []float64{0.25, 0.5, 0.75, 1.0} {
 		pts := make([]string, n)
@@ -261,25 +269,20 @@ func haRadarChartHTML(items []haRadarItem) string {
 		}
 		b.WriteString("<polygon class=\"radar-grid\" points=\"" + strings.Join(pts, " ") + "\"/>")
 	}
-	// Оси и подписи (название + балл).
+	// Оси и подписи (название сферы + балл на отдельной строке).
 	for i, it := range items {
 		ex, ey := axis(i, R)
 		b.WriteString(fmt.Sprintf("<line class=\"radar-axis\" x1=\"%.1f\" y1=\"%.1f\" x2=\"%.1f\" y2=\"%.1f\"/>", cx, cy, ex, ey))
-		lx, ly := axis(i, R+26)
+		lx, ly := axis(i, labelR)
 		anchor := "middle"
 		if lx > cx+8 {
 			anchor = "start"
 		} else if lx < cx-8 {
 			anchor = "end"
 		}
-		dy := 0.0
-		if ly < cy-8 {
-			dy = -4
-		} else if ly > cy+8 {
-			dy = 12
-		}
-		b.WriteString(fmt.Sprintf("<text class=\"radar-label\" x=\"%.1f\" y=\"%.1f\" text-anchor=\"%s\">%s<tspan class=\"radar-label-val\" dx=\"6\">%d</tspan></text>",
-			lx, ly+dy, anchor, esc(it.label), haClampScore(it.score)))
+		// Название сферы, а балл - второй строкой (dy), с тем же выравниванием.
+		b.WriteString(fmt.Sprintf("<text class=\"radar-label\" x=\"%.1f\" y=\"%.1f\" text-anchor=\"%s\">%s<tspan class=\"radar-label-val\" x=\"%.1f\" dy=\"15\">%d</tspan></text>",
+			lx, ly, anchor, esc(it.label), lx, haClampScore(it.score)))
 	}
 	// Область данных (многоугольник по баллам).
 	dpts := make([]string, n)
@@ -375,13 +378,13 @@ func RenderHealthAssessmentHTML(ha models.HealthAssessment, date time.Time, forP
 	var b strings.Builder
 	b.WriteString("<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\">")
 	b.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">")
-	b.WriteString("<title>Health Dashboard</title>")
+	b.WriteString("<title>Prisma · Общая оценка здоровья</title>")
 	b.WriteString("<link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap\" rel=\"stylesheet\">")
 	b.WriteString("<style>" + healthDashboardCSS + "</style></head><body" + bodyClass + ">")
 	b.WriteString("<div class=\"container\">")
 
 	// Заголовок.
-	b.WriteString("<div class=\"header\"><div class=\"header-title\"><span>Health Dashboard</span></div>")
+	b.WriteString("<div class=\"header\"><div class=\"header-title\"><span>Prisma · Общая оценка здоровья</span></div>")
 	b.WriteString("<div class=\"header-subtitle\">" + esc(sub) + "</div></div>")
 
 	// Главный индекс здоровья.
@@ -476,8 +479,33 @@ func RenderHealthAssessmentHTML(ha models.HealthAssessment, date time.Time, forP
 		b.WriteString("</div></div>")
 	}
 
+	// Зоны внимания (балл < 65 - умеренное и ниже качество), отсортированные
+	// по возрастанию балла, чтобы персонализировать последний шаг блока
+	// «Технология разбора PRISMA» конкретными выявленными зонами.
+	weak := make([]cardT, 0, len(cards))
+	for _, c := range cards {
+		if c.score < 65 {
+			weak = append(weak, c)
+		}
+	}
+	sort.Slice(weak, func(i, j int) bool { return weak[i].score < weak[j].score })
+	weakZones := make([]string, 0, len(weak))
+	for _, w := range weak {
+		weakZones = append(weakZones, w.label)
+	}
+	if len(weakZones) == 0 && len(cards) > 0 {
+		// Все сферы - отличные: выделяем самую низкую для поддержания.
+		minC := cards[0]
+		for _, c := range cards[1:] {
+			if c.score < minC.score {
+				minC = c
+			}
+		}
+		weakZones = append(weakZones, minC.label)
+	}
+
 	// Блок «Технология разбора PRISMA» - на последнем экране отчёта.
-	b.WriteString(haMethodologyHTML())
+	b.WriteString(haMethodologyHTML(weakZones))
 
 	b.WriteString("</div></body></html>")
 	return b.String()
@@ -491,14 +519,23 @@ type haMethodologyStep struct {
 // haMethodologyHTML строит блок «Технология разбора PRISMA» для последнего
 // экрана отчёта. Чистая вёрстка (карточки БЕЗ box-shadow/filter) в едином
 // тёмном неоновом стиле - описывает профессиональный конвейер разбора
-// образа жизни аналитическим движком Prisma.
-func haMethodologyHTML() string {
+// образа жизни аналитическим движком Prisma. weakZones - названия сфер с
+// пониженным баллом (отсортированные по возрастанию), которые подставляются
+// в последний шаг, чтобы план выглядел привязанным к реальным данным
+// пользователя (персонализация блока).
+func haMethodologyHTML(weakZones []string) string {
+	// Персональная часть последнего шага: конкретные выявленные зоны
+	// внимания, чтобы план не выглядел шаблонным.
+	zonesText := "привязанные к выявленным зонам"
+	if len(weakZones) > 0 {
+		zonesText = "привязанные к выявленным зонам: " + strings.Join(weakZones, ", ")
+	}
 	steps := []haMethodologyStep{
 		{"01", "Сбор данных", "Опросник фиксирует привычки по сну, питанию, активности, стрессу и образу жизни в единой структуре."},
 		{"02", "Нормализация", "Ответы переводятся в баллы 0-100 по калиброванным шкалам безопасности без искажения исходных данных."},
 		{"03", "Профиль сфер", "Строится многомерный профиль, который выделяет сильные стороны и зоны повышенного внимания."},
 		{"04", "Индекс здоровья", "Сферы сворачиваются в общий показатель с приоритизацией самых слабых направлений."},
-		{"05", "Персональный план", "Формируются рекомендации на 3 месяца, привязанные к конкретным выявленным зонам."},
+		{"05", "Персональный план", "Формируются рекомендации на 3 месяца, " + zonesText + "."},
 	}
 	var b strings.Builder
 	b.WriteString("<div class=\"tech-card\">")

@@ -72,6 +72,33 @@ func errFirst(s string) error {
 	return json.Unmarshal([]byte(s), &ha)
 }
 
+// ValidateHealthAssessment проверяет, что отчёт «Общая оценка здоровья»
+// содержателен и не является «пугающим» пустым результатом (garbage-in).
+// ИИ иногда возвращает JSON с нулевыми/пустыми полями - если отдать такой
+// отчёт пользователю, он увидит карточки «Критично · 0» с пустыми
+// комментариями. Чтобы не пугать пользователя и не выдавать мусор за
+// аналитику, проверяем минимальную наполненность:
+//   - общий индекс в диапазоне 1..100 (0 трактуем как неудавшийся разбор);
+//   - хотя бы 3 сферы образа жизни с непустым комментарием и баллом >= 1.
+//
+// Возвращает ошибку, если отчёт не прошёл проверку (вызывающий код должен
+// показать дружелюбное сообщение вместо некачественного PDF/HTML).
+func ValidateHealthAssessment(ha models.HealthAssessment) error {
+	if ha.HealthIndex < 1 || ha.HealthIndex > 100 {
+		return fmt.Errorf("health index out of meaningful range: %d", ha.HealthIndex)
+	}
+	meaningful := 0
+	for _, dim := range ha.Lifestyle {
+		if strings.TrimSpace(dim.Comment) != "" && dim.Score >= 1 {
+			meaningful++
+		}
+	}
+	if meaningful < 3 {
+		return fmt.Errorf("too few meaningful lifestyle spheres: %d", meaningful)
+	}
+	return nil
+}
+
 // RenderHealthAssessmentText формирует читаемый текстовый отчёт «Общая оценка
 // здоровья» для вывода в чат Telegram (без markdown-разметки). Использует
 // данные структуры HealthAssessment: общий индекс, разбор образа жизни,
